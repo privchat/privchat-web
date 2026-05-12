@@ -1,0 +1,431 @@
+// ChatWorkspace — post-authenticate shell with PC/H5 responsive layout.
+//
+// Layout contract:
+//   - md+: persistent two-pane. Left aside (320px fixed) hosts a tab strip
+//     (Chats / Contacts / Groups) plus the matching list; right pane is
+//     the active ConversationPanel (flex-1).
+//   - <md: single-pane. Default = aside (with tabs). Selecting a row
+//     swaps to panel; panel's back button restores the list.
+//
+// Height plumbing (the part you have to get right or composer disappears
+// and the timeline can't scroll):
+//
+//   <root>      h-dvh + flex-col           (anchors viewport height)
+//   <topbar>    auto height
+//   <split>     flex-1 + min-h-0           (KEY: min-h-0 stops the default
+//               + flex md:flex-row          flex item min-height: auto from
+//                                           expanding past the viewport)
+//   <aside>     flex-col + min-h-0         (so its scroll region works)
+//                + md:w-[320px] md:shrink-0
+//   <main>      flex-1 + min-h-0 + flex-col (so the panel inside, which is
+//                                            also flex-col with flex-1 timeline,
+//                                            actually gets a bounded track)
+//
+// Drop ANY of the `min-h-0`s and the timeline overflow-auto stops scrolling
+// (because flex children default to min-height: auto, which expands to fit
+// content and defeats overflow). This is the canonical chat-app gotcha.
+//
+// `@privchat/react` does not handle responsiveness — host concern.
+
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Bell, BellOff, FileText, LogOut, Volume2, VolumeX } from 'lucide-react';
+import {
+  useChannelList,
+  useConnectionState,
+  useOpenDirectConversation,
+  usePrivchatClient,
+  useUserProfile,
+} from '@privchat/react';
+import type { PrivchatHandle } from '@/lib/privchat-client';
+import type { AccountKey } from '@/lib/account-key';
+import { AccountSwitcher } from '@/features/auth/account-switcher';
+import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { LangSwitcher } from '@/components/lang-switcher';
+import { ConversationList } from './conversation-list';
+import { ConversationPanel } from './conversation-panel';
+import { ContactList } from './contact-list';
+import { GroupList } from './group-list';
+import { SidebarTabs, type SidebarTab } from './sidebar-tabs';
+import { Avatar } from './avatar';
+import { ProfileCard } from './profile-card';
+import { useTabBadge } from './use-tab-badge';
+import { useIncomingNotifier, type IncomingNotifier } from './use-incoming-notifier';
+import { captureException } from '@/lib/error-reporter';
+import { useLazyMount } from '@/lib/use-lazy-mount';
+import { cn } from '@/lib/utils';
+
+// Lazy-loaded — log viewer is dev-only-ish, not in the first-paint
+// path. Splitting it shaves the console-buffer + dialog plumbing
+// from the main bundle until the user opens it.
+const LogsDialog = lazy(() =>
+  import('./logs-dialog').then((m) => ({ default: m.LogsDialog })),
+);
+
+export interface ChatWorkspaceProps {
+  handle: PrivchatHandle;
+  /** Called when the user clicks the logout button. App.tsx is
+   *  responsible for clearing persisted session + disposing the SDK
+   *  + returning to the login screen. */
+  onLogout: () => void;
+  /** R7.3 — switcher state forwarded into the top bar. Optional
+   *  so TestApp can mount ChatWorkspace without owning real
+   *  multi-account state. When undefined, the switcher renders
+   *  but its handlers are no-ops driven by the registry-on-disk
+   *  view (legacy-default account only, in test mode). */
+  activeAccountKey?: AccountKey | null;
+  onSelectAccount?: (key: AccountKey) => void;
+  onAddAccount?: () => void;
+  /** R7.4 — true while a switch sequencer is in flight; the
+   *  switcher trigger + entries + Add-account item disable
+   *  themselves so the user can't queue concurrent switches. */
+  switching?: boolean;
+}
+
+interface ActiveChannel {
+  channelId: string;
+  channelType: number;
+  /** Re-mount key so reopening the same channel resets composer/scroll/error. */
+  key: number;
+}
+
+export function ChatWorkspace({
+  handle: _handle,
+  onLogout,
+  activeAccountKey,
+  onSelectAccount,
+  onAddAccount,
+  switching,
+}: ChatWorkspaceProps) {
+  const state = useConnectionState();
+  // Read session uid via the adapter seam rather than `handle.client`
+  // directly so test harnesses can mount this workspace with a mock
+  // adapter and no real `PrivchatClient` instance.
+  const sessionUid = usePrivchatClient().sessionSnapshot().user_id;
+
+  const [tab, setTab] = useState<SidebarTab>('chats');
+  const [active, setActive] = useState<ActiveChannel | null>(null);
+  // Debounces double-taps on a contact row while channelDirectGetOrCreate
+  // is in flight. While set, ContactList disables every row.
+  const [openingDirectUid, setOpeningDirectUid] = useState<string | null>(null);
+
+  // Tab badge: title becomes "(N) {original}" when there's any unread.
+  // We sum unread_count across the user's channel list — same number the
+  // sidebar would render if we showed a global counter.
+  const channelList = useChannelList({ skipAutoBootstrap: true });
+  const unreadTotal = useMemo(
+    () =>
+      channelList.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0),
+    [channelList.conversations],
+  );
+  useTabBadge(unreadTotal);
+
+  // Incoming notifier: ping + (optional) desktop notification on
+  // received messages. Suppressed for the currently-active channel
+  // when the tab is visible.
+  const notifier = useIncomingNotifier(active?.channelId ?? null);
+
+  // Logs window — purely a debug affordance, but useful when running
+  // mobile-Safari-style without devtools. Patches `console.*` once at
+  // import time (see log-buffer.ts side effect).
+  const [logsOpen, setLogsOpen] = useState(false);
+
+  const openDirect = useOpenDirectConversation();
+
+  const onSelect = useCallback((channelId: string, channelType: number) => {
+    setActive((prev) => ({
+      channelId,
+      channelType,
+      key: (prev?.key ?? 0) + 1,
+    }));
+  }, []);
+
+  const onOpenContact = useCallback(
+    async (user_id: string) => {
+      if (openingDirectUid !== null) return;
+      setOpeningDirectUid(user_id);
+      try {
+        const { channelId, channelType } = await openDirect(user_id);
+        onSelect(channelId, channelType);
+        setTab('chats');
+      } catch (err) {
+        captureException(err, { source: 'chat-workspace.openDirect' });
+      } finally {
+        setOpeningDirectUid(null);
+      }
+    },
+    [openDirect, onSelect, openingDirectUid],
+  );
+
+  const onOpenGroup = useCallback(
+    (channelId: string, channelType: number) => {
+      onSelect(channelId, channelType);
+      setTab('chats');
+    },
+    [onSelect],
+  );
+
+  const onBackToList = () => setActive(null);
+
+  const activeId = active === null ? null : `${active.channelId}:${active.channelType}`;
+
+  return (
+    <div className="flex h-dvh flex-col bg-muted">
+      <TopBar
+        uid={sessionUid}
+        state={state}
+        onLogout={onLogout}
+        notifier={notifier}
+        onOpenLogs={() => setLogsOpen(true)}
+        activeAccountKey={activeAccountKey ?? null}
+        onSelectAccount={onSelectAccount}
+        onAddAccount={onAddAccount}
+        switching={switching ?? false}
+      />
+      <LazyLogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
+
+      <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+        {/* List pane */}
+        <aside
+          className={cn(
+            'flex flex-col min-h-0 border-r bg-card',
+            'md:w-[320px] md:shrink-0',
+            // <md: list is the only screen until a panel is opened
+            active === null ? 'flex-1 md:flex-none' : 'hidden md:flex',
+          )}
+        >
+          <SidebarTabs active={tab} onChange={setTab} />
+
+          <div
+            data-testid="pane-chats"
+            className={cn('flex-1 min-h-0', tab === 'chats' ? 'flex flex-col' : 'hidden')}
+          >
+            <ConversationList activeId={activeId} onSelect={onSelect} />
+          </div>
+          <div
+            data-testid="pane-contacts"
+            className={cn('flex-1 min-h-0', tab === 'contacts' ? 'flex flex-col' : 'hidden')}
+          >
+            <ContactList onOpen={onOpenContact} openingUid={openingDirectUid} />
+          </div>
+          <div
+            data-testid="pane-groups"
+            className={cn('flex-1 min-h-0', tab === 'groups' ? 'flex flex-col' : 'hidden')}
+          >
+            <GroupList onOpen={onOpenGroup} />
+          </div>
+        </aside>
+
+        {/* Panel pane */}
+        <main
+          className={cn(
+            'flex flex-1 min-h-0 flex-col bg-card',
+            // <md: panel only renders when something is selected
+            active === null ? 'hidden md:flex' : 'flex',
+          )}
+        >
+          {active !== null ? (
+            <ConversationPanel
+              key={active.key}
+              channelId={active.channelId}
+              channelType={active.channelType}
+              onBack={onBackToList}
+            />
+          ) : (
+            <EmptyPlaceholder />
+          )}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+/** Lazy wrapper for the logs dialog. Mounts on first open, stays
+ *  mounted afterwards so the Radix close-state animation can play
+ *  out when the user dismisses. */
+function LazyLogsDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const mounted = useLazyMount(open);
+  if (!mounted) return null;
+  return (
+    <Suspense fallback={null}>
+      <LogsDialog open={open} onOpenChange={onOpenChange} />
+    </Suspense>
+  );
+}
+
+function TopBar({
+  uid,
+  state,
+  onLogout,
+  notifier,
+  onOpenLogs,
+  activeAccountKey,
+  onSelectAccount,
+  onAddAccount,
+  switching,
+}: {
+  uid: string | undefined;
+  state: string;
+  onLogout: () => void;
+  notifier: IncomingNotifier;
+  onOpenLogs: () => void;
+  activeAccountKey: AccountKey | null;
+  onSelectAccount?: (key: AccountKey) => void;
+  onAddAccount?: () => void;
+  switching: boolean;
+}) {
+  const { t } = useTranslation();
+  // Self profile drives the top-bar identity display. It may be empty
+  // until the entity sync hydrates the cache; in that gap we fall back
+  // to the platform name.
+  const me = useUserProfile(uid ?? '');
+  const display = me?.nickname ?? me?.username ?? t('app.name');
+  const seed = uid !== undefined && uid !== '' ? `u:${uid}` : 'self';
+
+  return (
+    <header className="flex shrink-0 items-center justify-between border-b bg-card px-3 py-2">
+      <ProfileCard user={me} fallbackTitle={display}>
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent"
+        >
+          <Avatar seed={seed} label={display} size="sm" />
+          <span className="text-sm font-semibold">
+            {display}
+            <span className="text-muted-foreground font-normal">@PrivChat</span>
+          </span>
+          <ConnectionPill state={state} />
+        </button>
+      </ProfileCard>
+
+      <div className="flex items-center gap-1">
+        <NotifyToggles notifier={notifier} />
+        {onSelectAccount !== undefined && onAddAccount !== undefined && (
+          <AccountSwitcher
+            activeAccountKey={activeAccountKey}
+            onSelectAccount={onSelectAccount}
+            onAddAccount={onAddAccount}
+            disabled={switching}
+          />
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onOpenLogs}
+          aria-label={t('logs.open')}
+          title={t('logs.open')}
+        >
+          <FileText className="h-4 w-4" />
+        </Button>
+        <LangSwitcher />
+        <ThemeToggle />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onLogout}
+          aria-label={t('workspace.logout')}
+          title={t('workspace.logout')}
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+function NotifyToggles({ notifier }: { notifier: IncomingNotifier }) {
+  const { t } = useTranslation();
+  const onDesktopClick = () => {
+    if (notifier.desktopState === 'unsupported') return;
+    if (notifier.desktopState === 'denied') {
+      alert(t('notify.desktop_blocked'));
+      return;
+    }
+    if (notifier.desktopState === 'default') {
+      void notifier.requestDesktop();
+      return;
+    }
+    // granted — toggle the user pref
+    notifier.setDesktopEnabled(!notifier.desktopEnabled);
+  };
+  const desktopActive =
+    notifier.desktopState === 'granted' && notifier.desktopEnabled;
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => notifier.setSoundEnabled(!notifier.soundEnabled)}
+        aria-label={t('notify.sound_label')}
+        title={t('notify.sound_label')}
+      >
+        {notifier.soundEnabled ? (
+          <Volume2 className="h-4 w-4" />
+        ) : (
+          <VolumeX className="h-4 w-4 text-muted-foreground" />
+        )}
+      </Button>
+      {notifier.desktopState !== 'unsupported' && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDesktopClick}
+          aria-label={t('notify.desktop_label')}
+          title={
+            notifier.desktopState === 'default'
+              ? t('notify.desktop_request')
+              : t('notify.desktop_label')
+          }
+        >
+          {desktopActive ? (
+            <Bell className="h-4 w-4" />
+          ) : (
+            <BellOff className="h-4 w-4 text-muted-foreground" />
+          )}
+        </Button>
+      )}
+    </>
+  );
+}
+
+function ConnectionPill({ state }: { state: string }) {
+  const { t } = useTranslation();
+  // Map every SDK ConnectionState into one of three UX buckets so users
+  // don't have to learn the SDK vocabulary. The dot color signals at a
+  // glance: green = good, amber = transitional, red = nothing's getting
+  // through.
+  const bucket: 'connected' | 'connecting' | 'disconnected' =
+    state === 'authenticated'
+      ? 'connected'
+      : state === 'connecting' || state === 'connected' || state === 'reconnecting'
+        ? 'connecting'
+        : 'disconnected';
+  const dot =
+    bucket === 'connected'
+      ? 'bg-emerald-500'
+      : bucket === 'connecting'
+        ? 'bg-amber-500'
+        : 'bg-rose-500';
+  return (
+    <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      <span className={cn('h-1.5 w-1.5 rounded-full', dot)} />
+      {t(`connection.${bucket}`)}
+    </span>
+  );
+}
+
+function EmptyPlaceholder() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex h-full items-center justify-center bg-card text-sm text-muted-foreground">
+      {t('workspace.select_conversation')}
+    </div>
+  );
+}
