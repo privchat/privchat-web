@@ -11,7 +11,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ImageIcon, Info, Paperclip, X as XIcon } from 'lucide-react';
+import { ImageIcon, Info, Paperclip, Video, X as XIcon } from 'lucide-react';
 import {
   resolveConversationTitle,
   useChannelList,
@@ -22,6 +22,7 @@ import {
   usePrivchatClient,
   useSendFile,
   useSendImage,
+  useSendVideo,
   useTyping,
   useUserProfile,
 } from '@privchat/react';
@@ -150,6 +151,7 @@ export function ConversationPanel({
 
   const sendImage = useSendImage();
   const sendFile = useSendFile();
+  const sendVideo = useSendVideo();
   const selfUid = usePrivchatClient().sessionSnapshot().user_id;
 
   // Voice playback is a single-active controller across the whole app.
@@ -276,13 +278,52 @@ export function ConversationPanel({
     }
   };
 
+  const onSendVideoBlob = async (file: Blob, filename: string, mime: string) => {
+    const taskId = newTaskId();
+    startTask({
+      id: taskId,
+      channel_id: channelId,
+      filename,
+      kind: 'video',
+    });
+    try {
+      // Best-effort metadata probe via a hidden <video> element. If it
+      // fails (codec the browser can't decode, broken file), we fall
+      // back to width/height/duration = 0 — the server still accepts
+      // the message; the receiver just renders a player with default
+      // dims and no duration overlay.
+      const meta = await readVideoMetadata(file).catch(() => ({
+        width: 0,
+        height: 0,
+        duration: 0,
+      }));
+      await sendVideo({
+        channel_id: channelId,
+        channel_type: channelType,
+        file,
+        filename,
+        mime_type: mime,
+        width: meta.width,
+        height: meta.height,
+        duration: meta.duration,
+        // No client-side poster frame generation. The receiver renders
+        // controls without a thumbnail when this is absent.
+        onProgress: (e) => patchProgress(taskId, e.loaded, e.total, e.percent),
+      });
+      markDone(taskId);
+    } catch (err) {
+      markFailed(taskId, (err as Error).message);
+    }
+  };
+
   /** Multi-file dispatcher used by both file pickers and the
-   *  drag/paste handlers. Routes images vs everything else. */
+   *  drag/paste handlers. Routes image / video / generic-file by MIME. */
   const onAttachFiles = async (files: FileList | File[]) => {
     for (const f of Array.from(files)) {
-      const isImage = f.type.startsWith('image/');
-      if (isImage) {
+      if (f.type.startsWith('image/')) {
         await onSendImageBlob(f, f.name || 'image', f.type || 'image/jpeg');
+      } else if (f.type.startsWith('video/')) {
+        await onSendVideoBlob(f, f.name || 'video', f.type || 'video/mp4');
       } else {
         await onSendFileBlob(f, f.name || 'file', f.type || 'application/octet-stream');
       }
@@ -472,7 +513,12 @@ export function ConversationPanel({
         <input
           ref={imagePickerRef}
           type="file"
-          accept="image/*"
+          // The "image" picker button accepts both images and videos —
+          // `onAttachFiles` routes each by MIME type to the right
+          // sender. Visually we keep it labelled as the image button
+          // (camera icon) since "图片/视频" is the standard chat-app
+          // grouping (Telegram, WeChat, WhatsApp all do this).
+          accept="image/*,video/*"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -606,6 +652,8 @@ function UploadChip({ task }: { task: UploadTask }) {
     <div className="flex items-center gap-2 text-xs">
       {task.kind === 'image' ? (
         <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      ) : task.kind === 'video' ? (
+        <Video className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       ) : (
         <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       )}
@@ -679,5 +727,42 @@ async function readImageDimensions(file: Blob): Promise<{ width: number; height:
       reject(new Error('image probe failed'));
     };
     img.src = url;
+  });
+}
+
+/** Probe a video blob for `videoWidth` / `videoHeight` / `duration`
+ *  using a detached `<video>` element. Loads metadata only — never
+ *  fetches the body. Rejects on decode error / unknown codec; callers
+ *  fall back to `0/0/0` and let the receiver render default chrome. */
+async function readVideoMetadata(
+  file: Blob,
+): Promise<{ width: number; height: number; duration: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      video.src = '';
+    };
+    video.onloadedmetadata = () => {
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      // Some browsers report duration as Infinity for streamed / chunked
+      // sources before a seek; treat that as "unknown" rather than
+      // poisoning the receiver with a bogus value.
+      const rawDuration = video.duration;
+      const duration =
+        Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
+      cleanup();
+      resolve({ width, height, duration });
+    };
+    video.onerror = () => {
+      cleanup();
+      reject(new Error('video probe failed'));
+    };
+    video.src = url;
   });
 }

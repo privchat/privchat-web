@@ -19,8 +19,8 @@ export interface UploadTask {
   id: string;
   channel_id: string;
   filename: string;
-  /** 'image' | 'file' (other types are deferred). Drives icon choice. */
-  kind: 'image' | 'file';
+  /** Drives icon choice in the upload chip. */
+  kind: 'image' | 'file' | 'video';
   /** Bytes already sent. */
   loaded: number;
   /** Bytes total. `0` when Content-Length unavailable. */

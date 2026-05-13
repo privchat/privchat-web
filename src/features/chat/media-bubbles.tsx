@@ -1,23 +1,36 @@
-// Media bubble renderers for image / file / voice / video. Selected
-// in `MessageRow` based on `vm.content_type` + `vm.metadata`. Each
+// Media bubble renderers for the rich content types. Selected in
+// `MessageRow` based on `vm.content_type` + `vm.metadata`. Each
 // component owns a small amount of UX (image click to fullscreen,
-// file download chip, etc) and falls through to a plain text bubble
-// when metadata is missing or malformed (cross-version safety).
+// file download chip, etc).
+//
+// `pickMediaBubble` is the single dispatch point and never returns
+// the raw `vm.content` — text is the only case it returns null for.
+// All other recognized types render their typed bubble; unrecognized
+// or malformed metadata renders an `UnsupportedBubble` placeholder
+// instead of an empty / cryptic text bubble.
 
 import { useCallback, useState } from 'react';
 import {
   AlertTriangle,
   Download,
+  ExternalLink,
   FileText,
   ImageIcon,
+  Link as LinkIcon,
   Loader2,
+  MapPin,
   Pause,
   Play,
+  Video as VideoIcon,
 } from 'lucide-react';
 import type {
   FileMetadataVM,
   ImageMetadataVM,
+  LinkMetadataVM,
+  LocationMetadataVM,
   MessageItemVM,
+  StickerMetadataVM,
+  VideoMetadataVM,
   VoiceMetadataVM,
 } from '@privchat/react';
 import { usePrivchatClient } from '@privchat/react';
@@ -237,6 +250,202 @@ function formatMs(ms: number): string {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+// ─────────── Video ────────────────────────────────────────────────
+
+const MAX_VIDEO_WIDTH = 280;
+const MAX_VIDEO_HEIGHT = 360;
+
+export function VideoBubble({
+  meta,
+  isSelf,
+}: {
+  meta: VideoMetadataVM;
+  isSelf: boolean;
+}) {
+  if (meta.url === undefined || meta.url === '') {
+    return <FallbackBubble label="[视频]" isSelf={isSelf} icon={VideoIcon} />;
+  }
+  // Match ImageBubble's aspect-ratio fit so a 9:16 phone video doesn't
+  // dominate the timeline. Use natural dims when known; otherwise fall
+  // back to the bounding box and let object-cover handle layout.
+  const knownDims = meta.width > 0 && meta.height > 0;
+  const naturalW = knownDims ? meta.width : MAX_VIDEO_WIDTH;
+  const naturalH = knownDims ? meta.height : MAX_VIDEO_HEIGHT;
+  const scale = Math.min(
+    1,
+    MAX_VIDEO_WIDTH / naturalW,
+    MAX_VIDEO_HEIGHT / naturalH,
+  );
+  const w = Math.round(naturalW * scale);
+  const h = Math.round(naturalH * scale);
+  // Native <video> controls give playback / volume / fullscreen for
+  // free — building a custom player here would just duplicate browser
+  // chrome. `preload="metadata"` keeps cold scroll cheap (no body
+  // download on mount) but still surfaces the poster frame.
+  return (
+    <div
+      className={cn(
+        'overflow-hidden rounded-lg shrink-0 bg-black',
+        isSelf ? 'ml-auto' : 'mr-auto',
+      )}
+      style={{
+        width: w,
+        height: h,
+        aspectRatio: knownDims ? `${naturalW} / ${naturalH}` : undefined,
+      }}
+    >
+      <video
+        src={meta.url}
+        poster={meta.thumbnail_url}
+        controls
+        preload="metadata"
+        playsInline
+        className="h-full w-full object-cover bg-black"
+      />
+    </div>
+  );
+}
+
+// ─────────── Sticker ──────────────────────────────────────────────
+
+const STICKER_SIZE = 140;
+
+export function StickerBubble({
+  meta,
+  isSelf,
+}: {
+  meta: StickerMetadataVM;
+  isSelf: boolean;
+}) {
+  // Stickers render WITHOUT a chat-bubble background — they ARE the
+  // message visually, like Telegram / WhatsApp / iMessage. The
+  // `transparent` BG also makes PNGs with transparency look right.
+  return (
+    <img
+      src={meta.image_url}
+      alt={`sticker:${meta.sticker_id}`}
+      width={STICKER_SIZE}
+      height={STICKER_SIZE}
+      loading="lazy"
+      decoding="async"
+      className={cn(
+        'rounded-md shrink-0 object-contain',
+        isSelf ? 'ml-auto' : 'mr-auto',
+      )}
+      style={{ width: STICKER_SIZE, height: STICKER_SIZE }}
+    />
+  );
+}
+
+// ─────────── Location ─────────────────────────────────────────────
+
+export function LocationBubble({
+  meta,
+  isSelf,
+}: {
+  meta: LocationMetadataVM;
+  isSelf: boolean;
+}) {
+  // Minimum-viable: show coords + a tap target that opens the platform
+  // map app. Embedding a real map (Leaflet / Mapbox) adds 100+ KB and
+  // brings a tiles-API dependency — not worth it for a row that
+  // someone glances at once. Two decimal places ≈ 1.1 km precision,
+  // which keeps the chip narrow; the maps deep-link uses full
+  // precision so accuracy isn't lost.
+  const href = `https://www.google.com/maps?q=${meta.latitude},${meta.longitude}`;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm max-w-[280px]',
+        'transition-colors',
+        isSelf
+          ? 'ml-auto bg-primary text-primary-foreground hover:bg-primary/90'
+          : 'mr-auto bg-muted hover:bg-muted/80',
+      )}
+    >
+      <MapPin className="h-5 w-5 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">位置</div>
+        <div
+          className={cn(
+            'text-[10px] opacity-80 font-mono tabular-nums',
+            isSelf ? 'text-primary-foreground' : 'text-muted-foreground',
+          )}
+        >
+          {meta.latitude.toFixed(4)}, {meta.longitude.toFixed(4)}
+        </div>
+      </div>
+      <ExternalLink className="h-4 w-4 shrink-0 opacity-70" />
+    </a>
+  );
+}
+
+// ─────────── Link preview ─────────────────────────────────────────
+
+export function LinkBubble({
+  meta,
+  isSelf,
+}: {
+  meta: LinkMetadataVM;
+  isSelf: boolean;
+}) {
+  // Defensive hostname display — `new URL` throws on malformed values
+  // (e.g. `not a url`), in which case we just show the raw string.
+  let host: string;
+  try {
+    host = new URL(meta.url).hostname;
+  } catch {
+    host = meta.url;
+  }
+  return (
+    <a
+      href={meta.url}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        'flex max-w-[320px] flex-col overflow-hidden rounded-lg text-sm transition-colors',
+        isSelf
+          ? 'ml-auto bg-primary text-primary-foreground hover:bg-primary/90'
+          : 'mr-auto bg-muted hover:bg-muted/80',
+      )}
+    >
+      {meta.thumbnail_url !== undefined && meta.thumbnail_url !== '' && (
+        <img
+          src={meta.thumbnail_url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-32 w-full object-cover"
+        />
+      )}
+      <div className="flex flex-col gap-1 px-3 py-2">
+        <div className="flex items-center gap-1.5 text-[11px] opacity-80">
+          <LinkIcon className="h-3 w-3 shrink-0" />
+          <span className="truncate">{host}</span>
+        </div>
+        {meta.title !== undefined && meta.title !== '' && (
+          <div className="line-clamp-2 font-medium">{meta.title}</div>
+        )}
+        {meta.description !== undefined && meta.description !== '' && (
+          <div
+            className={cn(
+              'line-clamp-2 text-xs',
+              isSelf ? 'text-primary-foreground/80' : 'text-muted-foreground',
+            )}
+          >
+            {meta.description}
+          </div>
+        )}
+      </div>
+    </a>
+  );
+}
+
+// ─────────── Fallbacks ────────────────────────────────────────────
+
 export function FallbackBubble({
   label,
   isSelf,
@@ -259,10 +468,50 @@ export function FallbackBubble({
   );
 }
 
-/** Decide which bubble renderer applies to a message. Returns
- *  `null` when the row is plain text (caller renders the default
- *  text bubble). */
+/**
+ * Catch-all bubble for `content_type` values the web client doesn't
+ * specifically render (`forward`, `contact_card`, unknown future
+ * types). Shows a generic "unsupported" label instead of either
+ * crashing or rendering an empty text bubble.
+ *
+ * Distinct from FallbackBubble (which assumes the type IS known but
+ * metadata happened to be malformed and uses a type-specific label
+ * like "[图片]"). This one acknowledges the type isn't handled at all.
+ */
+function UnsupportedBubble({ isSelf }: { isSelf: boolean }) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm italic',
+        isSelf
+          ? 'ml-auto bg-primary/80 text-primary-foreground'
+          : 'mr-auto bg-muted text-muted-foreground',
+      )}
+    >
+      <AlertTriangle className="h-4 w-4" />
+      <span>该消息类型暂不支持</span>
+    </div>
+  );
+}
+
+/**
+ * Decide which bubble renderer applies to a message.
+ *
+ * - Returns `null` ONLY for `text` (caller renders the default text
+ *   bubble using `vm.content`).
+ * - All recognized media types return their typed bubble.
+ * - Unrecognized `content_type` (forward / contact_card / unknown /
+ *   future additions) returns the `UnsupportedBubble` placeholder
+ *   instead of falling through to a possibly-empty text bubble.
+ */
 export function pickMediaBubble(vm: MessageItemVM): React.ReactNode | null {
+  if (vm.content_type === 'text') return null;
+  if (vm.content_type === 'system') {
+    // System rows fall through to text rendering for now; centered /
+    // italic styling is a separate concern handled at MessageRow level
+    // if/when it's needed. Returning null preserves existing behavior.
+    return null;
+  }
   if (vm.content_type === 'image' && vm.metadata?.type === 'image') {
     return <ImageBubble meta={vm.metadata} isSelf={vm.is_self} />;
   }
@@ -278,7 +527,45 @@ export function pickMediaBubble(vm: MessageItemVM): React.ReactNode | null {
       />
     );
   }
-  return null;
+  if (vm.content_type === 'video' && vm.metadata?.type === 'video') {
+    return <VideoBubble meta={vm.metadata} isSelf={vm.is_self} />;
+  }
+  if (vm.content_type === 'sticker' && vm.metadata?.type === 'sticker') {
+    return <StickerBubble meta={vm.metadata} isSelf={vm.is_self} />;
+  }
+  if (vm.content_type === 'location' && vm.metadata?.type === 'location') {
+    return <LocationBubble meta={vm.metadata} isSelf={vm.is_self} />;
+  }
+  if (vm.content_type === 'link' && vm.metadata?.type === 'link') {
+    return <LinkBubble meta={vm.metadata} isSelf={vm.is_self} />;
+  }
+  // Recognized-but-metadata-mismatched (e.g. image content_type with no
+  // metadata): show a type-labelled fallback chip rather than the
+  // generic unsupported placeholder, so the user can tell what kind of
+  // message it was.
+  if (vm.content_type === 'image') {
+    return <FallbackBubble label="[图片]" isSelf={vm.is_self} icon={ImageIcon} />;
+  }
+  if (vm.content_type === 'file') {
+    return <FallbackBubble label="[文件]" isSelf={vm.is_self} icon={FileText} />;
+  }
+  if (vm.content_type === 'voice') {
+    return <FallbackBubble label="[语音]" isSelf={vm.is_self} />;
+  }
+  if (vm.content_type === 'video') {
+    return <FallbackBubble label="[视频]" isSelf={vm.is_self} icon={VideoIcon} />;
+  }
+  if (vm.content_type === 'sticker') {
+    return <FallbackBubble label="[表情]" isSelf={vm.is_self} />;
+  }
+  if (vm.content_type === 'location') {
+    return <FallbackBubble label="[位置]" isSelf={vm.is_self} icon={MapPin} />;
+  }
+  if (vm.content_type === 'link') {
+    return <FallbackBubble label="[链接]" isSelf={vm.is_self} icon={LinkIcon} />;
+  }
+  // forward / contact_card / unknown — show the generic placeholder.
+  return <UnsupportedBubble isSelf={vm.is_self} />;
 }
 
 function formatSize(bytes: number): string {

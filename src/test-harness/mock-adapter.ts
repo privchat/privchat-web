@@ -624,6 +624,9 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async sendFile() {
       throw new Error('sendFile not implemented in smoke harness');
     },
+    async sendVideo() {
+      throw new Error('sendVideo not implemented in smoke harness');
+    },
 
     // ---- Reactions ----
     async addReaction() {
