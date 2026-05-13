@@ -162,8 +162,8 @@ test.describe('LoginPage QR tab (R8.5c)', () => {
       'aria-selected',
       'false',
     );
-    // SMS form is what the user lands on.
-    await expect(page.getByTestId('login-mobile-input')).toBeVisible();
+    // SMS form is what the user lands on — Telegram-style step-1 widgets.
+    await expect(page.getByTestId('login-phone-number-input')).toBeVisible();
     await expect(page.getByTestId('login-qr-panel')).toHaveCount(0);
   });
 

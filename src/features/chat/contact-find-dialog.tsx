@@ -161,9 +161,11 @@ export function ContactFindDialog({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{display}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      @{user.username}
-                    </div>
+                    {user.username !== '' && (
+                      <div className="truncate text-xs text-muted-foreground">
+                        @{user.username}
+                      </div>
+                    )}
                   </div>
                   {alreadyFriend ? (
                     <Button

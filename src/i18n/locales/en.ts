@@ -31,6 +31,15 @@ export const en: LocaleSchema = {
     resend_sms_code: 'Resend in {{seconds}}s',
     sending_sms_code: 'Sending…',
     sms_code_hint: 'The code is valid for 5 minutes.',
+    // Telegram-style two-step phone → OTP flow (replaces single-page form):
+    continue: 'Continue',
+    country_label: 'Country',
+    phone_number_label: 'Phone number',
+    phone_number_placeholder: 'Your phone number',
+    otp_step_title: 'Enter the code',
+    otp_step_subtitle: 'We sent a code to {{mobile}}',
+    otp_back: 'Back',
+    otp_resend_now: 'Resend code',
     error_invalid_mobile: 'Please enter a valid mobile number, e.g. +8613800138000',
     error_send_sms: 'Send code: {{message}}',
     error_sms_login: 'SMS login: {{message}}',
@@ -313,6 +322,14 @@ export interface LocaleSchema {
     resend_sms_code: string;
     sending_sms_code: string;
     sms_code_hint: string;
+    continue: string;
+    country_label: string;
+    phone_number_label: string;
+    phone_number_placeholder: string;
+    otp_step_title: string;
+    otp_step_subtitle: string;
+    otp_back: string;
+    otp_resend_now: string;
     error_invalid_mobile: string;
     error_send_sms: string;
     error_sms_login: string;

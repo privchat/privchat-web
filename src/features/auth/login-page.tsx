@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ArrowLeft } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -10,6 +11,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CountrySelect } from '@/components/ui/country-select';
+import { OtpInput, type OtpInputHandle } from '@/components/ui/otp-input';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LangSwitcher } from '@/components/lang-switcher';
 import { getAuthProvider } from '@/lib/account-auth-provider';
@@ -18,6 +21,11 @@ import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { getLoginErrorMessage } from '@/lib/login-error-message';
 import type { RequiredAction } from '@/lib/required-action';
 import type { PersistedSession } from '@/lib/session-storage';
+import {
+  COUNTRIES,
+  DEFAULT_COUNTRY,
+  type CountryEntry,
+} from '@/lib/country-codes';
 import { QrLoginPanel } from './qr-login-panel';
 import { cn } from '@/lib/utils';
 
@@ -283,7 +291,12 @@ function BuiltinPasswordForm({
   );
 }
 
-// ─────────── PLATFORM: mobile + SMS code form ────────────────────
+// ─────────── PLATFORM: two-step phone → OTP flow (Telegram-style) ──
+
+/** OTP box count. Telegram uses 5; PrivChat uses 6 to match the
+ *  server's 6-digit code length (and existing `sms_code_placeholder`
+ *  copy). Change here and in `OtpInput` callers if the server moves. */
+const OTP_LENGTH = 6;
 
 function PlatformSmsForm({
   serverUrl,
@@ -293,22 +306,30 @@ function PlatformSmsForm({
   onLoggedIn,
 }: FormBranchProps) {
   const { t } = useTranslation();
-  const [mobile, setMobile] = useState('');
+  // Two-step state machine. 'phone' = country + national-number entry;
+  // 'otp' = 6-digit code entry with auto-submit on complete. The form
+  // intentionally does NOT preserve OTP across step back-navigation —
+  // re-entering phone means re-arming the whole flow.
+  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [country, setCountry] = useState<CountryEntry>(() =>
+    pickDefaultCountry(),
+  );
+  // National number (no dial code, no leading 0). Stored raw — we
+  // strip non-digits at submit time so paste of "(010) 1234-5678"
+  // works without forcing the user to clean it up.
+  const [nationalNumber, setNationalNumber] = useState('');
   const [smsCode, setSmsCode] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  const otpRef = useRef<OtpInputHandle>(null);
 
-  const canSendCode =
-    !busy && cooldown === 0 && mobile.trim() !== '';
-  const canSubmit =
-    !busy &&
-    serverUrl.trim() !== '' &&
-    E164_RE.test(mobile.trim()) &&
-    smsCode.trim() !== '';
+  // Compose into E.164: +<dial><digits-only>. Used for the platform
+  // sendSmsCode / loginWithSms calls and for E164_RE validation.
+  const composedMobile = `+${country.dial}${nationalNumber.replace(/[^0-9]/g, '')}`;
+  const phoneValid = E164_RE.test(composedMobile);
 
-  // R8.3b: cooldown countdown. setInterval cleaned up on unmount
-  // and on cooldown reaching 0 — both paths matter so a Cancel
-  // doesn't leave a dangling timer that calls setState after the
-  // component is gone.
+  // R8.3b — cooldown countdown for OTP resend. Same lifecycle as
+  // before: interval cleared on unmount and on cooldown reaching 0
+  // so a back-nav doesn't leave a dangling setState.
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (cooldown <= 0) {
@@ -331,16 +352,17 @@ function PlatformSmsForm({
     };
   }, [cooldown]);
 
-  const sendCode = async () => {
-    const m = mobile.trim();
-    if (!E164_RE.test(m)) {
+  const sendCode = async (
+    options: { advanceOnSuccess: boolean },
+  ): Promise<boolean> => {
+    if (!phoneValid) {
       setError(t('login.error_invalid_mobile'));
-      return;
+      return false;
     }
     const baseUrl = getPlatformBaseUrl();
     if (baseUrl === null) {
       setError(t('login.error_config'));
-      return;
+      return false;
     }
     setBusy(true);
     setError(null);
@@ -351,7 +373,7 @@ function PlatformSmsForm({
       }
       const result = await provider.sendSmsCode({
         platformBaseUrl: baseUrl,
-        mobile: m,
+        mobile: composedMobile,
         scene: 'login',
       });
       setCooldown(
@@ -359,20 +381,25 @@ function PlatformSmsForm({
           ? Math.floor(result.cooldownSeconds)
           : 60,
       );
+      if (options.advanceOnSuccess) {
+        setStep('otp');
+        setSmsCode('');
+      }
+      return true;
     } catch (e) {
       setError(getLoginErrorMessage(e, 'send-sms', t));
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  const submit = async () => {
-    if (!canSubmit) return;
-    const m = mobile.trim();
-    if (!E164_RE.test(m)) {
+  const submit = async (code: string) => {
+    if (!phoneValid) {
       setError(t('login.error_invalid_mobile'));
       return;
     }
+    if (code.length !== OTP_LENGTH) return;
     const baseUrl = getPlatformBaseUrl();
     if (baseUrl === null) {
       setError(t('login.error_config'));
@@ -388,17 +415,14 @@ function PlatformSmsForm({
       const result = await provider.loginWithSms({
         platformBaseUrl: baseUrl,
         serverUrl,
-        mobile: m,
-        smsCode: smsCode.trim(),
+        mobile: composedMobile,
+        smsCode: code,
         device: makeDevice(),
       });
       // R8.3b — PLATFORM session blob MUST carry account_mode +
       // platform_base_url + refresh_token (R7/R8 compat note).
-      // App.tsx persists what we hand it via persistSessionForAccount;
-      // missing fields here = missing context for refresh / restore.
-      // R8.4c — also pass requiredActions (server's post-login gate
-      // signal) so App.tsx can prime the RequiredActionsGate without
-      // a list() round-trip on first paint.
+      // R8.4c — also pass requiredActions so App.tsx can prime the
+      // RequiredActionsGate without a list() round-trip on first paint.
       onLoggedIn(
         {
           url: result.serverUrl,
@@ -417,67 +441,138 @@ function PlatformSmsForm({
       );
     } catch (e) {
       setError(getLoginErrorMessage(e, 'sms-login', t));
+      // Reset the OTP boxes on failure so user can retype without
+      // a "looks correct but cached wrong" trap.
+      otpRef.current?.clear();
+      setSmsCode('');
       setBusy(false);
     }
     // No setBusy(false) on success — onLoggedIn unmounts this page.
   };
 
-  return (
-    <>
-      <FormRow id="mobile" label={t('login.mobile_label')}>
-        <Input
-          id="mobile"
-          value={mobile}
-          onChange={(e) => setMobile(e.currentTarget.value)}
-          autoComplete="tel"
-          inputMode="tel"
-          placeholder={t('login.mobile_placeholder')}
-          disabled={busy}
-          data-testid="login-mobile-input"
-        />
-      </FormRow>
-      <FormRow id="sms-code" label={t('login.sms_code_label')}>
-        <div className="flex gap-2">
-          <Input
-            id="sms-code"
-            value={smsCode}
-            onChange={(e) => setSmsCode(e.currentTarget.value)}
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            placeholder={t('login.sms_code_placeholder')}
+  if (step === 'phone') {
+    return (
+      <>
+        <FormRow id="country" label={t('login.country_label')}>
+          <CountrySelect
+            value={country}
+            onChange={setCountry}
             disabled={busy}
-            data-testid="login-sms-code-input"
+            data-testid="login-country-select"
+          />
+        </FormRow>
+        <FormRow id="phone-number" label={t('login.phone_number_label')}>
+          <Input
+            id="phone-number"
+            value={nationalNumber}
+            onChange={(e) => setNationalNumber(e.currentTarget.value)}
+            autoComplete="tel-national"
+            inputMode="tel"
+            placeholder={t('login.phone_number_placeholder')}
+            disabled={busy}
+            data-testid="login-phone-number-input"
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && canSubmit) void submit();
+              if (e.key === 'Enter' && phoneValid && !busy) {
+                void sendCode({ advanceOnSuccess: true });
+              }
             }}
           />
-          <Button
-            variant="outline"
-            onClick={() => void sendCode()}
-            disabled={!canSendCode}
-            data-testid="login-send-sms-code"
-          >
-            {busy
-              ? t('login.sending_sms_code')
-              : cooldown > 0
-                ? t('login.resend_sms_code', { seconds: cooldown })
-                : t('login.send_sms_code')}
-          </Button>
-        </div>
-      </FormRow>
-      <p className="text-xs text-muted-foreground">{t('login.sms_code_hint')}</p>
+        </FormRow>
 
-      <Button
-        variant="default"
-        className="w-full"
-        onClick={() => void submit()}
-        disabled={!canSubmit}
-        data-testid="login-sms-submit"
-      >
-        {busy ? t('login.signing_in') : t('login.login')}
-      </Button>
+        <Button
+          variant="default"
+          className="w-full"
+          onClick={() => void sendCode({ advanceOnSuccess: true })}
+          disabled={busy || !phoneValid}
+          data-testid="login-phone-continue"
+        >
+          {busy ? t('login.sending_sms_code') : t('login.continue')}
+        </Button>
+      </>
+    );
+  }
+
+  // step === 'otp'
+  return (
+    <>
+      <div className="space-y-1.5 text-center">
+        <p className="text-sm font-medium">{t('login.otp_step_title')}</p>
+        <p className="text-xs text-muted-foreground">
+          {t('login.otp_step_subtitle', { mobile: composedMobile })}
+        </p>
+      </div>
+
+      <div className="py-2">
+        <OtpInput
+          ref={otpRef}
+          value={smsCode}
+          onChange={setSmsCode}
+          length={OTP_LENGTH}
+          disabled={busy}
+          onComplete={(code) => void submit(code)}
+          data-testid="login-otp"
+        />
+      </div>
+
+      {busy && (
+        <p className="text-center text-sm text-muted-foreground">
+          {t('login.signing_in')}
+        </p>
+      )}
+
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setStep('phone');
+            setSmsCode('');
+            setError(null);
+            otpRef.current?.clear();
+          }}
+          disabled={busy}
+          data-testid="login-otp-back"
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          {t('login.otp_back')}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void sendCode({ advanceOnSuccess: false })}
+          disabled={busy || cooldown > 0}
+          data-testid="login-otp-resend"
+        >
+          {cooldown > 0
+            ? t('login.resend_sms_code', { seconds: cooldown })
+            : t('login.otp_resend_now')}
+        </Button>
+      </div>
     </>
   );
+}
+
+/** Pick the default country code at mount.
+ *
+ *  v1: just returns the curated default (China). Future enhancement:
+ *  inspect `navigator.language` (`zh-CN` → CN, `vi` → VN, `en-US` → US,
+ *  etc.) and look it up in COUNTRIES. Not done yet because the
+ *  zh-CN-primary user base + the dev server's localPlatform profile
+ *  both default to China anyway. */
+function pickDefaultCountry(): CountryEntry {
+  if (typeof navigator !== 'undefined') {
+    const lang = (navigator.language || '').toLowerCase();
+    // Quick wins for the languages we already i18n.
+    if (lang.startsWith('vi')) {
+      const vn = COUNTRIES.find((c) => c.code === 'VN');
+      if (vn !== undefined) return vn;
+    }
+    if (lang.startsWith('en-us') || lang === 'en') {
+      const us = COUNTRIES.find((c) => c.code === 'US');
+      if (us !== undefined) return us;
+    }
+  }
+  return DEFAULT_COUNTRY;
 }
 
 // ─────────── PLATFORM: SMS / QR tab toggle ──────────────────────

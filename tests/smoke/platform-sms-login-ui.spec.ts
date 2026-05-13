@@ -1,37 +1,59 @@
-// R8.3b — PLATFORM SMS login UI smokes.
+// PLATFORM SMS login UI smokes — two-step phone → OTP flow (Telegram-style).
 //
 // Forces PLATFORM mode + same-origin fake `platformBaseUrl` via
-// `addInitScript` (window flags consulted by `account-mode.ts`
-// only when `VITE_PRIVCHAT_TEST_MODE === 'mock'`). The provider
-// factory then resolves to `PlatformAuthProvider` against the
-// fake URL; `page.route()` mocks each endpoint per-test.
+// `addInitScript` (window flags consulted by `account-mode.ts` only
+// when `VITE_PRIVCHAT_TEST_MODE === 'mock'`). The provider factory
+// then resolves to `PlatformAuthProvider` against the fake URL;
+// `page.route()` mocks each endpoint per-test.
 //
-// TestApp renders LoginPage only via the add-account flow (the
-// fake handle keeps ChatWorkspace mounted on first paint), so we
-// stage Alice in the registry and click switcher → add-account
-// before each test. TestApp's `onLoggedIn` mirrors App.tsx far
-// enough to call `persistSessionForAccount` + `commitActiveAccount`,
-// which is what test #4 reads back from localStorage.
+// TestApp renders LoginPage only via the add-account flow (the fake
+// handle keeps ChatWorkspace mounted on first paint), so we stage
+// Alice in the registry and click switcher → add-account before
+// each test.
+//
+// Flow recap (post-Telegram-style refactor):
+//   Step 'phone': country picker + national-number input → Continue
+//   Step 'otp':   6-segmented digit boxes; auto-submits on complete
 //
 // What's covered (5 cases):
-//   1. PLATFORM mode renders SMS form; BUILTIN form widgets absent
-//   2. Valid mobile + Send code → POST /auth/send-sms-code with
-//      `scene: 1`; cooldown engages
-//   3. Invalid mobile → inline error, NO HTTP call
-//   4. Successful SMS login persists `account_mode` /
-//      `platform_base_url` / `refresh_token` to BOTH the session
-//      blob AND the registry entry (R7/R8 compat invariant)
-//   5. SMS login API error (`code !== 0`) surfaces server's
-//      `message` verbatim (PlatformApiError pass-through)
+//   1. PLATFORM mode renders step-1 widgets; BUILTIN form widgets absent
+//   2. Continue → POST /auth/send-sms-code with composed E.164 +
+//      scene=1; advances to OTP step; resend cooldown engages
+//   3. Empty phone number disables Continue (no HTTP call possible)
+//   4. Successful flow (phone → OTP fills all 6 → auto-submit) persists
+//      `account_mode` / `platform_base_url` / `refresh_token` to BOTH
+//      the session blob AND the registry entry (R7/R8 compat invariant)
+//   5. SMS login API error (`code !== 0`) surfaces server's `message`
+//      verbatim and re-arms the OTP input for retry
 
 import { expect, test, type Route } from '@playwright/test';
 import { gotoAppFresh } from './_helpers';
 
-/** Per-test setup: stage forced PLATFORM mode + same-origin fake
- *  base URL + a placeholder Alice in registry BEFORE the bundle
- *  loads. Window flags are consulted by account-mode.ts only in
- *  test mode; localStorage is consulted by TestApp's initial state. */
-test.describe('platform SMS login UI (R8.3b)', () => {
+const fillOtp = async (
+  page: import('@playwright/test').Page,
+  code: string,
+): Promise<void> => {
+  // Distributing across boxes via paste handler keeps the test
+  // resilient to focus-advance timing. Paste lands on the first box;
+  // the OtpInput's paste handler distributes the digits across all
+  // boxes and the completion edge-trigger fires onComplete → submit.
+  const first = page.getByTestId('login-otp-0');
+  await first.click();
+  await first.evaluate((el, value) => {
+    const input = el as HTMLInputElement;
+    const dt = new DataTransfer();
+    dt.setData('text/plain', value);
+    input.dispatchEvent(
+      new ClipboardEvent('paste', {
+        clipboardData: dt,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  }, code);
+};
+
+test.describe('platform SMS login UI (Telegram-style two-step)', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       const w = window as unknown as Record<string, unknown>;
@@ -57,18 +79,17 @@ test.describe('platform SMS login UI (R8.3b)', () => {
       );
     });
     await gotoAppFresh(page);
-    // Open switcher → Add account → LoginPage mounts.
     await page.getByTestId('account-switcher-trigger').click();
     await page.getByTestId('account-switcher-add').click();
   });
 
-  test('PLATFORM mode renders SMS form; BUILTIN form widgets absent', async ({
+  test('PLATFORM mode renders phone step widgets; BUILTIN form widgets absent', async ({
     page,
   }) => {
-    await expect(page.getByTestId('login-mobile-input')).toBeVisible();
-    await expect(page.getByTestId('login-sms-code-input')).toBeVisible();
-    await expect(page.getByTestId('login-send-sms-code')).toBeVisible();
-    await expect(page.getByTestId('login-sms-submit')).toBeVisible();
+    // Step 1 widgets:
+    await expect(page.getByTestId('login-country-select')).toBeVisible();
+    await expect(page.getByTestId('login-phone-number-input')).toBeVisible();
+    await expect(page.getByTestId('login-phone-continue')).toBeVisible();
 
     // BUILTIN-only widgets must NOT render under PLATFORM:
     await expect(
@@ -80,9 +101,12 @@ test.describe('platform SMS login UI (R8.3b)', () => {
     await expect(
       page.getByRole('button', { name: /^(Register|注册|Đăng ký)$/ }),
     ).toHaveCount(0);
+
+    // OTP step widgets must NOT be visible yet (we're on the phone step):
+    await expect(page.getByTestId('login-otp-0')).toHaveCount(0);
   });
 
-  test('valid mobile + Send code → POSTs scene=1 and engages cooldown', async ({
+  test('Continue → POSTs E.164 + scene=1 and advances to OTP step with cooldown', async ({
     page,
   }) => {
     let receivedBody: unknown = null;
@@ -100,17 +124,21 @@ test.describe('platform SMS login UI (R8.3b)', () => {
       },
     );
 
-    await page.getByTestId('login-mobile-input').fill('+8613800138000');
-    await page.getByTestId('login-send-sms-code').click();
+    // Explicitly pick China (+86) — locale-dependent default would
+    // otherwise vary by browser. Type just the national digits.
+    await page.getByTestId('login-country-select').click();
+    await page.getByTestId('country-select-item-CN').click();
+    await page.getByTestId('login-phone-number-input').fill('13800138000');
+    await page.getByTestId('login-phone-continue').click();
 
-    // Wait until the cooldown text appears — `toContainText(/\d/)`
-    // polls until a digit is in the button label, which only
-    // happens after the request completes and cooldown engages
-    // (the prior "Sending…" state has no digits).
-    await expect(page.getByTestId('login-send-sms-code')).toContainText(
-      /\d/,
-    );
-    await expect(page.getByTestId('login-send-sms-code')).toBeDisabled();
+    // Step transition: phone widgets gone, OTP widgets present.
+    await expect(page.getByTestId('login-otp-0')).toBeVisible();
+    await expect(page.getByTestId('login-phone-number-input')).toHaveCount(0);
+    await expect(page.getByTestId('login-otp-back')).toBeVisible();
+
+    // Resend cooldown engages.
+    await expect(page.getByTestId('login-otp-resend')).toContainText(/\d/);
+    await expect(page.getByTestId('login-otp-resend')).toBeDisabled();
 
     expect(hitCount).toBe(1);
     expect(receivedBody).toEqual({
@@ -119,7 +147,7 @@ test.describe('platform SMS login UI (R8.3b)', () => {
     });
   });
 
-  test('invalid mobile blocks Send with inline error and NO HTTP call', async ({
+  test('empty national number disables Continue (no HTTP call)', async ({
     page,
   }) => {
     let hitCount = 0;
@@ -135,24 +163,31 @@ test.describe('platform SMS login UI (R8.3b)', () => {
       },
     );
 
-    await page.getByTestId('login-mobile-input').fill('123');
-    await page.getByTestId('login-send-sms-code').click();
+    // Continue starts disabled (empty input → phoneValid false).
+    await expect(page.getByTestId('login-phone-continue')).toBeDisabled();
 
-    // Inline error shown — copy includes "+8" example across all
-    // locales' `error_invalid_mobile` strings.
-    await expect(page.getByTestId('login-error')).toBeVisible();
-    await expect(page.getByTestId('login-error')).toContainText('+');
+    // Type a too-short number — still invalid E.164 → still disabled.
+    await page.getByTestId('login-phone-number-input').fill('1');
+    await expect(page.getByTestId('login-phone-continue')).toBeDisabled();
 
-    // Idle long enough that any in-flight request would have
-    // landed on the route.
+    // Idle long enough that nothing could have leaked through.
     await page.waitForTimeout(200);
     expect(hitCount).toBe(0);
-    await expect(page.getByTestId('login-send-sms-code')).toBeEnabled();
   });
 
-  test('successful SMS login persists PLATFORM fields to session + registry entry', async ({
+  test('successful flow (phone → OTP auto-submit) persists PLATFORM fields', async ({
     page,
   }) => {
+    await page.route(
+      '**/__fake-platform/app/auth/send-sms-code',
+      async (route: Route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: '{"code":0,"data":null}',
+        });
+      },
+    );
     await page.route(
       '**/__fake-platform/app/auth/sms-login',
       async (route: Route) => {
@@ -177,27 +212,21 @@ test.describe('platform SMS login UI (R8.3b)', () => {
       },
     );
 
-    // Use a new gateway URL so the derived accountKey differs from
-    // the staged Alice — that way the registry will gain a new
-    // entry rather than overwriting Alice in place.
-    await page
-      .locator('input#gateway')
-      .fill('ws://gw-bob/');
-    await page.getByTestId('login-mobile-input').fill('+8613800138000');
-    await page.getByTestId('login-sms-code-input').fill('123456');
-    await page.getByTestId('login-sms-submit').click();
+    // Distinct gateway so the derived accountKey differs from staged Alice.
+    await page.locator('input#gateway').fill('ws://gw-bob/');
+    await page.getByTestId('login-phone-number-input').fill('13800138000');
+    await page.getByTestId('login-phone-continue').click();
 
-    // Wait until persistSessionForAccount + commitActiveAccount
-    // have run (TestApp's onLoggedIn). The new account becomes
-    // active in the registry.
+    // OTP step. Paste in all 6 digits at once — auto-submit on complete.
+    await expect(page.getByTestId('login-otp-0')).toBeVisible();
+    await fillOtp(page, '123456');
+
     await page.waitForFunction(
       () => {
         const reg = JSON.parse(
           window.localStorage.getItem('privchat.web.accounts') ?? 'null',
         ) as { active?: string; accounts?: Record<string, unknown> } | null;
         if (reg === null || reg.active === undefined) return false;
-        // Wait until the new (Bob) entry exists — i.e., the active
-        // key isn't the staged Alice key.
         return reg.active !== '0123456789abcdef';
       },
       undefined,
@@ -218,7 +247,6 @@ test.describe('platform SMS login UI (R8.3b)', () => {
       return { entry, session };
     });
 
-    // Session blob carries all PLATFORM fields:
     expect(persisted.session.account_mode).toBe('platform');
     expect(persisted.session.platform_base_url).toMatch(
       /\/__fake-platform\/app$/,
@@ -228,7 +256,6 @@ test.describe('platform SMS login UI (R8.3b)', () => {
     expect(persisted.session.access_token).toBe('access-jwt');
     expect(persisted.session.device_id).toBe('dev-from-server');
 
-    // Registry entry mirrors mode + platformBaseUrl:
     expect(persisted.entry?.mode).toBe('platform');
     expect(persisted.entry?.platform_base_url).toMatch(
       /\/__fake-platform\/app$/,
@@ -236,9 +263,19 @@ test.describe('platform SMS login UI (R8.3b)', () => {
     expect(persisted.entry?.user_id).toBe('900002');
   });
 
-  test('sms-login API error surfaces server message verbatim', async ({
+  test('sms-login API error surfaces server message verbatim + re-arms OTP', async ({
     page,
   }) => {
+    await page.route(
+      '**/__fake-platform/app/auth/send-sms-code',
+      async (route: Route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: '{"code":0,"data":null}',
+        });
+      },
+    );
     await page.route(
       '**/__fake-platform/app/auth/sms-login',
       async (route: Route) => {
@@ -253,16 +290,20 @@ test.describe('platform SMS login UI (R8.3b)', () => {
       },
     );
 
-    await page.getByTestId('login-mobile-input').fill('+8613800138000');
-    await page.getByTestId('login-sms-code-input').fill('123456');
-    await page.getByTestId('login-sms-submit').click();
+    await page.getByTestId('login-phone-number-input').fill('13800138000');
+    await page.getByTestId('login-phone-continue').click();
+    await expect(page.getByTestId('login-otp-0')).toBeVisible();
 
-    // PlatformApiError pass-through: `message` shows verbatim,
-    // not wrapped in any `t('login.error_sms_login', ...)` prefix.
+    await fillOtp(page, '123456');
+
+    // Server message passes through verbatim (PlatformApiError prefix-free).
     await expect(page.getByTestId('login-error')).toContainText(
       'invalid sms code',
     );
-    // Login button re-enabled so the user can retry:
-    await expect(page.getByTestId('login-sms-submit')).toBeEnabled();
+
+    // OtpInput cleared on failure so the user can retype:
+    await expect(page.getByTestId('login-otp-0')).toHaveValue('');
+    // Boxes still enabled (busy released after the error path).
+    await expect(page.getByTestId('login-otp-0')).toBeEnabled();
   });
 });
