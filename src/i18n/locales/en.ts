@@ -285,6 +285,18 @@ export const en: LocaleSchema = {
     transfer_owner_confirm:
       'Transfer group ownership to {{name}}? You will be downgraded to admin.',
     transfer_owner_failed: 'Transfer failed',
+    settings_heading: 'Group settings',
+    settings_edit: 'Edit',
+    settings_edit_title: 'Edit group',
+    settings_description: 'Description',
+    settings_description_placeholder: 'Tell members what this group is for',
+    settings_announcement: 'Announcement',
+    settings_announcement_placeholder: 'Pinned at the top for new members',
+    settings_mute_all: 'Mute everyone',
+    settings_save: 'Save',
+    settings_cancel: 'Cancel',
+    settings_save_failed: 'Save failed',
+    mute_all_failed: 'Mute-all toggle failed',
   },
   connection: {
     connected: 'Connected',
@@ -560,6 +572,18 @@ export interface LocaleSchema {
     transfer_owner: string;
     transfer_owner_confirm: string;
     transfer_owner_failed: string;
+    settings_heading: string;
+    settings_edit: string;
+    settings_edit_title: string;
+    settings_description: string;
+    settings_description_placeholder: string;
+    settings_announcement: string;
+    settings_announcement_placeholder: string;
+    settings_mute_all: string;
+    settings_save: string;
+    settings_cancel: string;
+    settings_save_failed: string;
+    mute_all_failed: string;
   };
   connection: {
     connected: string;

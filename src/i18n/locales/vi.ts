@@ -291,6 +291,19 @@ export const vi: LocaleSchema = {
     transfer_owner_confirm:
       'Chuyển quyền chủ nhóm cho {{name}}? Bạn sẽ bị hạ xuống quản trị viên.',
     transfer_owner_failed: 'Chuyển chủ nhóm thất bại',
+    settings_heading: 'Cài đặt nhóm',
+    settings_edit: 'Chỉnh sửa',
+    settings_edit_title: 'Chỉnh sửa nhóm',
+    settings_description: 'Mô tả',
+    settings_description_placeholder: 'Giới thiệu chủ đề của nhóm',
+    settings_announcement: 'Thông báo',
+    settings_announcement_placeholder:
+      'Được ghim đầu nhóm, hiển thị với thành viên mới',
+    settings_mute_all: 'Chặn nói cả nhóm',
+    settings_save: 'Lưu',
+    settings_cancel: 'Hủy',
+    settings_save_failed: 'Lưu thất bại',
+    mute_all_failed: 'Bật/tắt chặn cả nhóm thất bại',
   },
   connection: {
     connected: 'Đã kết nối',

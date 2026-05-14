@@ -633,6 +633,15 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async transferGroupOwner() {
       throw new Error('transferGroupOwner not implemented in smoke harness');
     },
+    async getGroupSettings() {
+      throw new Error('getGroupSettings not implemented in smoke harness');
+    },
+    async updateGroupSettings() {
+      throw new Error('updateGroupSettings not implemented in smoke harness');
+    },
+    async muteGroupAll() {
+      throw new Error('muteGroupAll not implemented in smoke harness');
+    },
 
     // ---- Reactions ----
     async addReaction() {

@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, MoreHorizontal, UserPlus } from 'lucide-react';
-import type { GroupMember } from '@privchat/sdk';
+import type { GroupMember, GroupSettingsData } from '@privchat/sdk';
 import { useFriendList, useGroupOps, usePrivchatClient } from '@privchat/react';
 import {
   Dialog,
@@ -29,6 +29,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Avatar } from './avatar';
 import { errorText } from './error-text';
@@ -65,6 +67,14 @@ export function GroupInfoDialog({
   // Per-row busy state so multiple concurrent admin clicks queue cleanly.
   const [busyUid, setBusyUid] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // R2 — group settings. Lazy-loaded once on dialog open alongside the
+  // member roster. Editable subset is `description` + `announcement`
+  // (name + avatar have no user-side RPC per spec). `all_muted` flips
+  // via the dedicated mute-all toggle.
+  const [settings, setSettings] = useState<GroupSettingsData | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [toggleMuteAllBusy, setToggleMuteAllBusy] = useState(false);
 
   const fetchMembers = async () => {
     setLoading(true);
@@ -84,15 +94,24 @@ export function GroupInfoDialog({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    ops
-      .listMembers(groupId)
-      .then((resp) => {
+    // Run roster + settings fetches in parallel — independent calls
+    // and both feed the dialog body, no point serializing.
+    Promise.allSettled([ops.listMembers(groupId), ops.getSettings(groupId)])
+      .then(([rosterRes, settingsRes]) => {
         if (cancelled) return;
-        setMembers(resp.members);
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        setError(`${t('groups.members_failed')}: ${errorText(e)}`);
+        if (rosterRes.status === 'fulfilled') {
+          setMembers(rosterRes.value.members);
+        } else {
+          setError(
+            `${t('groups.members_failed')}: ${errorText(rosterRes.reason)}`,
+          );
+        }
+        if (settingsRes.status === 'fulfilled') {
+          setSettings(settingsRes.value.settings);
+        }
+        // Settings fetch failure is non-fatal — the roster is the
+        // primary content. Owner editing affordances simply stay
+        // hidden when `settings` is null.
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -234,6 +253,62 @@ export function GroupInfoDialog({
     void uid;
   };
 
+  // R2 — save edits from the inline settings form (description +
+  // announcement). Optimistic local patch on success so the
+  // description/announcement chips reflect the change without a
+  // refetch. Server rejects with a permission error if the caller
+  // isn't owner; we bubble that up via the same error chip the
+  // member ops use.
+  const onSaveSettings = async (patch: {
+    description?: string;
+    announcement?: string;
+  }) => {
+    if (settings === null || savingSettings) return;
+    setSavingSettings(true);
+    setError(null);
+    try {
+      await ops.updateSettings(groupId, patch);
+      setSettings((prev) =>
+        prev !== null
+          ? {
+              ...prev,
+              ...(patch.description !== undefined
+                ? { description: patch.description }
+                : {}),
+              ...(patch.announcement !== undefined
+                ? { announcement: patch.announcement }
+                : {}),
+            }
+          : prev,
+      );
+      setEditOpen(false);
+    } catch (e) {
+      setError(`${t('groups.settings_save_failed')}: ${errorText(e)}`);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // R3 — toggle whole-group mute. Owner-only per spec; UI gates on
+  // `isOwnerSelf`. Goes through the dedicated `group/settings/mute_all`
+  // route (separate notification on the server side).
+  const onToggleMuteAll = async () => {
+    if (settings === null || toggleMuteAllBusy) return;
+    setToggleMuteAllBusy(true);
+    setError(null);
+    try {
+      const next = !settings.all_muted;
+      await ops.muteAll(groupId, next);
+      setSettings((prev) =>
+        prev !== null ? { ...prev, all_muted: next } : prev,
+      );
+    } catch (e) {
+      setError(`${t('groups.mute_all_failed')}: ${errorText(e)}`);
+    } finally {
+      setToggleMuteAllBusy(false);
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -246,6 +321,66 @@ export function GroupInfoDialog({
               {error}
             </div>
           )}
+          {/* R2 — group settings section (description / announcement).
+              Render whenever settings have loaded. Owner gets an Edit
+              affordance; non-owner sees read-only. Empty values are
+              hidden to keep the dialog compact. */}
+          {settings !== null &&
+            (settings.description !== undefined ||
+              settings.announcement !== undefined ||
+              isOwnerSelf) && (
+              <div className="space-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-muted-foreground">
+                    {t('groups.settings_heading')}
+                  </span>
+                  {isOwnerSelf && (
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={() => setEditOpen(true)}
+                    >
+                      {t('groups.settings_edit')}
+                    </button>
+                  )}
+                </div>
+                {settings.description !== undefined &&
+                  settings.description !== '' && (
+                    <div>
+                      <div className="text-[10px] uppercase text-muted-foreground">
+                        {t('groups.settings_description')}
+                      </div>
+                      <div className="whitespace-pre-wrap break-words">
+                        {settings.description}
+                      </div>
+                    </div>
+                  )}
+                {settings.announcement !== undefined &&
+                  settings.announcement !== '' && (
+                    <div>
+                      <div className="text-[10px] uppercase text-muted-foreground">
+                        {t('groups.settings_announcement')}
+                      </div>
+                      <div className="whitespace-pre-wrap break-words">
+                        {settings.announcement}
+                      </div>
+                    </div>
+                  )}
+                {isOwnerSelf && (
+                  <label className="flex items-center justify-between gap-2 pt-1">
+                    <span>{t('groups.settings_mute_all')}</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.all_muted}
+                      disabled={toggleMuteAllBusy}
+                      onChange={() => void onToggleMuteAll()}
+                      data-testid="group-mute-all"
+                    />
+                  </label>
+                )}
+              </div>
+            )}
+
           <div className="flex items-center justify-between">
             <div className="text-xs text-muted-foreground">
               {t('groups.members', { count: members.length })}
@@ -391,7 +526,123 @@ export function GroupInfoDialog({
         existingUids={new Set(members.map((m) => String(m.user_id)))}
         onAdded={onAdded}
       />
+      {settings !== null && (
+        <EditSettingsDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          initial={{
+            description: settings.description ?? '',
+            announcement: settings.announcement ?? '',
+          }}
+          saving={savingSettings}
+          onSave={onSaveSettings}
+        />
+      )}
     </>
+  );
+}
+
+/** Owner-only inline form for editing the two free-text settings the
+ *  user-facing RPC actually supports (`description`, `announcement`).
+ *  Diff-and-submit: only fields whose value differs from `initial`
+ *  are sent so we don't churn `updated_at` on a no-op save, and the
+ *  server's `updated_count` correctly reflects the actual changes. */
+function EditSettingsDialog({
+  open,
+  onOpenChange,
+  initial,
+  saving,
+  onSave,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initial: { description: string; announcement: string };
+  saving: boolean;
+  onSave: (patch: {
+    description?: string;
+    announcement?: string;
+  }) => Promise<void> | void;
+}) {
+  const { t } = useTranslation();
+  const [description, setDescription] = useState(initial.description);
+  const [announcement, setAnnouncement] = useState(initial.announcement);
+
+  // Re-seed when the dialog opens (initial might change between mounts
+  // because the outer settings state updated optimistically).
+  useEffect(() => {
+    if (open) {
+      setDescription(initial.description);
+      setAnnouncement(initial.announcement);
+    }
+  }, [open, initial.description, initial.announcement]);
+
+  const dirty =
+    description !== initial.description ||
+    announcement !== initial.announcement;
+
+  const submit = () => {
+    const patch: { description?: string; announcement?: string } = {};
+    if (description !== initial.description) patch.description = description;
+    if (announcement !== initial.announcement) patch.announcement = announcement;
+    if (Object.keys(patch).length === 0) {
+      onOpenChange(false);
+      return;
+    }
+    void onSave(patch);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('groups.settings_edit_title')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <Label htmlFor="group-settings-description">
+              {t('groups.settings_description')}
+            </Label>
+            <Input
+              id="group-settings-description"
+              value={description}
+              onChange={(e) => setDescription(e.currentTarget.value)}
+              disabled={saving}
+              placeholder={t('groups.settings_description_placeholder')}
+              data-testid="group-settings-description-input"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="group-settings-announcement">
+              {t('groups.settings_announcement')}
+            </Label>
+            <Input
+              id="group-settings-announcement"
+              value={announcement}
+              onChange={(e) => setAnnouncement(e.currentTarget.value)}
+              disabled={saving}
+              placeholder={t('groups.settings_announcement_placeholder')}
+              data-testid="group-settings-announcement-input"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            {t('groups.settings_cancel')}
+          </Button>
+          <Button onClick={submit} disabled={saving || !dirty}>
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              t('groups.settings_save')
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
