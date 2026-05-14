@@ -267,9 +267,15 @@ export const en: LocaleSchema = {
     role_owner: 'Owner',
     role_admin: 'Admin',
     add_member: 'Add Member',
-    add_member_pick: 'Pick a friend to add',
+    add_member_pick: 'Add member',
     add_member_no_friends: 'No friends available to add.',
     add_member_failed: 'Add member failed',
+    add_member_added: 'Added',
+    add_member_tab_friends: 'From friends',
+    add_member_tab_search: 'Search',
+    add_member_search_placeholder: 'Search by username, name, or mobile',
+    add_member_search_hint: 'Type a username, display name, or mobile number to search.',
+    add_member_search_empty: 'No matching users.',
     remove_member: 'Remove',
     remove_member_confirm: 'Remove {{name}} from the group?',
     remove_member_failed: 'Remove failed',
@@ -297,6 +303,12 @@ export const en: LocaleSchema = {
     settings_cancel: 'Cancel',
     settings_save_failed: 'Save failed',
     mute_all_failed: 'Mute-all toggle failed',
+    mute_duration_title: 'Mute {{name}}',
+    mute_duration_1h: '1 hour',
+    mute_duration_1d: '1 day',
+    mute_duration_7d: '7 days',
+    mute_duration_30d: '30 days',
+    mute_duration_forever: 'Forever',
   },
   connection: {
     connected: 'Connected',
@@ -558,6 +570,12 @@ export interface LocaleSchema {
     add_member_pick: string;
     add_member_no_friends: string;
     add_member_failed: string;
+    add_member_added: string;
+    add_member_tab_friends: string;
+    add_member_tab_search: string;
+    add_member_search_placeholder: string;
+    add_member_search_hint: string;
+    add_member_search_empty: string;
     remove_member: string;
     remove_member_confirm: string;
     remove_member_failed: string;
@@ -584,6 +602,12 @@ export interface LocaleSchema {
     settings_cancel: string;
     settings_save_failed: string;
     mute_all_failed: string;
+    mute_duration_title: string;
+    mute_duration_1h: string;
+    mute_duration_1d: string;
+    mute_duration_7d: string;
+    mute_duration_30d: string;
+    mute_duration_forever: string;
   };
   connection: {
     connected: string;

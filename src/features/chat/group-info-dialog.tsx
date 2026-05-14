@@ -11,11 +11,20 @@
 // look up the current user's row and derive `canManage` from
 // `role ∈ {'owner','admin'}`. No magic numbers.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, MoreHorizontal, UserPlus } from 'lucide-react';
-import type { GroupMember, GroupSettingsData } from '@privchat/sdk';
-import { useFriendList, useGroupOps, usePrivchatClient } from '@privchat/react';
+import type {
+  GroupMember,
+  GroupSettingsData,
+  SearchedUser,
+} from '@privchat/sdk';
+import {
+  useAccountSearch,
+  useFriendList,
+  useGroupOps,
+  usePrivchatClient,
+} from '@privchat/react';
 import {
   Dialog,
   DialogContent,
@@ -169,24 +178,50 @@ export function GroupInfoDialog({
     }
   };
 
+  // R5 — mute duration picker. When a viewer mutes someone, open a
+  // dialog asking for the duration; unmute is one-shot (no dialog).
+  // `mutingMember` non-null = picker open, addressing that member.
+  const [mutingMember, setMutingMember] = useState<GroupMember | null>(null);
+
   const onMute = async (m: GroupMember) => {
     if (busyUid !== null) return;
+    if (m.is_muted) {
+      // Unmute is a single tap — no duration involved.
+      setBusyUid(m.user_id);
+      setError(null);
+      try {
+        await ops.unmuteMember(groupId, String(m.user_id));
+        setMembers((prev) =>
+          prev.map((x) =>
+            x.user_id === m.user_id ? { ...x, is_muted: false } : x,
+          ),
+        );
+      } catch (e) {
+        setError(`${t('groups.mute_failed')}: ${errorText(e)}`);
+      } finally {
+        setBusyUid(null);
+      }
+      return;
+    }
+    // For mute, defer the actual RPC to MuteDurationDialog so the
+    // viewer picks a duration. The local roster patch happens on
+    // submit (inside `onMuteConfirm`).
+    setMutingMember(m);
+  };
+
+  const onMuteConfirm = async (durationSeconds: number) => {
+    const m = mutingMember;
+    if (m === null || busyUid !== null) return;
     setBusyUid(m.user_id);
     setError(null);
     try {
-      if (m.is_muted) {
-        await ops.unmuteMember(groupId, String(m.user_id));
-      } else {
-        // 0 = permanent. UI doesn't expose duration picker yet — keep
-        // it server-default.
-        await ops.muteMember(groupId, String(m.user_id), 0);
-      }
-      // Patch the row locally so the badge flips immediately.
+      await ops.muteMember(groupId, String(m.user_id), durationSeconds);
       setMembers((prev) =>
         prev.map((x) =>
-          x.user_id === m.user_id ? { ...x, is_muted: !m.is_muted } : x,
+          x.user_id === m.user_id ? { ...x, is_muted: true } : x,
         ),
       );
+      setMutingMember(null);
     } catch (e) {
       setError(`${t('groups.mute_failed')}: ${errorText(e)}`);
     } finally {
@@ -538,6 +573,19 @@ export function GroupInfoDialog({
           onSave={onSaveSettings}
         />
       )}
+      <MuteDurationDialog
+        open={mutingMember !== null}
+        onOpenChange={(o) => {
+          if (!o) setMutingMember(null);
+        }}
+        memberDisplay={
+          mutingMember
+            ? mutingMember.nickname || mutingMember.username
+            : ''
+        }
+        busy={busyUid !== null}
+        onConfirm={onMuteConfirm}
+      />
     </>
   );
 }
@@ -646,10 +694,19 @@ function EditSettingsDialog({
   );
 }
 
-/** Friend-picker for adding a member. Lists the user's friends,
- *  filtered to exclude anyone already in the group. Currently only
- *  supports adding from friends — random uid input is intentionally
- *  out of scope for this round. */
+/** Add-member picker with two source modes: friends list (fast, no
+ *  network) and account search (typed, hits the server). Search
+ *  matches the same surface ContactFindDialog uses
+ *  (`useAccountSearch`) — server returns user rows by username /
+ *  display name / mobile, debounced at 250 ms.
+ *
+ *  Both modes funnel through the same `ops.addMember(groupId, uid)`
+ *  call; success state is local-only ("Added" badge) — the outer
+ *  GroupInfoDialog refetches the roster via `onAdded` so server-
+ *  assigned fields (role, joined_at) appear correctly. */
+
+const SEARCH_DEBOUNCE_MS = 250;
+
 function AddMemberDialog({
   open,
   onOpenChange,
@@ -666,18 +723,67 @@ function AddMemberDialog({
   const { t } = useTranslation();
   const ops = useGroupOps();
   const friends = useFriendList();
+  const search = useAccountSearch();
+
+  const [mode, setMode] = useState<'friends' | 'search'>('friends');
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchedUser[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [busyUid, setBusyUid] = useState<string | null>(null);
+  // Locally remember which UIDs got added in this session so the
+  // search results can render an "Added" badge instead of a stale
+  // "Add" button — the friends-list source updates via `existingUids`
+  // from the parent on refetch, but search results live in this
+  // component's state.
+  const [addedUids, setAddedUids] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const reqIdRef = useRef(0);
+
   const candidates = useMemo(
     () => friends.filter((f) => !existingUids.has(f.user_id)),
     [friends, existingUids],
   );
-  const [busyUid, setBusyUid] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setMode('friends');
+    setQuery('');
+    setSearchResults([]);
+    setSearching(false);
     setBusyUid(null);
+    setAddedUids(new Set());
     setError(null);
   }, [open]);
+
+  // Debounced server search. Same shape as ContactFindDialog —
+  // late-arriving responses are dropped via `reqIdRef`.
+  useEffect(() => {
+    if (!open || mode !== 'search') return;
+    const trimmed = query.trim();
+    if (trimmed === '') {
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    const reqId = ++reqIdRef.current;
+    setSearching(true);
+    setError(null);
+    const timer = setTimeout(() => {
+      search(trimmed)
+        .then((resp) => {
+          if (reqId !== reqIdRef.current) return;
+          setSearchResults(resp.users);
+        })
+        .catch((e: unknown) => {
+          if (reqId !== reqIdRef.current) return;
+          setError(errorText(e));
+        })
+        .finally(() => {
+          if (reqId === reqIdRef.current) setSearching(false);
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [open, mode, query, search]);
 
   const onAdd = async (uid: string) => {
     if (busyUid !== null) return;
@@ -685,6 +791,7 @@ function AddMemberDialog({
     setError(null);
     try {
       await ops.addMember(groupId, uid);
+      setAddedUids((prev) => new Set(prev).add(uid));
       onAdded(uid);
     } catch (e) {
       setError(`${t('groups.add_member_failed')}: ${errorText(e)}`);
@@ -693,27 +800,95 @@ function AddMemberDialog({
     }
   };
 
+  // Filter search results so already-in-group and already-added-in-
+  // this-session rows show their state instead of an active button.
+  const renderAddButton = (uid: string, isExisting: boolean) => {
+    if (isExisting || addedUids.has(uid)) {
+      return (
+        <span className="text-xs text-muted-foreground">
+          {t('groups.add_member_added')}
+        </span>
+      );
+    }
+    const rowBusy = busyUid === uid;
+    return (
+      <Button
+        size="sm"
+        onClick={() => void onAdd(uid)}
+        disabled={busyUid !== null}
+        className={cn(rowBusy && 'opacity-70')}
+      >
+        {rowBusy ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          t('groups.add_member')
+        )}
+      </Button>
+    );
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('groups.add_member_pick')}</DialogTitle>
         </DialogHeader>
+        <div
+          className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1"
+          role="tablist"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'friends'}
+            onClick={() => setMode('friends')}
+            className={cn(
+              'rounded-sm px-3 py-1.5 text-sm font-medium transition-colors',
+              mode === 'friends'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t('groups.add_member_tab_friends')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'search'}
+            onClick={() => setMode('search')}
+            className={cn(
+              'rounded-sm px-3 py-1.5 text-sm font-medium transition-colors',
+              mode === 'search'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t('groups.add_member_tab_search')}
+          </button>
+        </div>
         {error !== null && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
         )}
+        {mode === 'search' && (
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+            placeholder={t('groups.add_member_search_placeholder')}
+            data-testid="group-add-member-search-input"
+            autoFocus
+          />
+        )}
         <div className="max-h-[50vh] overflow-y-auto">
-          {candidates.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              {t('groups.add_member_no_friends')}
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {candidates.map((f) => {
-                const rowBusy = busyUid === f.user_id;
-                return (
+          {mode === 'friends' ? (
+            candidates.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                {t('groups.add_member_no_friends')}
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {candidates.map((f) => (
                   <li
                     key={f.user_id}
                     className="flex items-center gap-3 py-2"
@@ -733,23 +908,147 @@ function AddMemberDialog({
                         </div>
                       )}
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => void onAdd(f.user_id)}
-                      disabled={busyUid !== null}
-                      className={cn(rowBusy && 'opacity-70')}
-                    >
-                      {rowBusy ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        t('groups.add_member')
+                    {renderAddButton(f.user_id, false)}
+                  </li>
+                ))}
+              </ul>
+            )
+          ) : query.trim() === '' ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              {t('groups.add_member_search_hint')}
+            </div>
+          ) : searching ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              {t('groups.add_member_search_empty')}
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {searchResults.map((u) => {
+                const uidStr = String(u.user_id);
+                const display = u.nickname || u.username;
+                const isExisting = existingUids.has(uidStr);
+                return (
+                  <li
+                    key={u.user_id}
+                    className="flex items-center gap-3 py-2"
+                  >
+                    <Avatar
+                      seed={`u:${u.user_id}`}
+                      label={display}
+                      size="md"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {display}
+                      </div>
+                      {u.username !== '' && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          @{u.username}
+                        </div>
                       )}
-                    </Button>
+                    </div>
+                    {renderAddButton(uidStr, isExisting)}
                   </li>
                 );
               })}
             </ul>
           )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Picker for mute duration. Five preset choices that align with the
+ *  server's per-member mute backend (`muteDuration` in seconds; 0 =
+ *  permanent). Default selection is "1 hour" — common moderation
+ *  cool-off without committing the row to a permanent mute.
+ *
+ *  Per-member mute is owner-or-admin (canManage gate in the outer
+ *  dialog). Server enforces authoritatively. */
+function MuteDurationDialog({
+  open,
+  onOpenChange,
+  memberDisplay,
+  busy,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  memberDisplay: string;
+  busy: boolean;
+  onConfirm: (durationSeconds: number) => void;
+}) {
+  const { t } = useTranslation();
+  // Durations as seconds; key is the i18n suffix used to fetch the
+  // localized label (groups.mute_duration_<key>).
+  const presets: Array<{ key: string; seconds: number }> = [
+    { key: '1h', seconds: 60 * 60 },
+    { key: '1d', seconds: 24 * 60 * 60 },
+    { key: '7d', seconds: 7 * 24 * 60 * 60 },
+    { key: '30d', seconds: 30 * 24 * 60 * 60 },
+    { key: 'forever', seconds: 0 },
+  ];
+  // Default to 1 hour — least destructive of the bunch.
+  const [seconds, setSeconds] = useState<number>(presets[0]!.seconds);
+
+  useEffect(() => {
+    if (open) setSeconds(presets[0]!.seconds);
+    // presets is a stable literal; re-running on open only is correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {t('groups.mute_duration_title', { name: memberDisplay })}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          {presets.map((p) => (
+            <label
+              key={p.key}
+              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+            >
+              <input
+                type="radio"
+                name="mute-duration"
+                value={p.seconds}
+                checked={seconds === p.seconds}
+                disabled={busy}
+                onChange={() => setSeconds(p.seconds)}
+              />
+              <span className="text-sm">
+                {t(`groups.mute_duration_${p.key}`)}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={busy}
+          >
+            {t('groups.settings_cancel')}
+          </Button>
+          <Button
+            onClick={() => onConfirm(seconds)}
+            disabled={busy}
+            data-testid="group-mute-duration-confirm"
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              t('groups.mute_member')
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
