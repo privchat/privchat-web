@@ -77,9 +77,16 @@ export function GroupInfoDialog({
   const [busyUid, setBusyUid] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   // R2 — group settings. Lazy-loaded once on dialog open alongside the
-  // member roster. Editable subset is `description` + `announcement`
-  // (name + avatar have no user-side RPC per spec). `all_muted` flips
-  // via the dedicated mute-all toggle.
+  // member roster. Editable subset here is `description` + `announcement`
+  // (these go through `group/settings/update` on privchat-server,
+  // owner-only). `all_muted` flips via the dedicated mute-all toggle.
+  //
+  // Group `name` and `avatar` editing is a PLATFORM-mode feature that
+  // travels via privchat-application HTTP rather than the server's
+  // RPC layer (consistent with how member profile name/avatar work in
+  // PLATFORM mode). Those endpoints aren't wired in this iteration —
+  // `groupInfo` returns name/avatar; the dialog displays them but the
+  // editor here intentionally does NOT include either field.
   const [settings, setSettings] = useState<GroupSettingsData | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -261,14 +268,15 @@ export function GroupInfoDialog({
     setError(null);
     try {
       await ops.transferOwner(groupId, String(m.user_id));
-      // Server invariant (per spec): outgoing owner is downgraded to
-      // admin in the same transaction. Mirror it locally so the row
-      // badges flip immediately — saves a roster refetch.
+      // Server-side behaviour (per privchat-server
+      // rpc/group/role/transfer_owner.rs:99-101): outgoing owner is
+      // set to MemberRole::Member — NOT admin. Mirror that locally so
+      // the role badges flip correctly without a roster refetch.
       setMembers((prev) =>
         prev.map((x) => {
           if (x.user_id === m.user_id) return { ...x, role: 'owner' };
           if (selfUid !== undefined && String(x.user_id) === selfUid) {
-            return { ...x, role: 'admin' };
+            return { ...x, role: 'member' };
           }
           return x;
         }),

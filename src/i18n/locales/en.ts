@@ -289,7 +289,7 @@ export const en: LocaleSchema = {
     set_role_failed: 'Role change failed',
     transfer_owner: 'Transfer ownership',
     transfer_owner_confirm:
-      'Transfer group ownership to {{name}}? You will be downgraded to admin.',
+      'Transfer group ownership to {{name}}? You will no longer be the owner and become a regular member.',
     transfer_owner_failed: 'Transfer failed',
     settings_heading: 'Group settings',
     settings_edit: 'Edit',

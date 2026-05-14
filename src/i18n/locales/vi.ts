@@ -297,7 +297,7 @@ export const vi: LocaleSchema = {
     set_role_failed: 'Thay đổi vai trò thất bại',
     transfer_owner: 'Chuyển chủ nhóm',
     transfer_owner_confirm:
-      'Chuyển quyền chủ nhóm cho {{name}}? Bạn sẽ bị hạ xuống quản trị viên.',
+      'Chuyển quyền chủ nhóm cho {{name}}? Bạn sẽ không còn là chủ nhóm và trở thành thành viên thường.',
     transfer_owner_failed: 'Chuyển chủ nhóm thất bại',
     settings_heading: 'Cài đặt nhóm',
     settings_edit: 'Chỉnh sửa',

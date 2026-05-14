@@ -284,7 +284,7 @@ export const zhCN: LocaleSchema = {
     demote_admin: '取消管理员',
     set_role_failed: '角色修改失败',
     transfer_owner: '转让群主',
-    transfer_owner_confirm: '将群主转让给 {{name}}？你将降为管理员。',
+    transfer_owner_confirm: '将群主转让给 {{name}}？你将不再是群主，变为普通成员。',
     transfer_owner_failed: '转让群主失败',
     settings_heading: '群设置',
     settings_edit: '编辑',
