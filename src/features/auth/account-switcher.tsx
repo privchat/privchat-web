@@ -76,6 +76,15 @@ function snapshotGetter(): RegistrySnapshot {
   return cachedSnapshot;
 }
 function snapshotSubscribe(cb: () => void): () => void {
+  // Catch-up read: `cachedSnapshot` is module-level and initialized
+  // ONCE at module load — which happens BEFORE the user logs in.
+  // After login, `saveRegistry` notifies listeners, but at that
+  // moment the AccountSwitcher (inside ChatWorkspace) isn't mounted
+  // yet, so its listener doesn't exist and the cache stays stale.
+  // The first time the switcher mounts post-login, useSyncExternalStore
+  // calls this subscribe — refresh the cache here so the dropdown
+  // shows the just-logged-in account on first paint.
+  rereadSnapshot();
   // The registry primitive notifies us of all writes (saveRegistry /
   // clearRegistry); the active-account seam covers the in-memory
   // active flip that happens BEFORE any write. Subscribing to both

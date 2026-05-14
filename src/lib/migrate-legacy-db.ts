@@ -38,6 +38,17 @@ export type DbMigrationOutcome =
 const MARKER_PREFIX = 'privchat.web.migration.db.';
 const MARKER_VALUE_V1 = 'copied-from-legacy-v1';
 
+/** Global "legacy DB already consumed" marker. Set as soon as the
+ *  first account either successfully imports legacy data OR observes
+ *  no legacy DB to import. From that point on, every subsequent
+ *  account in the same browser starts with an EMPTY per-account
+ *  cache — the legacy copy is a one-time bootstrap, not a per-account
+ *  template. Without this gate, every new account would re-copy the
+ *  legacy DB's residual rows, leaking the first user's data into
+ *  every subsequent login. */
+const LEGACY_CONSUMED_KEY = `${MARKER_PREFIX}legacy_consumed`;
+const LEGACY_CONSUMED_VALUE = 'v1';
+
 function markerKey(accountKey: AccountKey): string {
   return `${MARKER_PREFIX}${accountKey}`;
 }
@@ -57,6 +68,25 @@ function writeMarker(accountKey: AccountKey, value: string): void {
     /* localStorage unavailable; the next boot will retry the
      *  migration. Idempotent up to whatever copy already
      *  happened. */
+  }
+}
+
+function isLegacyConsumed(): boolean {
+  try {
+    return window.localStorage.getItem(LEGACY_CONSUMED_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function markLegacyConsumed(): void {
+  try {
+    window.localStorage.setItem(LEGACY_CONSUMED_KEY, LEGACY_CONSUMED_VALUE);
+  } catch {
+    /* localStorage unavailable — next boot re-evaluates. The
+     *  per-account marker still gates against a second copy into
+     *  the same account; the cross-account leak risk is only
+     *  present in this rare degraded-storage case. */
   }
 }
 
@@ -128,14 +158,29 @@ export async function migrateLegacyDbToAccountDb(
     return 'skipped-existing';
   }
 
-  // 3. Legacy DB exists?
-  const legacyExists = await CacheDB.exists(LEGACY_DB_NAME);
-  if (!legacyExists) {
+  // 3. Cross-account leak gate: the legacy → account copy is a
+  // one-time bootstrap, not a per-account template. Once any
+  // account has consumed (or skipped) the legacy DB, every
+  // subsequent new account in this browser starts with an empty
+  // cache. Without this check, adding account B after account A
+  // imports A's friends / channels / messages into B's DB.
+  if (isLegacyConsumed()) {
     writeMarker(accountKey, MARKER_VALUE_V1);
     return 'no-legacy';
   }
 
-  // 4. Copy.
+  // 4. Legacy DB exists?
+  const legacyExists = await CacheDB.exists(LEGACY_DB_NAME);
+  if (!legacyExists) {
+    // First account in this browser AND no legacy data to import —
+    // mark legacy consumed so future accounts (even on a different
+    // dogfood device that later imports state) don't re-evaluate.
+    markLegacyConsumed();
+    writeMarker(accountKey, MARKER_VALUE_V1);
+    return 'no-legacy';
+  }
+
+  // 5. Copy.
   const src = new CacheDB(LEGACY_DB_NAME);
   const dst = new CacheDB(accountDbName(accountKey));
   try {
@@ -149,10 +194,12 @@ export async function migrateLegacyDbToAccountDb(
     dst.close();
   }
 
-  // 5. Marker written ONLY after a successful copy. A throw
-  // before this line short-circuits — the caller's catch falls
-  // back to LEGACY_DB_NAME for this boot, the next boot retries
-  // the copy from scratch.
+  // 6. Markers written ONLY after a successful copy. The global
+  // `legacy_consumed` marker prevents subsequent accounts from
+  // re-copying the legacy DB. A throw before this line short-
+  // circuits — the caller's catch falls back to LEGACY_DB_NAME for
+  // this boot, the next boot retries the copy from scratch.
+  markLegacyConsumed();
   writeMarker(accountKey, MARKER_VALUE_V1);
   return 'copied';
 }
