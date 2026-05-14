@@ -14,7 +14,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Plus, Users } from 'lucide-react';
+import { AlertCircle, Check, Plus, Users, X } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +48,14 @@ export interface AccountSwitcherProps {
    *  button + every dropdown entry disable so the user can't queue
    *  another switch mid-flight. */
   disabled?: boolean;
+  /** R7.4 — i18n key under `accounts.*` to render as an error chip
+   *  at the top of the dropdown (e.g. switch was rolled back).
+   *  `null` to hide the chip. */
+  errorI18nKey?: 'switch_failed' | 'switch_target_missing' | null;
+  /** Optional callback to clear the surfaced error. Wired to the
+   *  close button on the chip; the chip itself doesn't auto-dismiss
+   *  so the user has a chance to read it. */
+  onDismissError?: () => void;
 }
 
 interface RegistrySnapshot {
@@ -108,13 +116,16 @@ function useRegistrySnapshot(): RegistrySnapshot {
   return useSyncExternalStore(snapshotSubscribe, snapshotGetter, snapshotGetter);
 }
 
-/** Display label for a registry entry. Falls back through alias →
- *  user-id formatting. R8.4 will add username/nickname when the
- *  PLATFORM profile API ships; for R7.3 this is alias-or-id. */
+/** Display label for a registry entry. `display_name` is written
+ *  asynchronously by `App.tsx` after each account becomes active and
+ *  its profile hydrates from entity-sync (nickname → username). Falls
+ *  back to user-set alias, then to a `User #<id>` placeholder for
+ *  entries that have never been active in this browser. */
 function accountDisplayName(entry: AccountEntry): string {
-  if (entry.alias !== undefined && entry.alias.trim() !== '') {
-    return entry.alias.trim();
-  }
+  const persisted = entry.display_name?.trim();
+  if (persisted !== undefined && persisted !== '') return persisted;
+  const alias = entry.alias?.trim();
+  if (alias !== undefined && alias !== '') return alias;
   return `User #${entry.user_id}`;
 }
 
@@ -123,6 +134,8 @@ export function AccountSwitcher({
   onSelectAccount,
   onAddAccount,
   disabled = false,
+  errorI18nKey = null,
+  onDismissError,
 }: AccountSwitcherProps) {
   const { t } = useTranslation();
   const snapshot = useRegistrySnapshot();
@@ -163,6 +176,30 @@ export function AccountSwitcher({
         data-testid="account-switcher-menu"
       >
         <DropdownMenuLabel>{t('accounts.switcher_title')}</DropdownMenuLabel>
+        {errorI18nKey !== null && (
+          <div
+            data-testid="account-switcher-error"
+            className="mx-1 mb-1 flex items-start gap-2 rounded-sm border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive"
+          >
+            <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+            <span className="flex-1 leading-tight">
+              {t(`accounts.${errorI18nKey}`)}
+            </span>
+            {onDismissError !== undefined && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismissError();
+                }}
+                aria-label={t('accounts.cancel_add')}
+                className="shrink-0 rounded-sm p-0.5 hover:bg-destructive/20"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
         <DropdownMenuSeparator />
         {snapshot.entries.length === 0 ? (
           <DropdownMenuItem disabled>
@@ -192,7 +229,7 @@ export function AccountSwitcher({
                     {accountDisplayName(entry)}
                   </span>
                   <span className="truncate text-[10px] text-muted-foreground">
-                    {entry.url}
+                    #{entry.user_id}
                   </span>
                 </span>
                 {isActive && <Check className="h-4 w-4 shrink-0" />}

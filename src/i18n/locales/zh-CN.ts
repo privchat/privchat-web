@@ -220,6 +220,8 @@ export const zhCN: LocaleSchema = {
     no_accounts: '尚未登录任何账号',
     add_account: '添加账号',
     cancel_add: '取消',
+    switch_failed: '切换失败，已保留在当前账号。',
+    switch_target_missing: '该账号的登录信息已失效，请重新添加。',
   },
   contacts: {
     empty: '暂无联系人。',

@@ -82,6 +82,30 @@ export function upsertEntry(
   };
 }
 
+/** Write a freshly-resolved display name (nickname / username) to the
+ *  given account's registry entry, no-op when the value hasn't
+ *  changed. The switcher renders persisted `display_name` directly,
+ *  so this keeps the dropdown label up to date once the active
+ *  account's profile syncs in. */
+export function updateAccountDisplayName(
+  accountKey: AccountKey,
+  displayName: string,
+): void {
+  const reg = loadRegistry();
+  if (reg === null) return;
+  const entry = reg.accounts[accountKey];
+  if (entry === undefined) return;
+  const trimmed = displayName.trim();
+  if (trimmed === '' || entry.display_name === trimmed) return;
+  saveRegistry({
+    ...reg,
+    accounts: {
+      ...reg.accounts,
+      [accountKey]: { ...entry, display_name: trimmed },
+    },
+  });
+}
+
 /** Remove an entry by key. If `active === accountKey`, also clear
  *  active. Pure function. */
 export function removeEntry(

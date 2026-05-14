@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useConnectionState } from '@privchat/react';
+import { useConnectionState, useUserProfile } from '@privchat/react';
 import { AppProviders } from '@/app/providers';
 import { LoginPage } from '@/features/auth/login-page';
 import { ChatWorkspace } from '@/features/chat/chat-workspace';
@@ -22,7 +22,10 @@ import {
   setActiveAccountKey,
 } from '@/lib/active-account';
 import { loadAccountSession } from '@/lib/account-session';
-import { loadRegistry } from '@/lib/account-registry-store';
+import {
+  loadRegistry,
+  updateAccountDisplayName,
+} from '@/lib/account-registry-store';
 import type { AccountKey } from '@/lib/account-key';
 import {
   switchAccountSafely,
@@ -32,6 +35,30 @@ import { clearForAccountSwitch as stopVoiceForSwitch } from '@/features/chat/voi
 import { abortAllForAccountSwitch as abortUploadsForSwitch } from '@/features/chat/uploads-store';
 
 type AutoLoginState = 'restoring' | 'idle';
+
+/** Account-switch error surfaced in the switcher UI. `i18nKey` is a
+ *  key under the `accounts.*` namespace so the message follows the
+ *  current locale. Cleared when a subsequent switch commits, or when
+ *  the user attempts another switch. */
+export type SwitchError = { i18nKey: 'switch_failed' | 'switch_target_missing' };
+
+/** Map a `SwitchOutcome` into the user-facing surface for the switcher.
+ *  `committed` clears any prior error; everything else points at a
+ *  matching i18n key. The actual cause / stack is already piped through
+ *  `captureException` by the sequencer's `onError` callback. */
+function switchErrorFor(
+  outcome: SwitchOutcome<unknown>,
+): SwitchError | null {
+  switch (outcome.result) {
+    case 'committed':
+      return null;
+    case 'rejected':
+      return { i18nKey: 'switch_target_missing' };
+    case 'rolled-back-current':
+    case 'rolled-back-no-current':
+      return { i18nKey: 'switch_failed' };
+  }
+}
 
 export default function App() {
   const [handle, setHandle] = useState<PrivchatHandle | null>(null);
@@ -55,6 +82,13 @@ export default function App() {
   // by every terminal sequencer outcome (committed / rolled-back /
   // rejected / failed).
   const [switching, setSwitching] = useState(false);
+  // R7.4 — last switch attempt's failure surface. `null` after a
+  // committed switch (or on first paint). Set whenever the sequencer
+  // rolls back or rejects so the AccountSwitcher can render the
+  // reason inline. Cleared as soon as the user attempts another
+  // switch (so each attempt's surface reflects only its own outcome).
+  const [switchError, setSwitchError] = useState<SwitchError | null>(null);
+  const clearSwitchError = useCallback(() => setSwitchError(null), []);
   // R8.4c — fresh-login's first-paint hint for the RequiredActionsGate.
   // When fresh login lands with non-empty `requiredActions`, we stash
   // them so the gate can render immediately without a list() round-trip
@@ -155,6 +189,7 @@ export default function App() {
       credentials: Omit<PersistedSession, 'saved_at'>,
       requiredActions: RequiredAction[],
     ) => {
+      setSwitchError(null);
       setAutoLogin('restoring');
       setSwitching(true);
       let targetKey: AccountKey;
@@ -216,7 +251,7 @@ export default function App() {
         onError: (err, source) => captureException(err, { source }),
       });
 
-      void outcome;
+      setSwitchError(switchErrorFor(outcome));
       setAutoLogin('idle');
       setSwitching(false);
     },
@@ -261,6 +296,7 @@ export default function App() {
         return;
       }
 
+      setSwitchError(null);
       setSwitching(true);
       setAutoLogin('restoring');
       // Snapshot the live React handle for the sequencer; clear
@@ -312,7 +348,7 @@ export default function App() {
           onError: (err, source) => captureException(err, { source }),
         });
 
-      void outcome;
+      setSwitchError(switchErrorFor(outcome));
       setAutoLogin('idle');
       setSwitching(false);
     },
@@ -394,6 +430,8 @@ export default function App() {
           onSelectAccount={onSelectAccount}
           onAddAccount={onAddAccount}
           switching={switching}
+          switchError={switchError}
+          clearSwitchError={clearSwitchError}
         />
       </AppProviders>
     </RequiredActionsGate>
@@ -408,6 +446,8 @@ function PostClientRoot({
   onSelectAccount,
   onAddAccount,
   switching,
+  switchError,
+  clearSwitchError,
 }: {
   handle: PrivchatHandle;
   onLogout: () => void;
@@ -415,24 +455,57 @@ function PostClientRoot({
   onSelectAccount: (key: AccountKey) => void;
   onAddAccount: () => void;
   switching: boolean;
+  switchError: SwitchError | null;
+  clearSwitchError: () => void;
 }) {
   const state = useConnectionState();
   if (state === 'authenticated') {
     return (
-      <ChatWorkspace
-        handle={handle}
-        onLogout={onLogout}
-        activeAccountKey={activeAccountKey}
-        onSelectAccount={onSelectAccount}
-        onAddAccount={onAddAccount}
-        switching={switching}
-      />
+      <>
+        <ActiveAccountDisplayNameSync activeAccountKey={activeAccountKey} />
+        <ChatWorkspace
+          handle={handle}
+          onLogout={onLogout}
+          activeAccountKey={activeAccountKey}
+          onSelectAccount={onSelectAccount}
+          onAddAccount={onAddAccount}
+          switching={switching}
+          switchError={switchError}
+          clearSwitchError={clearSwitchError}
+        />
+      </>
     );
   }
   // Connection broke after auto-login (server kicked us, network dropped).
   // Easiest recovery is to wipe the bad session and let the user log in
   // again — handle.client is in a bad state and not worth salvaging.
   return <RestoringSplash />;
+}
+
+/** Persist the active account's display name (nickname → username)
+ *  to its registry entry once the SDK's profile cache has the user.
+ *  The switcher reads `entry.display_name` so other accounts' labels
+ *  remain stable even while they're inactive (no SDK handle for
+ *  them). Lives under PrivchatProvider so it can call
+ *  `useUserProfile`. Renders nothing. */
+function ActiveAccountDisplayNameSync({
+  activeAccountKey,
+}: {
+  activeAccountKey: AccountKey | null;
+}) {
+  const reg = loadRegistry();
+  const userId =
+    activeAccountKey !== null
+      ? reg?.accounts[activeAccountKey]?.user_id ?? null
+      : null;
+  const profile = useUserProfile(userId ?? '');
+  useEffect(() => {
+    if (activeAccountKey === null || profile === undefined) return;
+    const name = profile.nickname?.trim() || profile.username?.trim() || '';
+    if (name === '') return;
+    updateAccountDisplayName(activeAccountKey, name);
+  }, [activeAccountKey, profile]);
+  return null;
 }
 
 function RestoringSplash() {

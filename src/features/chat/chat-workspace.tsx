@@ -39,6 +39,7 @@ import {
 } from '@privchat/react';
 import type { PrivchatHandle } from '@/lib/privchat-client';
 import type { AccountKey } from '@/lib/account-key';
+import type { SwitchError } from '@/App';
 import { AccountSwitcher } from '@/features/auth/account-switcher';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -81,6 +82,13 @@ export interface ChatWorkspaceProps {
    *  switcher trigger + entries + Add-account item disable
    *  themselves so the user can't queue concurrent switches. */
   switching?: boolean;
+  /** R7.4 — last switch attempt's failure surface. Rendered inline
+   *  in the switcher dropdown so the user sees why the active
+   *  account didn't change. `null` after a committed switch. */
+  switchError?: SwitchError | null;
+  /** Called when the user explicitly dismisses the error chip
+   *  (clicking the close icon). App.tsx clears its switch-error state. */
+  clearSwitchError?: () => void;
 }
 
 interface ActiveChannel {
@@ -97,6 +105,8 @@ export function ChatWorkspace({
   onSelectAccount,
   onAddAccount,
   switching,
+  switchError,
+  clearSwitchError,
 }: ChatWorkspaceProps) {
   const state = useConnectionState();
   // Read session uid via the adapter seam rather than `handle.client`
@@ -182,6 +192,8 @@ export function ChatWorkspace({
         onSelectAccount={onSelectAccount}
         onAddAccount={onAddAccount}
         switching={switching ?? false}
+        switchError={switchError ?? null}
+        clearSwitchError={clearSwitchError}
       />
       <LazyLogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
 
@@ -270,6 +282,8 @@ function TopBar({
   onSelectAccount,
   onAddAccount,
   switching,
+  switchError,
+  clearSwitchError,
 }: {
   uid: string | undefined;
   state: string;
@@ -280,6 +294,8 @@ function TopBar({
   onSelectAccount?: (key: AccountKey) => void;
   onAddAccount?: () => void;
   switching: boolean;
+  switchError: SwitchError | null;
+  clearSwitchError?: () => void;
 }) {
   const { t } = useTranslation();
   // Self profile drives the top-bar identity display. It may be empty
@@ -309,10 +325,12 @@ function TopBar({
         <NotifyToggles notifier={notifier} />
         {onSelectAccount !== undefined && onAddAccount !== undefined && (
           <AccountSwitcher
-            activeAccountKey={activeAccountKey}
+            activeAccountKey={activeAccountKey ?? null}
             onSelectAccount={onSelectAccount}
             onAddAccount={onAddAccount}
             disabled={switching}
+            errorI18nKey={switchError?.i18nKey ?? null}
+            onDismissError={clearSwitchError}
           />
         )}
         <Button

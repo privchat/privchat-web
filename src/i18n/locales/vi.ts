@@ -228,6 +228,8 @@ export const vi: LocaleSchema = {
     no_accounts: 'Chưa có tài khoản nào',
     add_account: 'Thêm tài khoản',
     cancel_add: 'Hủy',
+    switch_failed: 'Không chuyển được — vẫn giữ tài khoản hiện tại.',
+    switch_target_missing: 'Phiên đăng nhập đã lưu cho tài khoản đó bị thiếu. Hãy thêm lại.',
   },
   contacts: {
     empty: 'Chưa có liên hệ nào.',

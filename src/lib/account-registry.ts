@@ -29,6 +29,14 @@ export interface AccountEntry {
   /** User-set display alias (defaults to username at add time).
    *  Only used by the switcher UI (R7.3). */
   alias?: string;
+  /** Last-known display name (nickname or username) sourced from
+   *  the SDK's user-profile cache for this account. Written
+   *  asynchronously by `App.tsx` after the account has been active
+   *  at least once and its profile has hydrated via entity sync.
+   *  Empty/absent when the account has never been active in this
+   *  browser — the switcher then falls back to `alias` or
+   *  `User #<user_id>`. */
+  display_name?: string;
   /** Avatar tint chosen by the switcher UI (or rotated on add).
    *  Stored alongside the account so the UI is stable across
    *  reloads. R7.3+. */

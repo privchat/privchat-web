@@ -224,6 +224,8 @@ export const en: LocaleSchema = {
     no_accounts: 'No accounts registered',
     add_account: 'Add account',
     cancel_add: 'Cancel',
+    switch_failed: 'Could not switch — staying on the current account.',
+    switch_target_missing: 'Saved sign-in for that account is missing. Add it again.',
   },
   contacts: {
     empty: 'No contacts yet.',
@@ -524,6 +526,8 @@ export interface LocaleSchema {
     no_accounts: string;
     add_account: string;
     cancel_add: string;
+    switch_failed: string;
+    switch_target_missing: string;
   };
   contacts: {
     empty: string;
