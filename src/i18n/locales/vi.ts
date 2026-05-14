@@ -284,6 +284,13 @@ export const vi: LocaleSchema = {
     muted_badge: 'Đã chặn nói',
     mute_failed: 'Thao tác chặn nói thất bại',
     info_button: 'Thông tin nhóm',
+    promote_admin: 'Thăng làm quản trị viên',
+    demote_admin: 'Hủy quyền quản trị viên',
+    set_role_failed: 'Thay đổi vai trò thất bại',
+    transfer_owner: 'Chuyển chủ nhóm',
+    transfer_owner_confirm:
+      'Chuyển quyền chủ nhóm cho {{name}}? Bạn sẽ bị hạ xuống quản trị viên.',
+    transfer_owner_failed: 'Chuyển chủ nhóm thất bại',
   },
   connection: {
     connected: 'Đã kết nối',

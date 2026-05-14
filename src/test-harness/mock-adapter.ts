@@ -627,6 +627,12 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async sendVideo() {
       throw new Error('sendVideo not implemented in smoke harness');
     },
+    async setGroupMemberRole() {
+      throw new Error('setGroupMemberRole not implemented in smoke harness');
+    },
+    async transferGroupOwner() {
+      throw new Error('transferGroupOwner not implemented in smoke harness');
+    },
 
     // ---- Reactions ----
     async addReaction() {

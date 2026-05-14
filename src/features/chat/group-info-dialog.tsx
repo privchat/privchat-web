@@ -175,6 +175,57 @@ export function GroupInfoDialog({
     }
   };
 
+  // R1: role management. Owner-only — the `canManage` gate above admits
+  // both owner + admin, but per spec (`group/role/set`) only owner can
+  // promote/demote. Server enforces authoritatively; UI gates only to
+  // give early feedback (hides the menu items for admin viewers).
+  const isOwnerSelf = selfMember?.role === 'owner';
+
+  const onSetRole = async (m: GroupMember, nextRole: 'admin' | 'member') => {
+    if (busyUid !== null) return;
+    setBusyUid(m.user_id);
+    setError(null);
+    try {
+      await ops.setMemberRole(groupId, String(m.user_id), nextRole);
+      setMembers((prev) =>
+        prev.map((x) =>
+          x.user_id === m.user_id ? { ...x, role: nextRole } : x,
+        ),
+      );
+    } catch (e) {
+      setError(`${t('groups.set_role_failed')}: ${errorText(e)}`);
+    } finally {
+      setBusyUid(null);
+    }
+  };
+
+  const onTransferOwner = async (m: GroupMember) => {
+    if (busyUid !== null) return;
+    const display = m.nickname || m.username;
+    if (!confirm(t('groups.transfer_owner_confirm', { name: display }))) return;
+    setBusyUid(m.user_id);
+    setError(null);
+    try {
+      await ops.transferOwner(groupId, String(m.user_id));
+      // Server invariant (per spec): outgoing owner is downgraded to
+      // admin in the same transaction. Mirror it locally so the row
+      // badges flip immediately — saves a roster refetch.
+      setMembers((prev) =>
+        prev.map((x) => {
+          if (x.user_id === m.user_id) return { ...x, role: 'owner' };
+          if (selfUid !== undefined && String(x.user_id) === selfUid) {
+            return { ...x, role: 'admin' };
+          }
+          return x;
+        }),
+      );
+    } catch (e) {
+      setError(`${t('groups.transfer_owner_failed')}: ${errorText(e)}`);
+    } finally {
+      setBusyUid(null);
+    }
+  };
+
   const onAdded = (uid: string) => {
     setAddOpen(false);
     // Pull a fresh roster — the just-added row carries server-assigned
@@ -273,6 +324,32 @@ export function GroupInfoDialog({
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {/* Role management is owner-only per spec.
+                             `group/role/set` rejects non-owner callers,
+                             so we gate the menu items at UI level too —
+                             admin viewers see mute/remove but not
+                             promote/demote/transfer. */}
+                          {isOwnerSelf && m.role !== 'owner' && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                void onSetRole(
+                                  m,
+                                  m.role === 'admin' ? 'member' : 'admin',
+                                )
+                              }
+                            >
+                              {m.role === 'admin'
+                                ? t('groups.demote_admin')
+                                : t('groups.promote_admin')}
+                            </DropdownMenuItem>
+                          )}
+                          {isOwnerSelf && (
+                            <DropdownMenuItem
+                              onSelect={() => void onTransferOwner(m)}
+                            >
+                              {t('groups.transfer_owner')}
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem onSelect={() => void onMute(m)}>
                             {m.is_muted
                               ? t('groups.unmute_member')

@@ -278,6 +278,13 @@ export const en: LocaleSchema = {
     muted_badge: 'Muted',
     mute_failed: 'Mute action failed',
     info_button: 'Group info',
+    promote_admin: 'Make admin',
+    demote_admin: 'Remove admin',
+    set_role_failed: 'Role change failed',
+    transfer_owner: 'Transfer ownership',
+    transfer_owner_confirm:
+      'Transfer group ownership to {{name}}? You will be downgraded to admin.',
+    transfer_owner_failed: 'Transfer failed',
   },
   connection: {
     connected: 'Connected',
@@ -547,6 +554,12 @@ export interface LocaleSchema {
     muted_badge: string;
     mute_failed: string;
     info_button: string;
+    promote_admin: string;
+    demote_admin: string;
+    set_role_failed: string;
+    transfer_owner: string;
+    transfer_owner_confirm: string;
+    transfer_owner_failed: string;
   };
   connection: {
     connected: string;

@@ -274,6 +274,12 @@ export const zhCN: LocaleSchema = {
     muted_badge: '已禁言',
     mute_failed: '禁言操作失败',
     info_button: '群信息',
+    promote_admin: '设为管理员',
+    demote_admin: '取消管理员',
+    set_role_failed: '角色修改失败',
+    transfer_owner: '转让群主',
+    transfer_owner_confirm: '将群主转让给 {{name}}？你将降为管理员。',
+    transfer_owner_failed: '转让群主失败',
   },
   connection: {
     connected: '已连接',
