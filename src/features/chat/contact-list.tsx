@@ -9,17 +9,23 @@
 //
 // The header carries two entry points: pending friend requests (bell)
 // and find-friend search (user-plus). Both open dialogs whose state is
-// owned here.
+// owned here. The bell carries a badge with the live pending count —
+// fetched on mount + polled at the same cadence the friend-list refresh
+// uses (30s) so a freshly-arrived request shows up without the user
+// needing to open the dialog first.
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { BellRing, UserPlus } from 'lucide-react';
-import { useFriendList, useUserProfile } from '@privchat/react';
+import { useFriendList, useFriendPending, useUserProfile } from '@privchat/react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
+import { captureException } from '@/lib/error-reporter';
 import { cn } from '@/lib/utils';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { Avatar } from './avatar';
 import { ProfileCard } from './profile-card';
+
+const PENDING_POLL_INTERVAL_MS = 30_000;
 
 // Both dialogs are user-triggered — pending friend requests + find-
 // friend search. Neither is on the first-paint path; both pull in
@@ -45,8 +51,46 @@ export interface ContactListProps {
 export function ContactList({ onOpen, openingUid, className }: ContactListProps) {
   const { t } = useTranslation();
   const friends = useFriendList();
+  const fetchPending = useFriendPending();
   const [pendingOpen, setPendingOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const resp = await fetchPending();
+      setPendingCount(resp.requests.length);
+    } catch (e) {
+      // Swallow — badge just stays at its last known value. Errors
+      // here would otherwise spam the console on every poll tick when
+      // the gateway is unreachable.
+      captureException(e, { source: 'contact-list.pending-count' });
+    }
+  }, [fetchPending]);
+
+  // Fetch on mount + poll at the same cadence as `useFriendList`.
+  // Re-running when `fetchPending` flips identity (account switch
+  // through the same component) re-fetches against the new adapter.
+  useEffect(() => {
+    void refreshPendingCount();
+    const handle = setInterval(() => {
+      void refreshPendingCount();
+    }, PENDING_POLL_INTERVAL_MS);
+    return () => {
+      clearInterval(handle);
+    };
+  }, [refreshPendingCount]);
+
+  // Re-fetch as soon as the dialog closes — accept/reject inside the
+  // dialog mutates `pendingCount` optimistically, but a fresh read
+  // catches any concurrent change (other tab / device).
+  const onPendingOpenChange = useCallback(
+    (next: boolean) => {
+      setPendingOpen(next);
+      if (!next) void refreshPendingCount();
+    },
+    [refreshPendingCount],
+  );
 
   return (
     <div className={cn('flex h-full flex-col bg-card', className)}>
@@ -57,8 +101,17 @@ export function ContactList({ onOpen, openingUid, className }: ContactListProps)
           onClick={() => setPendingOpen(true)}
           aria-label={t('contacts.pending_title')}
           title={t('contacts.pending_title')}
+          className="relative"
         >
           <BellRing className="h-4 w-4" />
+          {pendingCount > 0 && (
+            <span
+              data-testid="contacts-pending-badge"
+              className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-[10px] font-mono leading-4 text-white text-center"
+            >
+              {pendingCount > 99 ? '99+' : pendingCount}
+            </span>
+          )}
         </Button>
         <Button
           size="sm"
@@ -97,7 +150,9 @@ export function ContactList({ onOpen, openingUid, className }: ContactListProps)
 
       <LazyContactPendingDialog
         open={pendingOpen}
-        onOpenChange={setPendingOpen}
+        onOpenChange={onPendingOpenChange}
+        onOpenChat={onOpen}
+        onCountChange={setPendingCount}
       />
       <LazyContactFindDialog
         open={findOpen}
@@ -112,6 +167,8 @@ export function ContactList({ onOpen, openingUid, className }: ContactListProps)
 function LazyContactPendingDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenChat: (user_id: string) => void;
+  onCountChange: (count: number) => void;
 }) {
   const mounted = useLazyMount(props.open);
   if (!mounted) return null;

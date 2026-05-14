@@ -236,6 +236,7 @@ export const en: LocaleSchema = {
     find_no_results: 'No matches.',
     pending_empty: 'No pending requests.',
     accept: 'Accept',
+    accepted_greeting: 'I accepted your friend request. Let’s chat!',
     apply: 'Add',
     apply_message_label: 'Message (optional)',
     apply_send: 'Send Request',
@@ -538,6 +539,7 @@ export interface LocaleSchema {
     find_no_results: string;
     pending_empty: string;
     accept: string;
+    accepted_greeting: string;
     apply: string;
     apply_message_label: string;
     apply_send: string;

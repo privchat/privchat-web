@@ -232,6 +232,7 @@ export const zhCN: LocaleSchema = {
     find_no_results: '没有找到。',
     pending_empty: '暂无新申请。',
     accept: '接受',
+    accepted_greeting: '我已经通过你的好友申请，现在可以开始聊天了。',
     apply: '加好友',
     apply_message_label: '验证消息（可选）',
     apply_send: '发送申请',

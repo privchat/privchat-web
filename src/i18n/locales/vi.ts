@@ -240,6 +240,7 @@ export const vi: LocaleSchema = {
     find_no_results: 'Không tìm thấy kết quả.',
     pending_empty: 'Không có lời mời nào.',
     accept: 'Chấp nhận',
+    accepted_greeting: 'Tôi đã chấp nhận lời mời kết bạn. Hãy bắt đầu trò chuyện!',
     apply: 'Kết bạn',
     apply_message_label: 'Lời nhắn (tùy chọn)',
     apply_send: 'Gửi lời mời',
