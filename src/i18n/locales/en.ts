@@ -158,6 +158,39 @@ export const en: LocaleSchema = {
     copy_all: 'Copy all',
     clear: 'Clear',
   },
+  qrcode: {
+    // entry points (menus / buttons)
+    my_qr: 'My QR code',
+    group_qr: 'Group QR code',
+    scan_entry: 'Scan / paste a QR link',
+    // display dialog
+    user_title: 'My QR code',
+    group_title: '{{name}} · QR code',
+    user_hint: 'Anyone who scans this can add you as a friend.',
+    group_hint: 'Anyone who scans this can request to join this group.',
+    rotate: 'Replace this QR code',
+    retry: 'Try again',
+    copy_url: 'Copy URL',
+    copied: 'Link copied',
+    confirm_rotate_user: 'Replace your QR code? The old link will immediately stop working.',
+    confirm_rotate_group: 'Replace this group QR code? The old link will immediately stop working.',
+    // scan dialog
+    scan_title: 'Scan / paste a QR link',
+    scan_input_label: 'Paste the URL you scanned or received.',
+    scan_submit: 'Open',
+    scan_reset: 'Done',
+    scan_not_privchat: 'This URL is not a PrivChat link.',
+    scan_unsupported: 'PrivChat link "{{entity}}/{{action}}" is not supported by this version. Please update the app.',
+    scan_user_self: 'This is your own QR code.',
+    scan_user_open_chat: 'Open chat',
+    scan_user_add_friend: 'View profile · Add friend',
+    scan_group_about_to_join: 'You are about to request to join this group.',
+    scan_group_confirm_join: 'Request to join',
+    scan_group_joined: 'You joined the group.',
+    scan_group_open: 'Open group',
+    scan_group_pending: 'Your request was submitted and is pending owner / admin approval.',
+    scan_group_unknown_status: 'Unknown server response: {{status}}',
+  },
   panel: {
     back: 'Back',
     type_message: 'Type a message…',
@@ -641,5 +674,35 @@ export interface LocaleSchema {
     empty: string;
     copy_all: string;
     clear: string;
+  };
+  qrcode: {
+    my_qr: string;
+    group_qr: string;
+    scan_entry: string;
+    user_title: string;
+    group_title: string;
+    user_hint: string;
+    group_hint: string;
+    rotate: string;
+    retry: string;
+    copy_url: string;
+    copied: string;
+    confirm_rotate_user: string;
+    confirm_rotate_group: string;
+    scan_title: string;
+    scan_input_label: string;
+    scan_submit: string;
+    scan_reset: string;
+    scan_not_privchat: string;
+    scan_unsupported: string;
+    scan_user_self: string;
+    scan_user_open_chat: string;
+    scan_user_add_friend: string;
+    scan_group_about_to_join: string;
+    scan_group_confirm_join: string;
+    scan_group_joined: string;
+    scan_group_open: string;
+    scan_group_pending: string;
+    scan_group_unknown_status: string;
   };
 }

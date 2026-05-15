@@ -685,6 +685,59 @@ export function createTestAdapter(): PrivchatClientAdapter {
         mime_type: 'audio/mpeg',
       };
     },
+
+    // QR Code v1.3 — minimal deterministic stubs so smoke tests can mount
+    // the dialogs without a real backend. Hosts that want richer fixtures
+    // can spread overrides on top.
+    async userQrcodeGet() {
+      return {
+        qr_key: 'mockUserKey001',
+        qr_code: 'https://privchat.app/privchat:protocol/user/get?qrkey=mockUserKey001',
+        user_id: state.selfUid,
+      };
+    },
+    async userQrcodeRefresh() {
+      return {
+        old_qr_key: 'mockUserKey000',
+        new_qr_key: 'mockUserKey002',
+        qr_code: 'https://privchat.app/privchat:protocol/user/get?qrkey=mockUserKey002',
+        user_id: state.selfUid,
+      };
+    },
+    async userQrcodeResolve(qrKey: string) {
+      return {
+        user_id: '999',
+        username: 'mockuser',
+        display_name: `Mock(${qrKey})`,
+        avatar_url: undefined,
+        user_type: 0,
+        is_friend: false,
+        is_self: false,
+      };
+    },
+    async groupQrcodeGet(groupId: string) {
+      return {
+        qr_key: `mockGroupKey-${groupId}`,
+        qr_code: `https://privchat.app/privchat:protocol/group/join?qrkey=mockGroupKey-${groupId}`,
+        group_id: groupId,
+      };
+    },
+    async groupQrcodeRefresh(groupId: string) {
+      return {
+        old_qr_key: 'mockGroupOld',
+        new_qr_key: `mockGroupKey-${groupId}-new`,
+        qr_code: `https://privchat.app/privchat:protocol/group/join?qrkey=mockGroupKey-${groupId}-new`,
+        group_id: groupId,
+      };
+    },
+    async groupJoinByQrcode(_qrKey: string, _message?: string) {
+      return {
+        status: 'joined',
+        group_id: '1000',
+        user_id: state.selfUid,
+        joined_at: Date.now(),
+      };
+    },
   };
 }
 

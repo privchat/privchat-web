@@ -29,7 +29,16 @@
 
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, BellOff, FileText, LogOut, Volume2, VolumeX } from 'lucide-react';
+import {
+  Bell,
+  BellOff,
+  FileText,
+  LogOut,
+  QrCode,
+  ScanLine,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import {
   useChannelList,
   useConnectionState,
@@ -53,6 +62,8 @@ import { Avatar } from './avatar';
 import { ProfileCard } from './profile-card';
 import { useTabBadge } from './use-tab-badge';
 import { useIncomingNotifier, type IncomingNotifier } from './use-incoming-notifier';
+import { QrcodeDisplayDialog } from './qrcode-display-dialog';
+import { QrcodeScanDialog } from './qrcode-scan-dialog';
 import { captureException } from '@/lib/error-reporter';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { cn } from '@/lib/utils';
@@ -304,8 +315,11 @@ function TopBar({
   const me = useUserProfile(uid ?? '');
   const display = me?.nickname ?? me?.username ?? t('app.name');
   const seed = uid !== undefined && uid !== '' ? `u:${uid}` : 'self';
+  const [myQrOpen, setMyQrOpen] = useState(false);
+  const [scanQrOpen, setScanQrOpen] = useState(false);
 
   return (
+    <>
     <header className="flex shrink-0 items-center justify-between border-b bg-card px-3 py-2">
       <ProfileCard user={me} fallbackTitle={display}>
         <button
@@ -336,6 +350,26 @@ function TopBar({
         <Button
           variant="ghost"
           size="sm"
+          onClick={() => setMyQrOpen(true)}
+          aria-label={t('qrcode.my_qr')}
+          title={t('qrcode.my_qr')}
+          data-testid="topbar-my-qr"
+        >
+          <QrCode className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setScanQrOpen(true)}
+          aria-label={t('qrcode.scan_entry')}
+          title={t('qrcode.scan_entry')}
+          data-testid="topbar-scan-qr"
+        >
+          <ScanLine className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onOpenLogs}
           aria-label={t('logs.open')}
           title={t('logs.open')}
@@ -355,6 +389,16 @@ function TopBar({
         </Button>
       </div>
     </header>
+    <QrcodeDisplayDialog
+      open={myQrOpen}
+      onOpenChange={setMyQrOpen}
+      mode={{ kind: 'user' }}
+    />
+    <QrcodeScanDialog
+      open={scanQrOpen}
+      onOpenChange={setScanQrOpen}
+    />
+    </>
   );
 }
 

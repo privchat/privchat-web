@@ -43,6 +43,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Avatar } from './avatar';
 import { errorText } from './error-text';
+import { QrcodeDisplayDialog } from './qrcode-display-dialog';
 
 export interface GroupInfoDialogProps {
   open: boolean;
@@ -76,6 +77,7 @@ export function GroupInfoDialog({
   // Per-row busy state so multiple concurrent admin clicks queue cleanly.
   const [busyUid, setBusyUid] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   // R2 — group settings. Lazy-loaded once on dialog open alongside the
   // member roster. Editable subset here is `description` + `announcement`
   // (these go through `group/settings/update` on privchat-server,
@@ -357,7 +359,17 @@ export function GroupInfoDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle>{title}</DialogTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setQrOpen(true)}
+                data-testid="group-info-qr-button"
+              >
+                {t('qrcode.group_qr')}
+              </Button>
+            </div>
           </DialogHeader>
           {error !== null && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -593,6 +605,11 @@ export function GroupInfoDialog({
         }
         busy={busyUid !== null}
         onConfirm={onMuteConfirm}
+      />
+      <QrcodeDisplayDialog
+        open={qrOpen}
+        onOpenChange={setQrOpen}
+        mode={{ kind: 'group', groupId, groupName: title }}
       />
     </>
   );
