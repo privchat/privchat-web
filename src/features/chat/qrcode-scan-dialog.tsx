@@ -362,7 +362,7 @@ function ScanBody({
         value={raw}
         onChange={(e) => setRaw(e.target.value)}
         rows={3}
-        placeholder="https://…/privchat:protocol/…?qrkey=…"
+        placeholder="https://…/privchat:protocol/<entity>/<action>/<qrkey>"
         className="w-full resize-none rounded-md border bg-background p-2 text-xs"
       />
       <Button size="sm" className="w-full" disabled={!canSubmit} onClick={onParse}>

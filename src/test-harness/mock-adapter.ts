@@ -692,7 +692,7 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async userQrcodeGet() {
       return {
         qr_key: 'mockUserKey001',
-        qr_code: 'https://privchat.app/privchat:protocol/user/get?qrkey=mockUserKey001',
+        qr_code: 'https://privchat.app/privchat:protocol/user/get/mockUserKey001',
         user_id: state.selfUid,
       };
     },
@@ -700,7 +700,7 @@ export function createTestAdapter(): PrivchatClientAdapter {
       return {
         old_qr_key: 'mockUserKey000',
         new_qr_key: 'mockUserKey002',
-        qr_code: 'https://privchat.app/privchat:protocol/user/get?qrkey=mockUserKey002',
+        qr_code: 'https://privchat.app/privchat:protocol/user/get/mockUserKey002',
         user_id: state.selfUid,
       };
     },
@@ -718,7 +718,7 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async groupQrcodeGet(groupId: string) {
       return {
         qr_key: `mockGroupKey-${groupId}`,
-        qr_code: `https://privchat.app/privchat:protocol/group/join?qrkey=mockGroupKey-${groupId}`,
+        qr_code: `https://privchat.app/privchat:protocol/group/join/mockGroupKey-${groupId}`,
         group_id: groupId,
       };
     },
@@ -726,7 +726,7 @@ export function createTestAdapter(): PrivchatClientAdapter {
       return {
         old_qr_key: 'mockGroupOld',
         new_qr_key: `mockGroupKey-${groupId}-new`,
-        qr_code: `https://privchat.app/privchat:protocol/group/join?qrkey=mockGroupKey-${groupId}-new`,
+        qr_code: `https://privchat.app/privchat:protocol/group/join/mockGroupKey-${groupId}-new`,
         group_id: groupId,
       };
     },
