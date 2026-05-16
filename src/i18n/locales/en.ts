@@ -183,7 +183,11 @@ export const en: LocaleSchema = {
     scan_unsupported: 'PrivChat link "{{entity}}/{{action}}" is not supported by this version. Please update the app.',
     scan_user_self: 'This is your own QR code.',
     scan_user_open_chat: 'Open chat',
-    scan_user_add_friend: 'View profile · Add friend',
+    scan_user_send_message: 'Send a message',
+    scan_user_add_friend: 'Add friend',
+    scan_user_apply_message_label: 'Message (optional)',
+    scan_user_apply_message_placeholder: 'Say hi — this is the note attached to your request.',
+    scan_user_friend_request_sent: 'Friend request sent to {{name}}.',
     scan_group_about_to_join: 'You are about to request to join this group.',
     scan_group_confirm_join: 'Request to join',
     scan_group_joined: 'You joined the group.',
@@ -697,7 +701,11 @@ export interface LocaleSchema {
     scan_unsupported: string;
     scan_user_self: string;
     scan_user_open_chat: string;
+    scan_user_send_message: string;
     scan_user_add_friend: string;
+    scan_user_apply_message_label: string;
+    scan_user_apply_message_placeholder: string;
+    scan_user_friend_request_sent: string;
     scan_group_about_to_join: string;
     scan_group_confirm_join: string;
     scan_group_joined: string;

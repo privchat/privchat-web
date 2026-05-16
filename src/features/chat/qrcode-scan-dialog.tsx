@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import {
   parsePrivchatLink,
+  useFriendApply,
   useGroupQrcode,
   useUserQrcode,
   type PrivchatProtocolLink,
@@ -47,6 +48,7 @@ type ResolveState =
   | { kind: 'not-privchat' }
   | {
       kind: 'user-card';
+      qrKey: string; // kept so we can pass as source_id when applying
       user_id: string;
       username: string;
       display_name?: string;
@@ -55,6 +57,7 @@ type ResolveState =
       is_friend: boolean;
       is_self: boolean;
     }
+  | { kind: 'friend-requested'; user_id: string; display: string }
   | { kind: 'group-joined'; groupId: string }
   | { kind: 'group-pending'; groupId: string; requestId?: string }
   | { kind: 'busy' }
@@ -83,6 +86,7 @@ export function QrcodeScanDialog({
   const [state, setState] = useState<ResolveState>({ kind: 'idle' });
   const userOps = useUserQrcode();
   const groupOps = useGroupQrcode();
+  const applyFriend = useFriendApply();
 
   const reset = useCallback(() => {
     setRaw('');
@@ -99,7 +103,7 @@ export function QrcodeScanDialog({
           setState({ kind: 'busy' });
           try {
             const card = await userOps.resolve(link.qrKey);
-            setState({ kind: 'user-card', ...card });
+            setState({ kind: 'user-card', qrKey: link.qrKey, ...card });
           } catch (e) {
             captureException(e, { source: 'qrcode-scan.user-resolve' });
             setState({ kind: 'error', message: errorText(e) });
@@ -153,6 +157,25 @@ export function QrcodeScanDialog({
     [groupOps, t],
   );
 
+  /** Friend-apply path. Source/source_id is set to ('card_share', qr_key)
+   *  per the server's enum {search, group, card_share, friend} —
+   *  'qrcode' isn't whitelisted on the server side. */
+  const onAddFriend = useCallback(
+    (target_user_id: string, qrKey: string, message: string, display: string) => {
+      setState({ kind: 'busy' });
+      void (async () => {
+        try {
+          await applyFriend(target_user_id, message || undefined, 'card_share', qrKey);
+          setState({ kind: 'friend-requested', user_id: target_user_id, display });
+        } catch (e) {
+          captureException(e, { source: 'qrcode-scan.friend-apply' });
+          setState({ kind: 'error', message: errorText(e) });
+        }
+      })();
+    },
+    [applyFriend],
+  );
+
   return (
     <Dialog
       open={open}
@@ -171,6 +194,7 @@ export function QrcodeScanDialog({
           state={state}
           onParse={onParse}
           onJoinGroup={onJoinGroup}
+          onAddFriend={onAddFriend}
           onReset={reset}
           onOpenUserProfile={onOpenUserProfile}
           onJoinedGroup={onJoinedGroup}
@@ -186,6 +210,7 @@ function ScanBody({
   state,
   onParse,
   onJoinGroup,
+  onAddFriend,
   onReset,
   onOpenUserProfile,
   onJoinedGroup,
@@ -195,6 +220,12 @@ function ScanBody({
   state: ResolveState;
   onParse: () => void;
   onJoinGroup: (qrKey: string) => void;
+  onAddFriend: (
+    target_user_id: string,
+    qrKey: string,
+    message: string,
+    display: string,
+  ) => void;
   onReset: () => void;
   onOpenUserProfile?: (userId: string) => void;
   onJoinedGroup?: (groupId: string) => void;
@@ -256,50 +287,22 @@ function ScanBody({
   }
 
   if (state.kind === 'user-card') {
-    const display = state.display_name ?? state.username;
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <Avatar
-            seed={`u:${state.user_id}`}
-            label={display}
-            size="lg"
-          />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">{display}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              @{state.username}
-            </div>
-          </div>
-        </div>
+      <UserCardBody
+        state={state}
+        onAddFriend={onAddFriend}
+        onOpenUserProfile={onOpenUserProfile}
+        onReset={onReset}
+      />
+    );
+  }
 
-        {state.is_self ? (
-          <p className="text-center text-xs text-muted-foreground">
-            {t('qrcode.scan_user_self')}
-          </p>
-        ) : state.is_friend ? (
-          <Button
-            size="sm"
-            className="w-full"
-            onClick={() => {
-              onOpenUserProfile?.(state.user_id);
-              onReset();
-            }}
-          >
-            {t('qrcode.scan_user_open_chat')}
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            className="w-full"
-            onClick={() => {
-              onOpenUserProfile?.(state.user_id);
-              onReset();
-            }}
-          >
-            {t('qrcode.scan_user_add_friend')}
-          </Button>
-        )}
+  if (state.kind === 'friend-requested') {
+    return (
+      <div className="space-y-3 text-center">
+        <p className="text-sm">
+          {t('qrcode.scan_user_friend_request_sent', { name: state.display })}
+        </p>
         <Button size="sm" variant="outline" className="w-full" onClick={onReset}>
           {t('qrcode.scan_reset')}
         </Button>
@@ -367,6 +370,93 @@ function ScanBody({
       />
       <Button size="sm" className="w-full" disabled={!canSubmit} onClick={onParse}>
         {t('qrcode.scan_submit')}
+      </Button>
+    </div>
+  );
+}
+
+/** User-card body. Lives in its own component so the apply-message
+ *  textarea has its own local state without polluting the dialog's
+ *  state machine (we don't need to track keystrokes in `ResolveState`). */
+function UserCardBody({
+  state,
+  onAddFriend,
+  onOpenUserProfile,
+  onReset,
+}: {
+  state: Extract<ResolveState, { kind: 'user-card' }>;
+  onAddFriend: (
+    target_user_id: string,
+    qrKey: string,
+    message: string,
+    display: string,
+  ) => void;
+  onOpenUserProfile?: (userId: string) => void;
+  onReset: () => void;
+}) {
+  const { t } = useTranslation();
+  const display = state.display_name ?? state.username;
+  const [applyMessage, setApplyMessage] = useState('');
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Avatar seed={`u:${state.user_id}`} label={display} size="lg" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium">{display}</div>
+          <div className="truncate text-xs text-muted-foreground">
+            @{state.username} · #{state.user_id}
+          </div>
+        </div>
+      </div>
+
+      {state.is_self ? (
+        <p className="text-center text-xs text-muted-foreground">
+          {t('qrcode.scan_user_self')}
+        </p>
+      ) : state.is_friend ? (
+        // 已是好友：直接「发送消息」（打开聊天）
+        <Button
+          size="sm"
+          className="w-full"
+          onClick={() => {
+            onOpenUserProfile?.(state.user_id);
+            onReset();
+          }}
+        >
+          {t('qrcode.scan_user_send_message')}
+        </Button>
+      ) : (
+        // 非好友：可选附言 + 「添加好友」
+        <div className="space-y-2">
+          <label className="block text-xs text-muted-foreground">
+            {t('qrcode.scan_user_apply_message_label')}
+          </label>
+          <textarea
+            value={applyMessage}
+            onChange={(e) => setApplyMessage(e.target.value)}
+            rows={2}
+            placeholder={t('qrcode.scan_user_apply_message_placeholder')}
+            className="w-full resize-none rounded-md border bg-background p-2 text-xs"
+          />
+          <Button
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              onAddFriend(
+                state.user_id,
+                state.qrKey,
+                applyMessage.trim(),
+                display,
+              );
+            }}
+          >
+            {t('qrcode.scan_user_add_friend')}
+          </Button>
+        </div>
+      )}
+      <Button size="sm" variant="outline" className="w-full" onClick={onReset}>
+        {t('qrcode.scan_reset')}
       </Button>
     </div>
   );

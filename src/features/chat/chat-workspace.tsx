@@ -205,6 +205,8 @@ export function ChatWorkspace({
         switching={switching ?? false}
         switchError={switchError ?? null}
         clearSwitchError={clearSwitchError}
+        onOpenDirectByUserId={onOpenContact}
+        onOpenGroupChannel={onOpenGroup}
       />
       <LazyLogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
 
@@ -295,6 +297,8 @@ function TopBar({
   switching,
   switchError,
   clearSwitchError,
+  onOpenDirectByUserId,
+  onOpenGroupChannel,
 }: {
   uid: string | undefined;
   state: string;
@@ -307,6 +311,16 @@ function TopBar({
   switching: boolean;
   switchError: SwitchError | null;
   clearSwitchError?: () => void;
+  /** Scan flow: user-card "open chat / send message" handler.
+   *  ChatWorkspace wires this to `useOpenDirectConversation` so the
+   *  scanned user's direct channel pops in the right pane. If they're
+   *  not yet friends, the conversation header still renders — host's
+   *  add-friend affordance is reachable from there. */
+  onOpenDirectByUserId: (userId: string) => void;
+  /** Scan flow: after joining a group (status='joined') jump the user
+   *  into the group's channel. channel_id == group_id by server
+   *  invariant; channel_type is 2 for groups. */
+  onOpenGroupChannel: (channelId: string, channelType: number) => void;
 }) {
   const { t } = useTranslation();
   // Self profile drives the top-bar identity display. It may be empty
@@ -397,6 +411,18 @@ function TopBar({
     <QrcodeScanDialog
       open={scanQrOpen}
       onOpenChange={setScanQrOpen}
+      onOpenUserProfile={(uid) => {
+        // User scanned someone's namecard QR → open a direct chat
+        // with them. Conversation header's add-friend affordance
+        // covers the non-friend case (matches the standard route
+        // through ContactFindDialog).
+        onOpenDirectByUserId(uid);
+      }}
+      onJoinedGroup={(gid) => {
+        // status='joined' branch: bring the user straight into the
+        // newly-joined group's channel.
+        onOpenGroupChannel(gid, 2);
+      }}
     />
     </>
   );
