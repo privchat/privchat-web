@@ -183,6 +183,15 @@ function ConversationRow({
         ? `u:${peerUid}`
         : `g:${record.channel_id}`;
 
+  // Preview line: text shows the literal content; every other type shows
+  // a locale-specific placeholder ("[图片]" / "[Image]"). Older cached rows
+  // without a resolved type fall back to the stored preview string.
+  const ct = vm.last_message_content_type;
+  const previewText =
+    ct !== undefined && ct !== 'text'
+      ? t(`message_preview.${ct}`)
+      : vm.last_message_preview;
+
   return (
     <li>
       <div
@@ -226,10 +235,10 @@ function ConversationRow({
                 {t('channel_actions.revoked_preview')}
               </div>
             ) : (
-              vm.last_message_preview !== undefined &&
-              vm.last_message_preview !== '' && (
+              previewText !== undefined &&
+              previewText !== '' && (
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {vm.last_message_preview}
+                  {previewText}
                 </div>
               )
             )}

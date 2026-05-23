@@ -138,6 +138,21 @@ export const en: LocaleSchema = {
     failed: 'Action failed',
     revoked_preview: '[Recalled]',
   },
+  // Conversation-list preview placeholders for non-text messages. Keys
+  // match `MessageItemVM.content_type` (minus `text`, which shows content).
+  message_preview: {
+    image: '[Image]',
+    video: '[Video]',
+    voice: '[Voice]',
+    file: '[File]',
+    system: '[System]',
+    sticker: '[Sticker]',
+    contact_card: '[Contact]',
+    location: '[Location]',
+    link: '[Link]',
+    forward: '[Forwarded]',
+    unknown: '[Message]',
+  },
   notify: {
     new_message: 'New message',
     sound_label: 'Notification sound',
@@ -498,6 +513,19 @@ export interface LocaleSchema {
     hide_confirm: string;
     failed: string;
     revoked_preview: string;
+  };
+  message_preview: {
+    image: string;
+    video: string;
+    voice: string;
+    file: string;
+    system: string;
+    sticker: string;
+    contact_card: string;
+    location: string;
+    link: string;
+    forward: string;
+    unknown: string;
   };
   notify: {
     new_message: string;
