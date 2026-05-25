@@ -1,14 +1,14 @@
 // Web side of the SDK-owned auth-refresh flow.
 //
 // Builds the `AuthRefreshConfig` the SDK calls (via `configureAuthRefresh`)
-// when an access token is rejected as expired. The refresh itself is
-// mode-aware through the existing `AccountAuthProvider.refreshToken`:
-//   - PLATFORM → real HTTP `/auth/refresh-token` (rotates access + refresh)
-//   - BUILTIN  → passthrough today (the backend issues no separate refresh
-//                token yet; the seam is here so a future builtin refresh
-//                needs no coordinator change). A passthrough means builtin
-//                cannot silently refresh — a genuinely-expired builtin
-//                token falls through to re-login.
+// when an access token is rejected as expired. Refresh is mode-aware:
+//   - PLATFORM → real HTTP `/auth/refresh-token` via PlatformAuthProvider
+//     (rotates access + refresh).
+//   - BUILTIN  → the SDK RPC `client.refreshAccessToken(refresh_token,
+//     device_id)` → `account/auth/refresh`, which the server exposes as an
+//     anonymous-whitelisted route (callable while connected-but-unauth, so
+//     no deadlock). The refresh token comes from `account/auth/login`
+//     (captured by BuiltinAuthProvider into the persisted session).
 //
 // `onTokensRefreshed` persists the new tokens by MERGING onto the freshest
 // stored session: override the access token, keep the old refresh token
@@ -18,16 +18,18 @@ import type {
   AuthRefreshConfig,
   AuthRefreshContext,
   AuthRefreshResult,
+  PrivchatClient,
 } from '@privchat/sdk';
 import { SessionExpiredError } from '@privchat/sdk';
 import { getAuthProvider } from './account-auth-provider';
 import {
   loadSession,
   persistSessionForAccount,
+  sessionAccountMode,
   type PersistedSession,
 } from './session-storage';
 
-export function buildAuthRefresh(): AuthRefreshConfig {
+export function buildAuthRefresh(client: PrivchatClient): AuthRefreshConfig {
   return {
     refreshAuth: async (_ctx: AuthRefreshContext): Promise<AuthRefreshResult> => {
       const current = loadSession();
@@ -35,18 +37,37 @@ export function buildAuthRefresh(): AuthRefreshConfig {
         // Nothing to refresh from → terminal; SDK fires session_expired.
         throw new SessionExpiredError('no active session to refresh');
       }
-      const provider = await getAuthProvider();
-      if (typeof provider.refreshToken !== 'function') {
-        throw new SessionExpiredError('auth provider does not support refresh');
+
+      if (sessionAccountMode(current) === 'platform') {
+        const provider = await getAuthProvider();
+        if (typeof provider.refreshToken !== 'function') {
+          throw new SessionExpiredError('platform provider does not support refresh');
+        }
+        const updated = await provider.refreshToken(current);
+        return {
+          accessToken: updated.access_token,
+          deviceId: updated.device_id,
+          userId: updated.user_id,
+          ...(updated.refresh_token !== undefined
+            ? { refreshToken: updated.refresh_token }
+            : {}),
+        };
       }
-      const updated = await provider.refreshToken(current);
+
+      // BUILTIN: refresh over the live SDK connection via the anonymous
+      // `account/auth/refresh` route. Requires a stored refresh token
+      // (captured at login). `refreshAccessToken` throws RefreshTokenError
+      // on 10009/10010 → the SDK coordinator turns that into session_expired.
+      if (current.refresh_token === undefined || current.refresh_token === '') {
+        throw new SessionExpiredError('builtin session has no refresh token');
+      }
+      const r = await client.refreshAccessToken(current.refresh_token, current.device_id);
       return {
-        accessToken: updated.access_token,
-        deviceId: updated.device_id,
-        userId: updated.user_id,
-        ...(updated.refresh_token !== undefined
-          ? { refreshToken: updated.refresh_token }
-          : {}),
+        accessToken: r.access_token,
+        deviceId: current.device_id,
+        userId: current.user_id,
+        // B1 non-rotation: server may omit refresh_token → keep the old one.
+        refreshToken: r.refresh_token ?? current.refresh_token,
       };
     },
 

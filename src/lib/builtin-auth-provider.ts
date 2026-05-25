@@ -38,6 +38,11 @@ interface CredentialResponse {
   user_id: number;
   token: string;
   device_id: string;
+  /** Long-TTL refresh token issued by `account/auth/login` (server
+   *  `login.rs` §7.1). Used by the SDK-owned auth-refresh flow to mint a
+   *  fresh access token via `account/auth/refresh` (an anonymous-
+   *  whitelisted route). */
+  refresh_token?: string;
 }
 
 const LOGIN_ROUTE = 'account/auth/login';
@@ -61,11 +66,12 @@ export class BuiltinAuthProvider implements AccountAuthProvider {
   // implements the method; UI gates the affordance via
   // `capabilities.smsLogin`.
 
-  // BUILTIN today doesn't expose a separate refresh token flow;
-  // the server's access token stays valid until session_version
-  // bumps. The seam exists for consistency; the implementation
-  // is a deliberate "session unchanged" passthrough so callers
-  // can call it unconditionally.
+  // BUILTIN refresh is NOT done here: the provider has no SDK client
+  // instance, and `account/auth/refresh` is an SDK RPC. The SDK-owned
+  // auth-refresh flow drives it instead — `auth-refresh-provider.ts`
+  // dispatches BUILTIN to `client.refreshAccessToken(refresh_token,
+  // device_id)`. This passthrough remains only so the provider interface
+  // stays satisfiable for any caller that invokes it directly.
   refreshToken = async (
     session: import('./session-storage').PersistedSession,
   ): Promise<import('./session-storage').PersistedSession> => session;
@@ -107,6 +113,12 @@ export class BuiltinAuthProvider implements AccountAuthProvider {
         accessToken: resp.token,
         deviceId: resp.device_id,
         accountMode: 'builtin',
+        // Persist the server-issued refresh token so the SDK auth-refresh
+        // coordinator can silently renew the access token. (login-page
+        // persists `result.refreshToken` mode-agnostically.)
+        ...(resp.refresh_token !== undefined
+          ? { refreshToken: resp.refresh_token }
+          : {}),
         // R8.4b: BUILTIN never has required actions; the framework is
         // wired but server side returns [] for builtin auth paths.
         requiredActions: [],

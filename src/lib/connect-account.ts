@@ -48,7 +48,7 @@ export async function connectAccount(
   // replay) is transparently refreshed + retried instead of bouncing the
   // user to login. Terminal failure surfaces via the `session_expired`
   // event (App shows the re-login dialog).
-  handle.client.configureAuthRefresh(buildAuthRefresh());
+  handle.client.configureAuthRefresh(buildAuthRefresh(handle.client));
   try {
     await handle.client.connect();
     await handle.client.authenticate(
