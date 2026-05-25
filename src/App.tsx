@@ -5,6 +5,7 @@ import { AppProviders } from '@/app/providers';
 import { LoginPage } from '@/features/auth/login-page';
 import { ChatWorkspace } from '@/features/chat/chat-workspace';
 import { RequiredActionsGate } from '@/features/onboarding/required-actions-gate';
+import { SessionExpiredDialog } from '@/features/auth/session-expired-dialog';
 import type { PrivchatHandle } from '@/lib/privchat-client';
 import type { RequiredAction } from '@/lib/required-action';
 import {
@@ -63,6 +64,9 @@ function switchErrorFor(
 export default function App() {
   const [handle, setHandle] = useState<PrivchatHandle | null>(null);
   const [autoLogin, setAutoLogin] = useState<AutoLoginState>('restoring');
+  // Set when the SDK fires `session_expired` (terminal — refresh could not
+  // save the session). Drives the "登录已过期" dialog; confirming logs out.
+  const [sessionExpired, setSessionExpired] = useState(false);
   // R7.3 — when true, render LoginPage with a Cancel button so the
   // user can return to the previous active account without
   // creating a new one. Set by AccountSwitcher's "Add account"
@@ -159,6 +163,17 @@ export default function App() {
         void handle.client.dispose();
       }
     };
+  }, [handle]);
+
+  // Terminal session expiry: the SDK-owned refresh coordinator could not
+  // save the session (refresh token expired/revoked, etc.). Surface the
+  // re-login dialog instead of silently dropping the connection.
+  useEffect(() => {
+    if (handle === null) return;
+    const unsubscribe = handle.client.observeEvents((env) => {
+      if (env.event.type === 'session_expired') setSessionExpired(true);
+    });
+    return unsubscribe;
   }, [handle]);
 
   /** Fresh-login + add-account converge here. Both come in with
@@ -259,6 +274,7 @@ export default function App() {
   );
 
   const onLogout = useCallback(async () => {
+    setSessionExpired(false);
     clearSession();
     if (handle !== null) {
       await handle.client.dispose().catch(() => {});
@@ -409,6 +425,11 @@ export default function App() {
       : undefined;
 
   return (
+    <>
+      <SessionExpiredDialog
+        open={sessionExpired}
+        onConfirm={() => void onLogout()}
+      />
     <RequiredActionsGate
       accountKey={gateAccountKey}
       initialActions={gateInitialActions}
@@ -435,6 +456,7 @@ export default function App() {
         />
       </AppProviders>
     </RequiredActionsGate>
+    </>
   );
 }
 

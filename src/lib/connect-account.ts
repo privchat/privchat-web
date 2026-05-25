@@ -24,6 +24,7 @@ import { resolveDbNameForActiveAccount } from './migrate-legacy-db';
 import { createPrivchat, type PrivchatHandle } from './privchat-client';
 import type { PersistedSession } from './session-storage';
 import { captureException } from './error-reporter';
+import { buildAuthRefresh } from './auth-refresh-provider';
 
 export interface ConnectAccountResult {
   handle: PrivchatHandle;
@@ -42,6 +43,12 @@ export async function connectAccount(
     captureException(err, { source: 'connect-account.db-migration' });
   });
   const handle = createPrivchat({ url: session.url, dbName });
+  // Install SDK-owned auth refresh BEFORE authenticate, so an expired
+  // access token (here on cold-start auth, or later on auto-reconnect
+  // replay) is transparently refreshed + retried instead of bouncing the
+  // user to login. Terminal failure surfaces via the `session_expired`
+  // event (App shows the re-login dialog).
+  handle.client.configureAuthRefresh(buildAuthRefresh());
   try {
     await handle.client.connect();
     await handle.client.authenticate(

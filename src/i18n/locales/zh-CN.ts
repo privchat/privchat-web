@@ -147,6 +147,11 @@ export const zhCN: LocaleSchema = {
     forward: '[转发]',
     unknown: '[未知消息]',
   },
+  session_expired: {
+    title: '登录已过期',
+    body: '你的登录状态已失效，请重新登录。',
+    confirm: '重新登录',
+  },
   notify: {
     new_message: '新消息',
     sound_label: '消息提示音',

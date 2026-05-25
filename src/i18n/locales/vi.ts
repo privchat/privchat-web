@@ -152,6 +152,11 @@ export const vi: LocaleSchema = {
     forward: '[Chuyển tiếp]',
     unknown: '[Tin nhắn]',
   },
+  session_expired: {
+    title: 'Phiên đã hết hạn',
+    body: 'Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.',
+    confirm: 'Đăng nhập lại',
+  },
   notify: {
     new_message: 'Tin nhắn mới',
     sound_label: 'Âm báo tin nhắn',

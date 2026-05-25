@@ -153,6 +153,11 @@ export const en: LocaleSchema = {
     forward: '[Forwarded]',
     unknown: '[Message]',
   },
+  session_expired: {
+    title: 'Session expired',
+    body: 'Your session is no longer valid. Please sign in again.',
+    confirm: 'Sign in again',
+  },
   notify: {
     new_message: 'New message',
     sound_label: 'Notification sound',
@@ -526,6 +531,11 @@ export interface LocaleSchema {
     link: string;
     forward: string;
     unknown: string;
+  };
+  session_expired: {
+    title: string;
+    body: string;
+    confirm: string;
   };
   notify: {
     new_message: string;
