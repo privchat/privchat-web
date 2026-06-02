@@ -919,7 +919,7 @@ export interface TestHarnessControls {
     data: Array<Record<string, unknown>>;
   }>;
   /** R8.4b — construct `PlatformProfileProvider(baseUrl, getToken)` and
-   *  call `getProfile()`. Specs mock `${baseUrl}/app/member/user/get`. */
+   *  call `getProfile()`. Specs mock `${baseUrl}/member/user/get`. */
   platformGetProfile(args: {
     baseUrl: string;
     accessToken: string;
@@ -938,7 +938,7 @@ export interface TestHarnessControls {
   >;
   /** R8.4b — construct `PlatformProfileProvider(baseUrl, getToken)` and
    *  call `updateNickname(nickname)`. Specs mock
-   *  `${baseUrl}/app/member/user/update-nickname`. */
+   *  `${baseUrl}/member/user/update-nickname`. */
   platformUpdateNickname(args: {
     baseUrl: string;
     accessToken: string;

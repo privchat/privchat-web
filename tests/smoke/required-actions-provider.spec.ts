@@ -179,7 +179,7 @@ test.describe('RequiredActionsProvider + PlatformProfileProvider (R8.4b)', () =>
   }) => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     await page.route(
-      '**/__fake-platform/app/app/member/user/get',
+      '**/__fake-platform/app/member/user/get',
       async (route: Route) => {
         await fulfillJson(route, 200, {
           code: 0,
@@ -231,7 +231,7 @@ test.describe('RequiredActionsProvider + PlatformProfileProvider (R8.4b)', () =>
     let receivedBody: unknown = null;
     let receivedMethod = '';
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-nickname',
+      '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         receivedMethod = route.request().method();
         receivedBody = JSON.parse(route.request().postData() ?? 'null');
@@ -264,7 +264,7 @@ test.describe('RequiredActionsProvider + PlatformProfileProvider (R8.4b)', () =>
     const baseUrl = fakeBaseUrl(await originOf(page));
     let hits = 0;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-nickname',
+      '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         hits += 1;
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -297,7 +297,7 @@ test.describe('RequiredActionsProvider + PlatformProfileProvider (R8.4b)', () =>
   }) => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-nickname',
+      '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         await fulfillJson(route, 200, {
           code: 4001,

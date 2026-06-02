@@ -8,13 +8,12 @@
 // editor) wires them.
 //
 // Real paths (curl-verified):
-//   GET ${baseUrl}/app/member/user/get             (double /app/app)
-//   PUT ${baseUrl}/app/member/user/update-nickname (double /app/app)
+//   GET ${baseUrl}/member/user/get
+//   PUT ${baseUrl}/member/user/update-nickname
 //
-// baseUrl already contains `/app`. The double-/app stems from
-// `MemberUserController` using an absolute `@Controller("/app/member/user")`
-// annotation while AccountController/AuthController use relative paths;
-// clients honor the real path, this isn't to be "fixed" client-side.
+// baseUrl already contains `/app`. Controller annotations live under
+// `@Controller("/member/user")` (业务前缀,不含 /app);framework 路由组
+// 自动叠 /app prefix。Clients only write business-prefix paths here.
 
 import type { AccountMode } from './account-mode';
 import {
@@ -91,7 +90,7 @@ export interface AccountProfileProvider {
   /** R8.4d-2. multipart `POST /infra/file/upload` (single `/app` layer).
    *  Returns full `UploadedFile` for callers that want size / mime back. */
   uploadAvatar?(file: File): Promise<UploadedFile>;
-  /** R8.4d-2. `PUT /app/member/user/update-avatar` (double `/app/app`).
+  /** R8.4d-2. `PUT /member/user/update-avatar`.
    *  `fileId` comes from `uploadAvatar` result. */
   updateAvatar?(fileId: string): Promise<void>;
   /** R8.4d. @FreshAuth + 30-day rate limit. */
@@ -168,7 +167,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
   async getProfile(): Promise<MemberProfile> {
     const data = requireData(
       await getEnvelope<MemberProfileWire>(
-        `${this.baseUrl}/app/member/user/get`,
+        `${this.baseUrl}/member/user/get`,
         this.requireToken(),
       ),
       'profile.get',
@@ -196,7 +195,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
       );
     }
     await putEnvelope<unknown>(
-      `${this.baseUrl}/app/member/user/update-nickname`,
+      `${this.baseUrl}/member/user/update-nickname`,
       this.requireToken(),
       { nickname: trimmed },
     );
@@ -204,7 +203,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
 
   /** R8.4d-2 — multipart `POST {baseUrl}/infra/file/upload` (single `/app`
    *  layer; `infra/file` controller uses an absolute `@Controller("/infra/file")`
-   *  annotation, NOT the `/app/member/...` style). Two-step semantics: the
+   *  annotation, NOT the `/member/...` style). Two-step semantics: the
    *  caller is expected to invoke [updateAvatar] separately after this
    *  returns — uploading does NOT auto-bind the avatar to the member.
    *
@@ -238,9 +237,8 @@ export class PlatformProfileProvider implements AccountProfileProvider {
     );
   }
 
-  /** R8.4d-2 — `PUT {baseUrl}/app/member/user/update-avatar` (double `/app/app`
-   *  per `MemberUserController` annotation style; same path quirk as
-   *  `update-nickname` / `update-bio` etc.). Server logic validates that the
+  /** R8.4d-2 — `PUT {baseUrl}/member/user/update-avatar` (double `/app/app`
+   * . Server logic validates that the
    *  `fileId` exists, is owned by the caller, is status=active, and has
    *  `business_type == "member_avatar"` — see MODULE_MEMBER_PROFILE_SPEC §4.3. */
   async updateAvatar(fileId: string): Promise<void> {
@@ -249,7 +247,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
       throw new PlatformConfigError('updateAvatar: fileId is empty');
     }
     await putEnvelope<unknown>(
-      `${this.baseUrl}/app/member/user/update-avatar`,
+      `${this.baseUrl}/member/user/update-avatar`,
       this.requireToken(),
       { fileId: trimmed },
     );
@@ -259,7 +257,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
     throw new NotImplementedYetError('PlatformProfileProvider.updateUsername');
   }
 
-  /** R8.4d-1 — HTTP PUT /app/member/user/update-bio.
+  /** R8.4d-1 — HTTP PUT /member/user/update-bio.
    *  Server validation: @Size(max = 200). null/'' = clear. */
   async updateBio(bio: string | null): Promise<void> {
     const payload = bio === null ? null : bio.trim();
@@ -269,7 +267,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
       );
     }
     await putEnvelope<unknown>(
-      `${this.baseUrl}/app/member/user/update-bio`,
+      `${this.baseUrl}/member/user/update-bio`,
       this.requireToken(),
       // Server data class `UpdateMemberBioRequest(bio: String? = null)` accepts
       // null OR empty string as "clear". We send `null` for empty so it survives
@@ -278,7 +276,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
     );
   }
 
-  /** R8.4d-1 — HTTP PUT /app/member/user/update-gender.
+  /** R8.4d-1 — HTTP PUT /member/user/update-gender.
    *  Server accepts only {0,1,2,9}. */
   async updateGender(gender: number): Promise<void> {
     if (![0, 1, 2, 9].includes(gender)) {
@@ -287,13 +285,13 @@ export class PlatformProfileProvider implements AccountProfileProvider {
       );
     }
     await putEnvelope<unknown>(
-      `${this.baseUrl}/app/member/user/update-gender`,
+      `${this.baseUrl}/member/user/update-gender`,
       this.requireToken(),
       { gender },
     );
   }
 
-  /** R8.4d-1 — HTTP PUT /app/member/user/update-birthday.
+  /** R8.4d-1 — HTTP PUT /member/user/update-birthday.
    *  ISO YYYY-MM-DD string or null. Server stores as VARCHAR(10) to avoid
    *  timezone ambiguity (spec MODULE_MEMBER_PROFILE_SPEC §2). */
   async updateBirthday(birthday: string | null): Promise<void> {
@@ -304,7 +302,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
       );
     }
     await putEnvelope<unknown>(
-      `${this.baseUrl}/app/member/user/update-birthday`,
+      `${this.baseUrl}/member/user/update-birthday`,
       this.requireToken(),
       { birthday: payload === '' ? null : payload },
     );
@@ -313,7 +311,7 @@ export class PlatformProfileProvider implements AccountProfileProvider {
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Raw wire shape for `GET /app/member/user/get` envelope `data`. */
+/** Raw wire shape for `GET /member/user/get` envelope `data`. */
 interface MemberProfileWire {
   id: number;
   mobile?: string;

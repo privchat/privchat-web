@@ -16,7 +16,7 @@
 
 ## 0. Scope
 
-This document covers **only** the application member profile HTTP API (`/app/member/user/*`) — endpoints, request/response shapes, errors, authorization, the path-prefix quirk. The cross-cutting **profile completion gate** mechanism that uses `updateNickname` lives in
+This document covers **only** the application member profile HTTP API (`/member/user/*`) — endpoints, request/response shapes, errors, authorization. The cross-cutting **profile completion gate** mechanism that uses `updateNickname` lives in
 [PLATFORM_REQUIRED_ACTIONS_CONTRACT.md](./PLATFORM_REQUIRED_ACTIONS_CONTRACT.md) — that document owns when/why the gate fires; this one owns what `updateNickname` looks like over the wire.
 
 R8.4 only required `getProfile` + `updateNickname` for the gate's first action (`complete_profile.nickname`). Other endpoints are listed for R8.4d (full profile editor) but not implemented in R8.4b.
@@ -25,21 +25,21 @@ R8.4 only required `getProfile` + `updateNickname` for the gate's first action (
 
 ## 1. Key facts (read first)
 
-### 1.1 Path prefix quirk
-Framework mounts every controller with an `/app` prefix; `MemberUserController` annotation is `@Controller("/app/member/user")` (absolute path). The two stack into actual mount path `/app/app/member/user/...`. Web client must build URLs as:
+### 1.1 Path prefix convention
+Framework mounts every `/app` route group's controllers with an `/app` prefix; controller annotations use **business prefix only** (`@Controller("/member/user")`, `@Controller("/auth")`, `@Controller("/account")` etc., **never** `/app/...`). Web client builds URLs as:
 
 ```
-${baseUrl}/app/member/user/...
+${baseUrl}/member/user/...
 ```
 
-where `baseUrl = https://app.example.com/app` (the R8.2b convention, includes `/app` already). Verified by curl:
+where `baseUrl = https://app.example.com/app` (R8.2b convention, includes `/app` already, or 子域名 `https://app-api.example.com/` 承担同一语义). Verified by curl:
 
 ```
-GET /app/member/user/get      → 404 (annotation alone)
-GET /app/app/member/user/get  → 401 (path exists, needs token)
+GET /member/user/get      → 404 (no /app prefix)
+GET /member/user/get  → 401 (path exists, needs token)
 ```
 
-Auth controller (`@Controller("/auth")`) is annotated with a relative path so its endpoints are `${baseUrl}/auth/...` — single `/app` layer. This is module-member's internal annotation-style inconsistency; clients must wire each per its actual mount.
+Prior `MemberUserController` annotation used to write `@Controller("/member/user")` (absolute), producing a double `/app/member/user/...` mount; that was a historical quirk that's been cleaned up 2026-06-02. Clients must write single-layer paths only.
 
 ### 1.2 Authorization
 All endpoints require `Authorization: Bearer <accessToken>`. Token is the unified token from R8.3 (HTTP + IM use the same one). 401 → trigger `refreshToken` from R8.3a; refresh fails → `clearSession()` + back to LoginPage.
@@ -78,23 +78,23 @@ export interface UpdateUsernameResult {
 
 export interface AccountProfileProvider {
   readonly mode: AccountMode;
-  /** R8.4b. GET /app/member/user/get */
+  /** R8.4b. GET /member/user/get */
   getProfile(): Promise<MemberProfile>;
-  /** R8.4b. PUT /app/member/user/update-nickname.
+  /** R8.4b. PUT /member/user/update-nickname.
    *  Sole nickname submission path. RequiredActionFlow's
    *  CompleteProfileAction calls this; full profile editor (R8.4d) too. */
   updateNickname(nickname: string): Promise<void>;
   /** R8.4d. POST /infra/file/upload (multipart). */
   uploadAvatar?(file: File): Promise<{ fileId: string; url: string }>;
-  /** R8.4d. PUT /app/member/user/update-avatar */
+  /** R8.4d. PUT /member/user/update-avatar */
   updateAvatar?(fileId: string): Promise<void>;
-  /** R8.4d. PUT /app/member/user/update-username. @FreshAuth + 30-day rate limit */
+  /** R8.4d. PUT /member/user/update-username. @FreshAuth + 30-day rate limit */
   updateUsername?(username: string): Promise<UpdateUsernameResult>;
-  /** R8.4d. PUT /app/member/user/update-bio. null/'' = clear */
+  /** R8.4d. PUT /member/user/update-bio. null/'' = clear */
   updateBio?(bio: string | null): Promise<void>;
-  /** R8.4d. PUT /app/member/user/update-gender. one of {0,1,2,9} */
+  /** R8.4d. PUT /member/user/update-gender. one of {0,1,2,9} */
   updateGender?(gender: number): Promise<void>;
-  /** R8.4d. PUT /app/member/user/update-birthday. ISO YYYY-MM-DD or null */
+  /** R8.4d. PUT /member/user/update-birthday. ISO YYYY-MM-DD or null */
   updateBirthday?(birthday: string | null): Promise<void>;
 }
 ```
@@ -103,8 +103,8 @@ export interface AccountProfileProvider {
 
 | Method | BUILTIN | PLATFORM v1 |
 |---|---|---|
-| `getProfile` | Read self UserRecord from IM SDK cache; map to MemberProfile (no mobile/bio/gender/birthday) | HTTP `GET /app/member/user/get` |
-| `updateNickname` | throw `ProfileEditNotSupportedError` | HTTP `PUT /app/member/user/update-nickname` |
+| `getProfile` | Read self UserRecord from IM SDK cache; map to MemberProfile (no mobile/bio/gender/birthday) | HTTP `GET /member/user/get` |
+| `updateNickname` | throw `ProfileEditNotSupportedError` | HTTP `PUT /member/user/update-nickname` |
 | Others | throw `ProfileEditNotSupportedError` | R8.4d implements |
 
 UI gates by `typeof provider.updateNickname === 'function'` and result of the call, not by reading the mode constant. Capability gate is consistent with R8.0 §"Capability gate".
@@ -121,20 +121,20 @@ R8.1 already shipped a placeholder `getProfileProvider()` in `src/lib/account-pr
 
 | Method | Path (relative to baseUrl) | R8.4 scope | `@FreshAuth` | Notes |
 |---|---|---|---|---|
-| GET  | `/app/member/user/get` | **R8.4b required** | — | Returns full `MemberProfile` |
-| PUT  | `/app/member/user/update-nickname` | **R8.4b required** | — | RequiredActionFlow uses this; sole nickname path |
+| GET  | `/member/user/get` | **R8.4b required** | — | Returns full `MemberProfile` |
+| PUT  | `/member/user/update-nickname` | **R8.4b required** | — | RequiredActionFlow uses this; sole nickname path |
 | POST | `/infra/file/upload` | R8.4d | — | multipart, businessType=member_avatar; single `/app` layer (different controller annotation style) |
-| PUT  | `/app/member/user/update-avatar` | R8.4d | — | Body `{fileId}` only; lookup-and-validate by logic layer |
-| PUT  | `/app/member/user/update-username` | R8.4d | ✓ | 30-day rate limit; reserved-words; uniqueness; Web returns `{username, nextChangeAvailableAt}` |
-| PUT  | `/app/member/user/update-bio` | R8.4d | — | `bio` null or `''` = clear |
-| PUT  | `/app/member/user/update-gender` | R8.4d | — | int 0/1/2/9 |
-| PUT  | `/app/member/user/update-birthday` | R8.4d | — | ISO YYYY-MM-DD or null |
+| PUT  | `/member/user/update-avatar` | R8.4d | — | Body `{fileId}` only; lookup-and-validate by logic layer |
+| PUT  | `/member/user/update-username` | R8.4d | ✓ | 30-day rate limit; reserved-words; uniqueness; Web returns `{username, nextChangeAvailableAt}` |
+| PUT  | `/member/user/update-bio` | R8.4d | — | `bio` null or `''` = clear |
+| PUT  | `/member/user/update-gender` | R8.4d | — | int 0/1/2/9 |
+| PUT  | `/member/user/update-birthday` | R8.4d | — | ISO YYYY-MM-DD or null |
 
 Mobile / password / SMS endpoints (`update-mobile` / `update-password` / `reset-password` / `send-sms-code`) are **out of scope** — they're auth-side flows already covered by R8.3 / R8.4 doesn't touch them.
 
 ---
 
-## 4. `GET /app/member/user/get`
+## 4. `GET /member/user/get`
 
 ### 4.1 Request
 
@@ -169,7 +169,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 5. `PUT /app/member/user/update-nickname`
+## 5. `PUT /member/user/update-nickname`
 
 ### 5.1 Request
 
@@ -217,24 +217,24 @@ Reuses R8.3a `PlatformError` taxonomy:
 
 ## 6. R8.4d endpoints (signatures only, not implemented in R8.4b)
 
-Documented for completeness; bodies land in R8.4d. Each follows the same pattern: `PUT ${baseUrl}/app/member/user/update-<field>` + Bearer + JSON body + envelope response with `data: null`. The Kotlin source of truth is `MemberUserController.kt`.
+Documented for completeness; bodies land in R8.4d. Each follows the same pattern: `PUT ${baseUrl}/member/user/update-<field>` + Bearer + JSON body + envelope response with `data: null`. The Kotlin source of truth is `MemberUserController.kt`.
 
-### 6.1 `PUT /app/member/user/update-avatar`
+### 6.1 `PUT /member/user/update-avatar`
 Body: `{ fileId: string }` (returned from §6.2). Server validates: file exists, status=active, `owner_uid == caller`, `business_type == "member_avatar"`. Failures map to `PlatformApiError("AVATAR_FILE_NOT_FOUND" / "AVATAR_FILE_INACTIVE" / "INVALID_AVATAR_BUSINESS_TYPE")`.
 
 ### 6.2 `POST /infra/file/upload`
 Multipart with `file` + `businessType=member_avatar`. **Single `/app` layer** in URL (`AppFileController` annotation style different from `MemberUserController`). Returns `{ fileId, url, businessType, mimeType, size }`. Constraints: mime ∈ `{image/jpeg, image/png, image/webp}`, size ≤ 5 MB.
 
-### 6.3 `PUT /app/member/user/update-username`
+### 6.3 `PUT /member/user/update-username`
 Body: `{ username: string }`. Server enforces 30-day rate limit + uniqueness + reserved-words + `@FreshAuth` (recent token). Response: `{ username, nextChangeAvailableAt: number }`. Map to `UpdateUsernameResult`. Username has its own UX (separate page in R8.4d, NOT part of any Required Action) per `PLATFORM_REQUIRED_ACTIONS_CONTRACT.md` §4.2.
 
-### 6.4 `PUT /app/member/user/update-bio`
+### 6.4 `PUT /member/user/update-bio`
 Body: `{ bio: string | null }`. Validation: `@Size(max = 200)`. null/`''` = clear.
 
-### 6.5 `PUT /app/member/user/update-gender`
+### 6.5 `PUT /member/user/update-gender`
 Body: `{ gender: number }`. Allowed: `0` (unknown), `1` (male), `2` (female), `9` (other). Server returns 400 for other values.
 
-### 6.6 `PUT /app/member/user/update-birthday`
+### 6.6 `PUT /member/user/update-birthday`
 Body: `{ birthday: string | null }`. Format `YYYY-MM-DD` (string, not date — avoids cross-platform timezone ambiguity). null/`''` = clear.
 
 ---
@@ -253,4 +253,4 @@ Body: `{ birthday: string | null }`. Format `YYYY-MM-DD` (string, not date — a
 
 ## 8. One-line summary
 
-PLATFORM Web client talks to application via `${baseUrl}/app/member/user/*` with Bearer unified token; envelope `{code,message,data}` matches R8.2b; v1 only requires `getProfile` + `updateNickname` to support the Required Actions framework's first action (`complete_profile.nickname`); other field-update endpoints are R8.4d's job.
+PLATFORM Web client talks to application via `${baseUrl}/member/user/*` with Bearer unified token; envelope `{code,message,data}` matches R8.2b; v1 only requires `getProfile` + `updateNickname` to support the Required Actions framework's first action (`complete_profile.nickname`); other field-update endpoints are R8.4d's job.

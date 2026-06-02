@@ -28,7 +28,7 @@ accountKey-based isolation as originally planned.
 | R8.4b | shipped | feat(web): two providers — `PlatformProfileProvider` (`getProfile` + `updateNickname`) + `RequiredActionsProvider` (PLATFORM HTTP + BUILTIN noop); 9-case smoke |
 | R8.4c | shipped | feat(web): `RequiredActionsGate` + `<CompleteProfileAction>` + `<UnsupportedRequiredActionPage>` + localStorage pending + auto-login re-check; 13-case smoke |
 | R8.4d-1 | shipped | feat(web): `<ProfileEditDialog>` self-edit affordance in `ProfileCard`; `PlatformProfileProvider.updateBio / updateGender / updateBirthday` HTTP impls; per-field diff PUT; 9-case smoke |
-| R8.4d-2 | shipped | feat(web): avatar `uploadAvatar` (multipart `/infra/file/upload`, single `/app`) + `updateAvatar` (`/app/app/member/user/update-avatar`); client mime/size guards (jpeg/png/webp ≤ 5MB); local blob preview; 9-case smoke |
+| R8.4d-2 | shipped | feat(web): avatar `uploadAvatar` (multipart `/infra/file/upload`, single `/app`) + `updateAvatar` (`/member/user/update-avatar`); client mime/size guards (jpeg/png/webp ≤ 5MB); local blob preview; 9-case smoke |
 | R8.4f-sdk | shipped | feat(privchat-app): SDK contract — `RequiredAction` DTO + `PlatformMemberLoginResponse.requiredActions` + `AccountCredentials.requiredActions` + `RequiredActionsApi` (Builtin noop + Platform HTTP `/account/required-actions`); 8-case unit test |
 | **R8.4** | **complete** | Required Actions + Web Profile Editor MVP. Server curl chain 8/8; browser manual UI verification 12/12 (mobile `+8615900099101` → gate → set nickname → workspace → edit profile → avatar upload → refresh self-heal). Derived-only model; no actions table. **v2 `profile_completed_at`** + **v3 assignment table** stay future (see PLATFORM_REQUIRED_ACTIONS_CONTRACT §14c Future Note). **R8.4d-3 username** deferred — not a Required Action surface, will be its own round when needed |
 
@@ -470,7 +470,7 @@ needs without re-architecting:
               ▼
 ┌────────────────────────────────────────┐
 │  Profile / Terms / KYC providers       │
-│  PlatformProfileProvider → /app/member/│
+│  PlatformProfileProvider → /member/│
 │  user/* (R8.4b)                        │
 │  Future: TermsProvider / KycProvider   │
 └────────────────────────────────────────┘
@@ -714,7 +714,7 @@ app, in which case fresh-login writes the new fields naturally.
 | R8.4b | shipped | feat(web): two providers — `PlatformProfileProvider` (`getProfile` + `updateNickname` required, others stubbed for R8.4d) + `RequiredActionsProvider` (PLATFORM HTTP `list()` impl + BUILTIN noop). 9-case smoke |
 | R8.4c | shipped | feat(web): `RequiredActionsGate` + `<CompleteProfileAction>` + `<UnsupportedRequiredActionPage>` — `App.tsx` blocks ChatWorkspace whenever `loginResult.requiredActions.length > 0` OR `provider.list()` returns non-empty OR localStorage `required-actions-pending` flag set; v1 only handles `complete_profile.nickname`; unknown action with `required: true` → fail-closed; 13-case smoke |
 | R8.4d-1 | shipped | feat(web): `<ProfileEditDialog>` self-edit affordance in `ProfileCard`; `PlatformProfileProvider.updateBio / updateGender / updateBirthday` HTTP impls; per-field diff PUT for nickname/bio/gender/birthday; 9-case smoke |
-| R8.4d-2 | shipped | feat(web): avatar `uploadAvatar` (multipart `/infra/file/upload`, single `/app`) + `updateAvatar` (`/app/app/member/user/update-avatar`); client mime/size guards; local blob preview; 9-case smoke |
+| R8.4d-2 | shipped | feat(web): avatar `uploadAvatar` (multipart `/infra/file/upload`, single `/app`) + `updateAvatar` (`/member/user/update-avatar`); client mime/size guards; local blob preview; 9-case smoke |
 | ~~R8.4d-3~~ | deferred | username editor; not a Required Action surface — independent round when needed |
 | R8.4e | future | feat(web): additional concrete actions (`accept_terms`, `bind_mobile`, `acknowledge_notice`, `complete_kyc`, etc.) plug into the framework as new `<XxxAction>` components without changing R8.4c's outer state machine |
 | R8.5a | shipped | docs(web): freeze QR login wire — [PLATFORM_QR_LOGIN_CONTRACT.md](./PLATFORM_QR_LOGIN_CONTRACT.md). Pinned: Web ↔ privchat-server is unauth RPC (`qr_login/create_scene` + 4 push topics on the same unauth WebSocket); Web ↔ application is HTTP only for post-authorized routes; QR canvas payload is JSON envelope `{sceneId, qrToken}` (not raw `qr_token`) so the App scanner can recover both fields; `authorized.data` = `MemberLoginResponse`; PLATFORM-only capability gate |

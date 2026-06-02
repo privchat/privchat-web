@@ -55,7 +55,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     let body: unknown = null;
     let method = '';
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-bio',
+      '**/__fake-platform/app/member/user/update-bio',
       async (route: Route) => {
         method = route.request().method();
         body = JSON.parse(route.request().postData() ?? 'null');
@@ -88,7 +88,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let body: unknown = null;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-bio',
+      '**/__fake-platform/app/member/user/update-bio',
       async (route: Route) => {
         body = JSON.parse(route.request().postData() ?? 'null');
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -114,7 +114,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let hits = 0;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-bio',
+      '**/__fake-platform/app/member/user/update-bio',
       async (route: Route) => {
         hits += 1;
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -148,7 +148,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     const observed: number[] = [];
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-gender',
+      '**/__fake-platform/app/member/user/update-gender',
       async (route: Route) => {
         const body = JSON.parse(route.request().postData() ?? 'null') as {
           gender: number;
@@ -179,7 +179,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let hits = 0;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-gender',
+      '**/__fake-platform/app/member/user/update-gender',
       async (route: Route) => {
         hits += 1;
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -209,7 +209,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let body: unknown = null;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-birthday',
+      '**/__fake-platform/app/member/user/update-birthday',
       async (route: Route) => {
         body = JSON.parse(route.request().postData() ?? 'null');
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -238,7 +238,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let body: unknown = null;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-birthday',
+      '**/__fake-platform/app/member/user/update-birthday',
       async (route: Route) => {
         body = JSON.parse(route.request().postData() ?? 'null');
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -264,7 +264,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let hits = 0;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-birthday',
+      '**/__fake-platform/app/member/user/update-birthday',
       async (route: Route) => {
         hits += 1;
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -299,7 +299,7 @@ test.describe('PlatformProfileProvider update fields (R8.4d-1)', () => {
   }) => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-bio',
+      '**/__fake-platform/app/member/user/update-bio',
       async (route: Route) => {
         await fulfillJson(route, 200, {
           code: 4002,

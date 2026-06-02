@@ -189,7 +189,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
     try {
       // R8.4d-2: avatar first. Two-step:
       //   1) uploadAvatar(file)  → multipart POST /infra/file/upload
-      //   2) updateAvatar(fileId) → PUT /app/member/user/update-avatar
+      //   2) updateAvatar(fileId) → PUT /member/user/update-avatar
       // Order is intentional — if upload succeeds but update fails, the
       // fileId is still valid for retry (server keeps the file row),
       // so the user can click Save again without re-picking. The dialog

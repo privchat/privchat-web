@@ -179,7 +179,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     );
     let updateBody: unknown = null;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-nickname',
+      '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         updateBody = JSON.parse(route.request().postData() ?? 'null');
         // Server "accepts" — flip subsequent list() responses to empty.
@@ -214,7 +214,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     });
     let updateHits = 0;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-nickname',
+      '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         updateHits += 1;
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -244,7 +244,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     });
     let updateHits = 0;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-nickname',
+      '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         updateHits += 1;
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -269,7 +269,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
       data: { requiredActions: [COMPLETE_PROFILE_ACTION] },
     });
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-nickname',
+      '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         await fulfillJson(route, 200, {
           code: 4001,

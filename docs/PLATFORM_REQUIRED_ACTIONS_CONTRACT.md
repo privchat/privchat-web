@@ -108,7 +108,7 @@ GET ${baseUrl}/app/account/required-actions
 Authorization: Bearer <accessToken>
 ```
 
-> 路径前缀按 R8.4a profile 规则：framework 给 controller mount 加 `/app` 前缀，controller 注解假设也是 `@Controller("/app/account")` 风格，叠加为 `${baseUrl}/app/account/required-actions`。Server 端实现时 controller 注解风格请保持一致；client 按双层 `/app` 拼接。
+> 路径前缀按全局规则：framework 给 controller mount 自动加 `/app` 前缀（或子域名 `app-api.*` 承担同语义），controller 注解只写业务前缀（`@Controller("/account")`、`@Controller("/member/user")` 等），**不写 `/app/`**。Client 用 `${baseUrl}/account/required-actions` 单层拼接。
 
 响应：
 
@@ -705,19 +705,19 @@ switch (a.action) {
 POST {platformBaseUrl}/auth/sms-login
   → 200 envelope.data may contain requiredActions; if absent treat as []
 
-GET  {platformBaseUrl}/account/required-actions   (← single /app layer)
+GET  {platformBaseUrl}/account/required-actions
   → 200 envelope.data.requiredActions is always an array (server-controlled)
   → 401 when token missing/invalid
 
-PUT  {platformBaseUrl}/app/member/user/update-nickname   (← double /app/app, real path)
+PUT  {platformBaseUrl}/member/user/update-nickname
   → 200 envelope.data === null
 ```
 
-`{platformBaseUrl}` is the env var which already contains `/app` (e.g. `http://localhost:8080/app`). The `required-actions` endpoint is single-layer (relative `@Controller("/account")`) while `member/user/*` is double-layer (absolute `@Controller("/app/member/user")` left over from earlier module-member code; clients honor the real path, don't "fix" it on the wire — fixing should happen on the server side as a coordinated rename).
+`{platformBaseUrl}` is the env var which already contains `/app` (e.g. `http://localhost:8080/app`,或子域名 `https://app-api.example.com/`). All controllers use single-layer business-prefix annotations (`@Controller("/account")`, `@Controller("/member/user")` 等),clients write single-layer paths only.
 
 ### Kotlin KDoc nested-comment gotcha
 
-Server-side doc-comments must NOT include `` `…/…/*` `` style examples inside `/** ... */`. Kotlin treats `/*` as a nested-comment opener (unlike Java), so a path like `` `/app/member/account/*` `` inside KDoc triggers "Unclosed comment". Use `` `…/…/...` `` (literal three dots) or break the line.
+Server-side doc-comments must NOT include `` `…/…/*` `` style examples inside `/** ... */`. Kotlin treats `/*` as a nested-comment opener (unlike Java), so a path like `` `/member/account/*` `` inside KDoc triggers "Unclosed comment". Use `` `…/…/...` `` (literal three dots) or break the line.
 
 ## 14c. Future Note: user-specific assigned actions
 

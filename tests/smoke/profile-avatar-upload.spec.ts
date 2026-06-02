@@ -271,14 +271,14 @@ test.describe('PlatformProfileProvider avatar (R8.4d-2)', () => {
 
   // ─────────────────────── updateAvatar ───────────────────────
 
-  test('updateAvatar: PUT /app/app/member/user/update-avatar with body {fileId}', async ({
+  test('updateAvatar: PUT /app/member/user/update-avatar with body {fileId}', async ({
     page,
   }) => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let body: unknown = null;
     let method = '';
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-avatar',
+      '**/__fake-platform/app/member/user/update-avatar',
       async (route: Route) => {
         method = route.request().method();
         body = JSON.parse(route.request().postData() ?? 'null');
@@ -308,7 +308,7 @@ test.describe('PlatformProfileProvider avatar (R8.4d-2)', () => {
     const baseUrl = fakeBaseUrl(await originOf(page));
     let hits = 0;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-avatar',
+      '**/__fake-platform/app/member/user/update-avatar',
       async (route: Route) => {
         hits += 1;
         await fulfillJson(route, 200, { code: 0, data: null });
@@ -355,7 +355,7 @@ test.describe('PlatformProfileProvider avatar (R8.4d-2)', () => {
     );
     let updateBody: unknown = null;
     await page.route(
-      '**/__fake-platform/app/app/member/user/update-avatar',
+      '**/__fake-platform/app/member/user/update-avatar',
       async (route: Route) => {
         updateBody = JSON.parse(route.request().postData() ?? 'null');
         await fulfillJson(route, 200, { code: 0, data: null });
