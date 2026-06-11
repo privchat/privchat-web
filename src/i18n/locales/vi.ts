@@ -152,6 +152,13 @@ export const vi: LocaleSchema = {
     forward: '[Chuyển tiếp]',
     unknown: '[Tin nhắn]',
   },
+  media_send: {
+    uploading: 'Đang tải lên…',
+    upload_failed: 'Tải lên thất bại — chạm để thử lại',
+    retry: 'Thử lại',
+    dismiss: 'Gỡ bỏ',
+    reselect: 'Vui lòng chọn lại tệp để gửi',
+  },
   session_expired: {
     title: 'Phiên đã hết hạn',
     body: 'Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại.',

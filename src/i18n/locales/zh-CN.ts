@@ -147,6 +147,13 @@ export const zhCN: LocaleSchema = {
     forward: '[转发]',
     unknown: '[未知消息]',
   },
+  media_send: {
+    uploading: '上传中…',
+    upload_failed: '上传失败，点击重试',
+    retry: '重试',
+    dismiss: '移除',
+    reselect: '请重新选择文件发送',
+  },
   session_expired: {
     title: '登录已过期',
     body: '你的登录状态已失效，请重新登录。',

@@ -153,6 +153,13 @@ export const en: LocaleSchema = {
     forward: '[Forwarded]',
     unknown: '[Message]',
   },
+  media_send: {
+    uploading: 'Uploading…',
+    upload_failed: 'Upload failed — tap to retry',
+    retry: 'Retry',
+    dismiss: 'Remove',
+    reselect: 'Please re-select the file to send',
+  },
   session_expired: {
     title: 'Session expired',
     body: 'Your session is no longer valid. Please sign in again.',
@@ -531,6 +538,13 @@ export interface LocaleSchema {
     link: string;
     forward: string;
     unknown: string;
+  };
+  media_send: {
+    uploading: string;
+    upload_failed: string;
+    retry: string;
+    dismiss: string;
+    reselect: string;
   };
   session_expired: {
     title: string;

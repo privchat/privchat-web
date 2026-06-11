@@ -34,6 +34,7 @@ import {
 } from '@/lib/switch-account';
 import { clearForAccountSwitch as stopVoiceForSwitch } from '@/features/chat/voice-playback';
 import { abortAllForAccountSwitch as abortUploadsForSwitch } from '@/features/chat/uploads-store';
+import { clearAll as clearMediaSends } from '@/features/chat/media-send-store';
 
 type AutoLoginState = 'restoring' | 'idle';
 
@@ -241,6 +242,7 @@ export default function App() {
         runtimeCleanup: () => {
           stopVoiceForSwitch();
           abortUploadsForSwitch('account switched');
+          clearMediaSends();
         },
         commit: (key, h) => {
           commitActiveAccount(key);
@@ -339,6 +341,7 @@ export default function App() {
           runtimeCleanup: () => {
             stopVoiceForSwitch();
             abortUploadsForSwitch('account switched');
+          clearMediaSends();
           },
           commit: (key, h) => {
             commitActiveAccount(key);

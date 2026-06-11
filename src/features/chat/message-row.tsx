@@ -18,6 +18,8 @@ import {
 import type { MessageItemVM } from '@privchat/react';
 import { pickMediaBubble } from './media-bubbles';
 import { MessageReactions } from './message-reactions';
+import { getEntry, removeEntry, txnIdFromRecordKey } from './media-send-store';
+import { useMediaSender } from './use-media-send';
 import { Avatar } from './avatar';
 import { ProfileCard } from './profile-card';
 import { errorText } from './error-text';
@@ -111,6 +113,8 @@ export function MessageRow({
   // (image dimensions, file chip width) so we don't apply the
   // max-width-75 container around them — they nest a per-type chrome.
   const mediaNode = pickMediaBubble(vm);
+  // Synthetic in-flight media row (upload phase) — see media-send-store.
+  const pendingTxnId = txnIdFromRecordKey(vm.record_key);
 
   return (
     <div
@@ -124,7 +128,7 @@ export function MessageRow({
         vm.is_self ? 'justify-end' : 'justify-start',
       )}
     >
-      {vm.is_self && (
+      {vm.is_self && pendingTxnId === undefined && (
         <MessageActionsMenu vm={vm} channelId={channelId} side="left" onReply={onReply} />
       )}
       {!vm.is_self && <MessageRowAvatar fromUid={vm.from_uid} />}
@@ -145,19 +149,27 @@ export function MessageRow({
             )}
           >
             <span>{ts}</span>
-            {vm.is_self && <SelfStatusBadge vm={vm} peerReadPts={peerReadPts} />}
+            {vm.is_self && pendingTxnId === undefined && (
+              <SelfStatusBadge vm={vm} peerReadPts={peerReadPts} />
+            )}
           </span>
-          {vm.is_self && vm.outbox_status === 'failed' && (
-            <FailedMessageActions
-              localMessageId={vm.local_message_id}
-              isSelf={vm.is_self}
-            />
+          {pendingTxnId !== undefined ? (
+            <MediaSendStatus txnId={pendingTxnId} />
+          ) : (
+            <>
+              {vm.is_self && vm.outbox_status === 'failed' && (
+                <FailedMessageActions
+                  localMessageId={vm.local_message_id}
+                  isSelf={vm.is_self}
+                />
+              )}
+              <MessageReactions
+                serverMessageId={vm.server_message_id}
+                selfUid={selfUid}
+                isSelf={vm.is_self}
+              />
+            </>
           )}
-          <MessageReactions
-            serverMessageId={vm.server_message_id}
-            selfUid={selfUid}
-            isSelf={vm.is_self}
-          />
         </div>
       ) : (
         <div className="flex flex-col gap-1 max-w-[75%]">
@@ -203,6 +215,59 @@ export function MessageRow({
       {!vm.is_self && (
         <MessageActionsMenu vm={vm} channelId={channelId} side="right" onReply={onReply} />
       )}
+    </div>
+  );
+}
+
+/** Status / retry affordance for an in-flight (upload-phase) media row.
+ *  While uploading shows a hint; on UPLOAD failure shows retry (re-runs
+ *  upload+send from the in-memory Blob) + dismiss. Post-upload SEND
+ *  failures never land here — the SDK's own row exists by then and the
+ *  outbox FailedMessageActions owns that path. Fresh reads of the store
+ *  are safe: the parent re-renders on every store notify because the
+ *  synthetic VM is re-projected. */
+function MediaSendStatus({ txnId }: { txnId: string }) {
+  const { t } = useTranslation();
+  const sender = useMediaSender();
+  const [busy, setBusy] = useState(false);
+  const entry = getEntry(txnId);
+  if (entry === undefined) return null;
+
+  if (entry.stage === 'uploading') {
+    return (
+      <span className="self-end text-[10px] text-muted-foreground">
+        {t('media_send.uploading')}
+      </span>
+    );
+  }
+
+  const onRetry = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await sender.retry(txnId);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="self-end flex items-center gap-2 text-[10px] text-destructive">
+      <span>{t('media_send.upload_failed')}</span>
+      <button
+        type="button"
+        onClick={() => void onRetry()}
+        disabled={busy}
+        className="underline disabled:opacity-50"
+      >
+        {busy ? t('status.retrying') : t('media_send.retry')}
+      </button>
+      <button
+        type="button"
+        onClick={() => removeEntry(txnId)}
+        className="underline opacity-70"
+      >
+        {t('media_send.dismiss')}
+      </button>
     </div>
   );
 }

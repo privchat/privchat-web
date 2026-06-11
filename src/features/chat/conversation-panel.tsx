@@ -11,7 +11,7 @@
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ImageIcon, Info, Paperclip, Video, X as XIcon } from 'lucide-react';
+import { ImageIcon, Info, Paperclip, X as XIcon } from 'lucide-react';
 import {
   resolveConversationTitle,
   useChannelList,
@@ -20,24 +20,13 @@ import {
   useGroupProfile,
   usePresence,
   usePrivchatClient,
-  useSendFile,
-  useSendImage,
-  useSendVideo,
   useTyping,
   useUserProfile,
 } from '@privchat/react';
 import type { MessageItemVM } from '@privchat/react';
 import { stopAll as stopVoicePlayback } from './voice-playback';
-import { useChannelUploads } from './use-channel-uploads';
-import {
-  markDone,
-  markFailed,
-  newTaskId,
-  patchProgress,
-  removeTask,
-  startTask,
-  type UploadTask,
-} from './uploads-store';
+import { projectEntry, removeEntry } from './media-send-store';
+import { useChannelMediaSends, useMediaSender } from './use-media-send';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -149,9 +138,8 @@ export function ConversationPanel({
   const imagePickerRef = useRef<HTMLInputElement | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
 
-  const sendImage = useSendImage();
-  const sendFile = useSendFile();
-  const sendVideo = useSendVideo();
+  const mediaSender = useMediaSender();
+  const mediaSends = useChannelMediaSends(channelId);
   const selfUid = usePrivchatClient().sessionSnapshot().user_id;
 
   // Voice playback is a single-active controller across the whole app.
@@ -221,99 +209,65 @@ export function ConversationPanel({
 
   // ---- media upload + send ----
   //
-  // Each upload registers a task in the module-level uploads store so
-  // the progress display survives panel remounts (channel switch +
-  // back) and stays decoupled from per-component state. The panel-
-  // local `uploading` flag is gone — concurrency control happens via
-  // the per-task store, and N parallel uploads are now allowed.
-  //
-  // Progress bubble inside the timeline is a richer follow-up; this
-  // round renders the active uploads as chips above the composer.
+  // Selecting media immediately inserts an optimistic bubble into the
+  // timeline (media-send-store entry, projected below into the messages
+  // array). Upload failures surface ON the bubble with retry/dismiss —
+  // the Blob stays in memory so retry re-runs upload+send. Once the
+  // upload succeeds, the SDK's own optimistic row (same txnId as
+  // local_message_id) takes over and the hand-off effect drops the
+  // overlay entry; post-upload SEND failures are owned by the existing
+  // outbox failed/retry UI. In-session only by design (refresh drops
+  // failed media; the user re-selects the file).
   const onSendImageBlob = async (file: Blob, filename: string, mime: string) => {
-    const taskId = newTaskId();
-    startTask({
-      id: taskId,
-      channel_id: channelId,
-      filename,
+    const dims = await readImageDimensions(file).catch(() => ({ width: 0, height: 0 }));
+    await mediaSender.send({
+      channelId,
+      channelType,
+      fromUid: selfUid ?? '',
       kind: 'image',
+      file,
+      filename,
+      mime,
+      width: dims.width,
+      height: dims.height,
     });
-    try {
-      const dims = await readImageDimensions(file);
-      await sendImage({
-        channel_id: channelId,
-        channel_type: channelType,
-        file,
-        filename,
-        mime_type: mime,
-        width: dims.width,
-        height: dims.height,
-        onProgress: (e) => patchProgress(taskId, e.loaded, e.total, e.percent),
-      });
-      markDone(taskId);
-    } catch (err) {
-      markFailed(taskId, (err as Error).message);
-    }
   };
 
   const onSendFileBlob = async (file: Blob, filename: string, mime: string) => {
-    const taskId = newTaskId();
-    startTask({
-      id: taskId,
-      channel_id: channelId,
-      filename,
+    await mediaSender.send({
+      channelId,
+      channelType,
+      fromUid: selfUid ?? '',
       kind: 'file',
+      file,
+      filename,
+      mime,
     });
-    try {
-      await sendFile({
-        channel_id: channelId,
-        channel_type: channelType,
-        file,
-        filename,
-        mime_type: mime,
-        onProgress: (e) => patchProgress(taskId, e.loaded, e.total, e.percent),
-      });
-      markDone(taskId);
-    } catch (err) {
-      markFailed(taskId, (err as Error).message);
-    }
   };
 
   const onSendVideoBlob = async (file: Blob, filename: string, mime: string) => {
-    const taskId = newTaskId();
-    startTask({
-      id: taskId,
-      channel_id: channelId,
-      filename,
+    // Best-effort metadata probe via a hidden <video> element. If it
+    // fails (codec the browser can't decode, broken file), we fall
+    // back to width/height/duration = 0 — the server still accepts
+    // the message; the receiver just renders a player with default
+    // dims and no duration overlay.
+    const meta = await readVideoMetadata(file).catch(() => ({
+      width: 0,
+      height: 0,
+      duration: 0,
+    }));
+    await mediaSender.send({
+      channelId,
+      channelType,
+      fromUid: selfUid ?? '',
       kind: 'video',
+      file,
+      filename,
+      mime,
+      width: meta.width,
+      height: meta.height,
+      duration: meta.duration,
     });
-    try {
-      // Best-effort metadata probe via a hidden <video> element. If it
-      // fails (codec the browser can't decode, broken file), we fall
-      // back to width/height/duration = 0 — the server still accepts
-      // the message; the receiver just renders a player with default
-      // dims and no duration overlay.
-      const meta = await readVideoMetadata(file).catch(() => ({
-        width: 0,
-        height: 0,
-        duration: 0,
-      }));
-      await sendVideo({
-        channel_id: channelId,
-        channel_type: channelType,
-        file,
-        filename,
-        mime_type: mime,
-        width: meta.width,
-        height: meta.height,
-        duration: meta.duration,
-        // No client-side poster frame generation. The receiver renders
-        // controls without a thumbnail when this is absent.
-        onProgress: (e) => patchProgress(taskId, e.loaded, e.total, e.percent),
-      });
-      markDone(taskId);
-    } catch (err) {
-      markFailed(taskId, (err as Error).message);
-    }
   };
 
   /** Multi-file dispatcher used by both file pickers and the
@@ -330,7 +284,29 @@ export function ConversationPanel({
     }
   };
 
-  const activeUploads = useChannelUploads(channelId);
+  // Merge in-flight media uploads as synthetic bubbles. Pending sends are
+  // newest, so timestamp-sort puts them at the bottom. Once the SDK's own
+  // optimistic row lands (same local_message_id as txnId), the hand-off
+  // effect below removes the entry, so there is never a duplicate.
+  const timelineMessages = useMemo(() => {
+    if (mediaSends.length === 0) return messages;
+    return [...messages, ...mediaSends.map(projectEntry)].sort(
+      (a, b) => a.timestamp - b.timestamp,
+    );
+  }, [messages, mediaSends]);
+
+  // Hand-off: drop the overlay entry once the real cache row exists.
+  useEffect(() => {
+    if (mediaSends.length === 0) return;
+    const realIds = new Set(
+      messages
+        .map((m) => m.local_message_id)
+        .filter((id): id is string => id !== undefined),
+    );
+    for (const e of mediaSends) {
+      if (realIds.has(e.txnId)) removeEntry(e.txnId);
+    }
+  }, [messages, mediaSends]);
 
   const onLoadOlder = async () => {
     if (loadingOlder || reachedBeginning) return;
@@ -445,7 +421,7 @@ export function ConversationPanel({
       </header>
 
       <MessageList
-        messages={messages}
+        messages={timelineMessages}
         channelId={channelId}
         selfUid={selfUid}
         peerReadPts={peerReadPts}
@@ -460,13 +436,6 @@ export function ConversationPanel({
       {error !== null && (
         <div className="shrink-0 border-t px-4 py-2 text-xs text-destructive">
           {error.message}
-        </div>
-      )}
-      {activeUploads.length > 0 && (
-        <div className="shrink-0 border-t bg-muted/30 px-3 py-2 space-y-1">
-          {activeUploads.map((task) => (
-            <UploadChip key={task.id} task={task} />
-          ))}
         </div>
       )}
       {dragHover && (
@@ -630,74 +599,6 @@ function LazyGroupInfoDialog(props: {
   );
 }
 
-
-/** A single line in the active-uploads row above the composer.
- *  Renders filename + percent + status. Failed tasks expose an
- *  inline X to dismiss; uploading / done tasks hide it (done tasks
- *  are removed from the store automatically, so this is a guard).
- *
- *  We deliberately render above the composer rather than in-bubble:
- *  in-bubble progress requires pre-creating the cache row before
- *  the upload finishes (so the row identity is stable as bytes
- *  flow), which is a bigger refactor than this round wants. */
-function UploadChip({ task }: { task: UploadTask }) {
-  const { t } = useTranslation();
-  const percentLabel =
-    task.percent !== undefined
-      ? `${task.percent}%`
-      : task.total > 0
-        ? `${Math.round(task.loaded / 1024)} KB`
-        : '…';
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      {task.kind === 'image' ? (
-        <ImageIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      ) : task.kind === 'video' ? (
-        <Video className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      ) : (
-        <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate">{task.filename}</span>
-          <span
-            className={cn(
-              'shrink-0 font-mono text-[10px]',
-              task.status === 'failed' ? 'text-destructive' : 'text-muted-foreground',
-            )}
-          >
-            {task.status === 'failed' ? t('panel.upload_failed') : percentLabel}
-          </span>
-        </div>
-        {task.status === 'uploading' && (
-          <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full bg-primary transition-[width] duration-150"
-              style={{
-                width:
-                  task.percent !== undefined
-                    ? `${task.percent}%`
-                    : task.total > 0
-                      ? `${Math.min(95, (task.loaded / Math.max(1, task.total)) * 100)}%`
-                      : '40%',
-              }}
-            />
-          </div>
-        )}
-      </div>
-      {task.status === 'failed' && (
-        <button
-          type="button"
-          onClick={() => removeTask(task.id)}
-          className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent"
-          aria-label={t('status.discard')}
-        >
-          <XIcon className="h-3 w-3" />
-        </button>
-      )}
-    </div>
-  );
-}
 
 /** Probe an image blob for its natural dimensions in the browser
  *  using `createImageBitmap` (decodes via the GPU when available),
