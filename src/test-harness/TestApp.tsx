@@ -23,8 +23,13 @@ import { PrivchatProvider } from '@privchat/react';
 import { ChatWorkspace } from '@/features/chat/chat-workspace';
 import { LoginPage } from '@/features/auth/login-page';
 import { RequiredActionsGate } from '@/features/onboarding/required-actions-gate';
+import { SessionExpiredDialog } from '@/features/auth/session-expired-dialog';
 import type { PrivchatHandle } from '@/lib/privchat-client';
-import { createTestAdapter, installTestControls } from './mock-adapter';
+import {
+  createTestAdapter,
+  installTestControls,
+  onTestSessionExpired,
+} from './mock-adapter';
 import {
   loadRegistry,
   subscribeRegistry,
@@ -78,6 +83,10 @@ export function TestApp() {
   );
   const [switching, setSwitching] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
+  // Mirror App.tsx's session-expired surface: the SDK's terminal
+  // `session_expired` event → re-login dialog. Driven in test mode by
+  // `__privchatTest.fireSessionExpired()`.
+  const [sessionExpired, setSessionExpired] = useState(false);
   // R8.4c — mirror App.tsx's fresh-login hint slot so the gate gets
   // immediate prefill when login lands with non-empty actions.
   const [initialActionsForKey, setInitialActionsForKey] = useState<{
@@ -100,6 +109,8 @@ export function TestApp() {
     });
     return off;
   }, []);
+
+  useEffect(() => onTestSessionExpired(() => setSessionExpired(true)), []);
 
   // Install hold/release knob exactly once per mount. Defaults to
   // immediate-resolve so existing specs (R7.3) don't have to
@@ -174,42 +185,63 @@ export function TestApp() {
   // skip the gate entirely — there's nothing to evaluate against.
   if (gateAccountKey === null) {
     return (
-      <PrivchatProvider adapter={handle.adapter}>
-        <ChatWorkspace
-          handle={handle}
-          onLogout={() => {
-            /* no-op in test mode */
+      <>
+        <SessionExpiredDialog
+          open={sessionExpired}
+          onConfirm={() => {
+            clearSession();
+            setSessionExpired(false);
           }}
-          activeAccountKey={activeAccountKey}
-          onSelectAccount={onSelectAccount}
-          onAddAccount={onAddAccount}
-          switching={switching}
         />
-      </PrivchatProvider>
+        <PrivchatProvider adapter={handle.adapter}>
+          <ChatWorkspace
+            handle={handle}
+            onLogout={() => {
+              /* no-op in test mode */
+            }}
+            activeAccountKey={activeAccountKey}
+            onSelectAccount={onSelectAccount}
+            onAddAccount={onAddAccount}
+            switching={switching}
+          />
+        </PrivchatProvider>
+      </>
     );
   }
 
   return (
-    <RequiredActionsGate
-      accountKey={gateAccountKey}
-      initialActions={gateInitialActions}
-      onLogout={() => {
-        clearSession();
-        setInitialActionsForKey(null);
-      }}
-    >
-      <PrivchatProvider adapter={handle.adapter}>
-        <ChatWorkspace
-          handle={handle}
-          onLogout={() => {
-            /* no-op in test mode */
-          }}
-          activeAccountKey={activeAccountKey}
-          onSelectAccount={onSelectAccount}
-          onAddAccount={onAddAccount}
-          switching={switching}
-        />
-      </PrivchatProvider>
-    </RequiredActionsGate>
+    <>
+      <SessionExpiredDialog
+        open={sessionExpired}
+        onConfirm={() => {
+          // Mirror App.tsx: confirm clears session + dismisses. The
+          // full logout (handle dispose / route to login) is a no-op in
+          // test mode; dismissing the dialog is the observable contract.
+          clearSession();
+          setSessionExpired(false);
+        }}
+      />
+      <RequiredActionsGate
+        accountKey={gateAccountKey}
+        initialActions={gateInitialActions}
+        onLogout={() => {
+          clearSession();
+          setInitialActionsForKey(null);
+        }}
+      >
+        <PrivchatProvider adapter={handle.adapter}>
+          <ChatWorkspace
+            handle={handle}
+            onLogout={() => {
+              /* no-op in test mode */
+            }}
+            activeAccountKey={activeAccountKey}
+            onSelectAccount={onSelectAccount}
+            onAddAccount={onAddAccount}
+            switching={switching}
+          />
+        </PrivchatProvider>
+      </RequiredActionsGate>
+    </>
   );
 }

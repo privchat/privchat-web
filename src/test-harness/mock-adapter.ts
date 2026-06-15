@@ -137,6 +137,10 @@ interface MockState {
   groups: GroupRecord[];
   friendships: FriendshipRecord[];
   outbox: OutboxEntry[];
+  /** Controls how `sendImage`/`sendFile`/`sendVideo` resolve. `'fail'`
+   *  (default) throws — drives the media-send-failure bubble. `'ok'`
+   *  resolves, letting specs exercise retry-to-success. */
+  mediaSendOutcome: 'fail' | 'ok';
 }
 
 function defaultState(): MockState {
@@ -237,10 +241,41 @@ function defaultState(): MockState {
       { user_id: '102', alias: undefined, created_at: 0, updated_at: 0, sync_version: 1 },
     ],
     outbox: [],
+    mediaSendOutcome: 'fail',
   };
 }
 
 let state: MockState = defaultState();
+
+// Session-expired signal hub. TestApp subscribes (mirroring App.tsx's
+// `client.observeEvents` → session_expired wiring); `fireSessionExpired`
+// control drives it. Module-level so it survives `seed`/`reset` (these
+// are component subscriptions, not seed state).
+const sessionExpiredListeners = new Set<() => void>();
+export function onTestSessionExpired(cb: () => void): () => void {
+  sessionExpiredListeners.add(cb);
+  return () => {
+    sessionExpiredListeners.delete(cb);
+  };
+}
+
+/** Shared media-send simulation. Throws when `mediaSendOutcome === 'fail'`
+ *  (the default — drives the failure bubble), else resolves a queued
+ *  result. The media-send store keys its overlay off the caller-supplied
+ *  `local_message_id` and clears it on a resolved send, so a resolved
+ *  return is enough to model retry-to-success without inserting a row. */
+function mockMediaSend(
+  localMessageId: string | undefined,
+): Promise<SendTextOperationResult> {
+  if (state.mediaSendOutcome === 'fail') {
+    return Promise.reject(new Error('upload failed (smoke harness)'));
+  }
+  return Promise.resolve({
+    status: 'queued',
+    local_message_id: localMessageId ?? 'mock-media',
+    outbox_id: localMessageId ?? 'mock-media',
+  });
+}
 
 // Queued prepend pages, keyed by channelId. Each entry is a FIFO
 // of pages that successive `scrollHistory` calls will consume.
@@ -618,14 +653,18 @@ export function createTestAdapter(): PrivchatClientAdapter {
     },
 
     // ---- Media ----
-    async sendImage() {
-      throw new Error('sendImage not implemented in smoke harness');
+    // `state.mediaSendOutcome` drives the outcome: 'fail' (default)
+    // throws — exercising the upload-failure timeline bubble — and 'ok'
+    // resolves so specs can test retry-to-success (the media-send store
+    // clears the overlay entry on a resolved send).
+    async sendImage(args: { local_message_id?: string }) {
+      return mockMediaSend(args.local_message_id);
     },
-    async sendFile() {
-      throw new Error('sendFile not implemented in smoke harness');
+    async sendFile(args: { local_message_id?: string }) {
+      return mockMediaSend(args.local_message_id);
     },
-    async sendVideo() {
-      throw new Error('sendVideo not implemented in smoke harness');
+    async sendVideo(args: { local_message_id?: string }) {
+      return mockMediaSend(args.local_message_id);
     },
     async setGroupMemberRole() {
       throw new Error('setGroupMemberRole not implemented in smoke harness');
@@ -793,6 +832,14 @@ export interface TestHarnessControls {
   }): { local_message_id: string; outbox_id: string };
   /** Push an inbound message into a channel and notify observers. */
   pushIncomingMessage(record: MessageRecord): void;
+  /** Control how media sends (`sendImage`/`sendFile`/`sendVideo`)
+   *  resolve: `'fail'` throws (failure bubble), `'ok'` resolves
+   *  (retry-to-success). Reset back to `'fail'` by `reset()`. */
+  setMediaSendOutcome(outcome: 'fail' | 'ok'): void;
+  /** Simulate the SDK's terminal `session_expired` signal. TestApp
+   *  mirrors App.tsx's subscription → renders the "登录已过期" dialog.
+   *  Lets smokes assert the dialog surface + confirm path. */
+  fireSessionExpired(): void;
   /** Queue a page of older messages that the NEXT `scrollHistory`
    *  call for `channelId` will consume. The records are prepended
    *  to the channel's cache and the observer is notified, mirroring
@@ -1228,6 +1275,12 @@ export function installTestControls(): TestHarnessControls {
     async dbDelete(dbName: string) {
       // Dexie.delete on the static is exposed via any subclass.
       await CacheDB.delete(dbName);
+    },
+    setMediaSendOutcome(outcome) {
+      state.mediaSendOutcome = outcome;
+    },
+    fireSessionExpired() {
+      for (const cb of [...sessionExpiredListeners]) cb();
     },
     seed(input) {
       if (input.selfUid !== undefined) state.selfUid = input.selfUid;
