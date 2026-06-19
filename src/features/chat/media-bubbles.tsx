@@ -9,7 +9,7 @@
 // or malformed metadata renders an `UnsupportedBubble` placeholder
 // instead of an empty / cryptic text bubble.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Download,
@@ -45,6 +45,48 @@ import { useVoicePlayback } from './use-voice-playback';
 const MAX_IMG_WIDTH = 280;
 const MAX_IMG_HEIGHT = 360;
 
+/**
+ * 附件加密 v1：`file_id -> downloadAttachmentBlob（get_url + WebCrypto 解密）-> objectURL`。
+ * 服务端存的是密文，不能 `img.src = file_url`。卸载 / file_id 变化时 revoke 防泄漏。
+ * downloadAttachmentBlob 对 v0 legacy 明文也透明（直接 fetch 返回），故两类都走它。
+ */
+function useDecryptedAttachment(fileId: string | undefined): {
+  url: string | undefined;
+  loading: boolean;
+  failed: boolean;
+} {
+  const adapter = usePrivchatClient();
+  const [url, setUrl] = useState<string | undefined>(undefined);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (fileId === undefined || fileId === '') return;
+    let cancelled = false;
+    let objectUrl: string | undefined;
+    setLoading(true);
+    setFailed(false);
+    adapter
+      .downloadAttachmentBlob(fileId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // 解密失败绝不退回密文 URL：宁可显示失败也不渲染坏图。
+        setFailed(true);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl !== undefined) URL.revokeObjectURL(objectUrl);
+    };
+  }, [adapter, fileId]);
+  return { url, loading, failed };
+}
+
 export function ImageBubble({
   meta,
   isSelf,
@@ -53,7 +95,30 @@ export function ImageBubble({
   isSelf: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  if (meta.url === undefined || meta.url === '') {
+  const dec = useDecryptedAttachment(meta.file_id);
+  // 优先解密后的 objectURL；无 file_id 的极老消息退回 legacy 明文 url。
+  const legacyUrl =
+    (meta.file_id === undefined || meta.file_id === '') && meta.url !== undefined && meta.url !== ''
+      ? meta.url
+      : undefined;
+  const src = dec.url ?? legacyUrl;
+  if (src === undefined) {
+    if (dec.failed) {
+      return <FallbackBubble label="[图片·解密失败]" isSelf={isSelf} icon={AlertTriangle} />;
+    }
+    if (dec.loading || (meta.file_id !== undefined && meta.file_id !== '')) {
+      return (
+        <div
+          className={cn(
+            'flex items-center justify-center rounded-lg bg-muted',
+            isSelf ? 'ml-auto' : 'mr-auto',
+          )}
+          style={{ width: 160, height: 200 }}
+        >
+          <Loader2 className="h-5 w-5 animate-spin opacity-60" />
+        </div>
+      );
+    }
     return <FallbackBubble label="[图片]" isSelf={isSelf} icon={ImageIcon} />;
   }
   // Compute display dims by fitting the image's aspect ratio inside
@@ -90,7 +155,7 @@ export function ImageBubble({
         }}
       >
         <img
-          src={meta.url}
+          src={src}
           alt=""
           loading="lazy"
           decoding="async"
@@ -105,7 +170,7 @@ export function ImageBubble({
           onClick={() => setOpen(false)}
         >
           <img
-            src={meta.url}
+            src={src}
             alt=""
             className="max-h-full max-w-full object-contain"
           />
@@ -122,15 +187,41 @@ export function FileBubble({
   meta: FileMetadataVM;
   isSelf: boolean;
 }) {
+  const adapter = usePrivchatClient();
   const filename = meta.filename ?? meta.file_id;
+  const [busy, setBusy] = useState(false);
+  // 附件加密 v1：file_url 是密文，不能 <a href> 直下。点击时 file_id -> get_url + 解密
+  // -> 明文 Blob -> objectURL -> 触发下载（用户主动导出明文）。
+  const onDownload = useCallback(async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const blob =
+        meta.file_id !== undefined && meta.file_id !== ''
+          ? await adapter.downloadAttachmentBlob(meta.file_id)
+          : meta.url !== undefined
+            ? await (await fetch(meta.url)).blob()
+            : undefined;
+      if (blob === undefined) return;
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // 给浏览器一帧抓取下载流再 revoke。
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    } finally {
+      setBusy(false);
+    }
+  }, [adapter, busy, filename, meta.file_id, meta.url]);
   return (
-    <a
-      href={meta.url ?? '#'}
-      download={filename}
-      target="_blank"
-      rel="noreferrer"
+    <button
+      type="button"
+      onClick={onDownload}
       className={cn(
-        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm max-w-[280px]',
+        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm max-w-[280px] text-left',
         isSelf ? 'ml-auto bg-primary text-primary-foreground' : 'mr-auto bg-muted',
       )}
     >
@@ -148,8 +239,12 @@ export function FileBubble({
           </div>
         )}
       </div>
-      {meta.url !== undefined && <Download className="h-4 w-4 shrink-0 opacity-70" />}
-    </a>
+      {busy ? (
+        <Loader2 className="h-4 w-4 shrink-0 animate-spin opacity-70" />
+      ) : (
+        <Download className="h-4 w-4 shrink-0 opacity-70" />
+      )}
+    </button>
   );
 }
 
@@ -262,7 +357,25 @@ export function VideoBubble({
   meta: VideoMetadataVM;
   isSelf: boolean;
 }) {
-  if (meta.url === undefined || meta.url === '') {
+  // 视频 v1：整文件加密，需下完整密文 → 解密 → Blob URL 才能播放（不能边下边播）。
+  const dec = useDecryptedAttachment(meta.file_id);
+  const legacyUrl =
+    (meta.file_id === undefined || meta.file_id === '') && meta.url !== undefined && meta.url !== ''
+      ? meta.url
+      : undefined;
+  const videoSrc = dec.url ?? legacyUrl;
+  if (videoSrc === undefined) {
+    if (dec.failed) return <FallbackBubble label="[视频·解密失败]" isSelf={isSelf} icon={AlertTriangle} />;
+    if (dec.loading || (meta.file_id !== undefined && meta.file_id !== '')) {
+      return (
+        <div
+          className={cn('flex items-center justify-center rounded-lg bg-black', isSelf ? 'ml-auto' : 'mr-auto')}
+          style={{ width: 200, height: 200 }}
+        >
+          <Loader2 className="h-5 w-5 animate-spin text-white/70" />
+        </div>
+      );
+    }
     return <FallbackBubble label="[视频]" isSelf={isSelf} icon={VideoIcon} />;
   }
   // Match ImageBubble's aspect-ratio fit so a 9:16 phone video doesn't
@@ -295,7 +408,7 @@ export function VideoBubble({
       }}
     >
       <video
-        src={meta.url}
+        src={videoSrc}
         poster={meta.thumbnail_url}
         controls
         preload="metadata"

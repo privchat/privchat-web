@@ -725,6 +725,12 @@ export function createTestAdapter(): PrivchatClientAdapter {
       };
     },
 
+    async downloadAttachmentBlob(_fileId) {
+      // Smoke contract: deterministic empty blob so media bubbles can mount
+      // without a real media server / decryption.
+      return new Blob([], { type: 'application/octet-stream' });
+    },
+
     // QR Code v1.3 — minimal deterministic stubs so smoke tests can mount
     // the dialogs without a real backend. Hosts that want richer fixtures
     // can spread overrides on top.
