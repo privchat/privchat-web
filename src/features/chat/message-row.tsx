@@ -124,8 +124,10 @@ export function MessageRow({
       // to it) so the search is always a single querySelector.
       data-message-id={vm.server_message_id}
       className={cn(
-        'group flex items-end gap-2 transition-colors',
-        vm.is_self ? 'justify-end' : 'justify-start',
+        // Received rows top-align so the sender avatar sits at the bubble's
+        // top edge; self rows keep bottom alignment (no left avatar there).
+        'group flex gap-2 transition-colors',
+        vm.is_self ? 'items-end justify-end' : 'items-start justify-start',
       )}
     >
       {vm.is_self && pendingTxnId === undefined && (
@@ -354,7 +356,7 @@ function MessageRowAvatar({ fromUid }: { fromUid: string }) {
     <ProfileCard user={user} fallbackTitle={display}>
       <button
         type="button"
-        className="shrink-0 self-end"
+        className="shrink-0 self-start"
         aria-label={display}
       >
         <Avatar seed={`u:${fromUid}`} label={display} size="sm" />
