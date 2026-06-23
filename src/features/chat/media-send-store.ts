@@ -52,9 +52,15 @@ function notify(): void {
   for (const l of listeners) l();
 }
 
+// The txnId doubles as the SDK `local_message_id`, which is wire-encoded
+// as a u64 (FlatBuffers). A non-numeric id (e.g. "media-<ts>-<n>") makes
+// `BigInt(id)` throw in the send codec, so the file message silently fails
+// to transmit. Mirror the SDK's snowflake-ish generator: ms timestamp in
+// the high bits, a 10-bit per-tab counter in the low bits → unique decimal.
 let seq = 0;
 export function newTxnId(): string {
-  return `media-${Date.now()}-${seq++}`;
+  seq = (seq + 1) & 0x3ff; // 10-bit rollover
+  return ((BigInt(Date.now()) << 12n) | BigInt(seq)).toString();
 }
 
 function makePreviewUrl(kind: MediaKind, file: Blob): string {

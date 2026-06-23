@@ -188,7 +188,10 @@ export function FileBubble({
   isSelf: boolean;
 }) {
   const adapter = usePrivchatClient();
+  // 文件名/大小随消息 typed metadata 传输（file_name/file_size），直接展示，不再额外
+  // 调 file/get_url 异步查（避免列表渲染闪烁 + 离线/历史拿不到名字）。
   const filename = meta.filename ?? meta.file_id;
+  const size = meta.size;
   const [busy, setBusy] = useState(false);
   // 附件加密 v1：file_url 是密文，不能 <a href> 直下。点击时 file_id -> get_url + 解密
   // -> 明文 Blob -> objectURL -> 触发下载（用户主动导出明文）。
@@ -228,14 +231,14 @@ export function FileBubble({
       <FileText className="h-5 w-5 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="truncate">{filename}</div>
-        {meta.size !== undefined && (
+        {size !== undefined && (
           <div
             className={cn(
               'text-[10px] opacity-80',
               isSelf ? 'text-primary-foreground' : 'text-muted-foreground',
             )}
           >
-            {formatSize(meta.size)}
+            {formatSize(size)}
           </div>
         )}
       </div>
