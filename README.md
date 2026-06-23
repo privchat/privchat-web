@@ -9,6 +9,12 @@ account host with SMS / QR auth) — with full chat UX, multi-account
 switching, media, reactions, presence, three-language i18n, and an
 opt-in virtualized timeline.
 
+## Screenshots
+
+| Login (SMS) | Login (QR) | Conversation |
+| --- | --- | --- |
+| ![Login with SMS](docs/screenshots/privchat-web-login.png) | ![Login with QR code](docs/screenshots/privchat-web-login-by-qrcode.png) | ![Conversation view](docs/screenshots/privchat-web-conversation.png) |
+
 ## Stack
 
 - Vite 5 + React 19 + TypeScript
