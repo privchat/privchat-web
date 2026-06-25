@@ -18,6 +18,7 @@ import { LangSwitcher } from '@/components/lang-switcher';
 import { getAuthProvider } from '@/lib/account-auth-provider';
 import { useAccountCapabilities } from '@/lib/account-capabilities';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
+import { getOrCreateDeviceId } from '@/lib/device-id';
 import { getLoginErrorMessage } from '@/lib/login-error-message';
 import type { RequiredAction } from '@/lib/required-action';
 import type { PersistedSession } from '@/lib/session-storage';
@@ -666,19 +667,13 @@ function makeDevice(): {
   app_version: string;
 } {
   return {
-    device_id: pseudoUuidV4(),
+    // Persisted across reloads (localStorage) so the server recognizes the
+    // same device and does not re-post a "new device login" notification on
+    // every page refresh. Previously this was a fresh random UUID per login.
+    device_id: getOrCreateDeviceId(),
     device_type: 'web',
     app_id: 'privchat-web',
     device_name: 'privchat-web',
     app_version: '0.0.0',
   };
-}
-
-function pseudoUuidV4(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
