@@ -21,6 +21,7 @@ import type {
 } from '@privchat/sdk';
 import {
   useAccountSearch,
+  useFriendApply,
   useFriendList,
   useGroupOps,
   usePrivchatClient,
@@ -93,6 +94,12 @@ export function GroupInfoDialog({
   const [editOpen, setEditOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [toggleMuteAllBusy, setToggleMuteAllBusy] = useState(false);
+  // Per-flag busy guards for the owner/admin-editable boolean toggles
+  // (allow_member_add_friend / allow_search). Keyed by the patch field
+  // so the two switches gate independently.
+  const [togglingFlag, setTogglingFlag] = useState<
+    'allow_member_add_friend' | 'allow_search' | 'join_policy' | null
+  >(null);
 
   const fetchMembers = async () => {
     setLoading(true);
@@ -151,6 +158,33 @@ export function GroupInfoDialog({
   );
   const canManage =
     selfMember?.role === 'owner' || selfMember?.role === 'admin';
+
+  // Add-friend-from-member affordance. We surface an "Add friend" button
+  // on non-self members who aren't already friends. The apply carries
+  // source=group + source_id=<group id> so the server attributes the
+  // request to this group (required when applying from a group roster).
+  const friends = useFriendList();
+  const applyFriend = useFriendApply();
+  const friendUids = useMemo(
+    () => new Set(friends.map((f) => f.user_id)),
+    [friends],
+  );
+  const [applyingUid, setApplyingUid] = useState<number | null>(null);
+  const [appliedUids, setAppliedUids] = useState<Set<number>>(new Set());
+
+  const onAddFriend = async (m: GroupMember) => {
+    if (applyingUid !== null) return;
+    setApplyingUid(m.user_id);
+    setError(null);
+    try {
+      await applyFriend(m.user_id, undefined, 'group', groupId);
+      setAppliedUids((prev) => new Set(prev).add(m.user_id));
+    } catch (e) {
+      setError(`${t('contacts.add_friend_failed')}: ${errorText(e)}`);
+    } finally {
+      setApplyingUid(null);
+    }
+  };
 
   const onLeave = async () => {
     if (leaving) return;
@@ -354,6 +388,45 @@ export function GroupInfoDialog({
     }
   };
 
+  // Owner/admin-editable boolean settings. Both ride the same
+  // `group/settings/update` RPC as description/announcement; we patch a
+  // single field at a time and optimistically reflect the new value.
+  const onToggleFlag = async (
+    field: 'allow_member_add_friend' | 'allow_search',
+  ) => {
+    if (settings === null || togglingFlag !== null) return;
+    setTogglingFlag(field);
+    setError(null);
+    try {
+      const next = !(settings[field] ?? false);
+      await ops.updateSettings(groupId, { [field]: next });
+      setSettings((prev) =>
+        prev !== null ? { ...prev, [field]: next } : prev,
+      );
+    } catch (e) {
+      setError(`${t('groups.settings_save_failed')}: ${errorText(e)}`);
+    } finally {
+      setTogglingFlag(null);
+    }
+  };
+
+  // Join policy: 0 = no join, 1 = approval required, 2 = open join.
+  const onChangeJoinPolicy = async (next: number) => {
+    if (settings === null || togglingFlag !== null) return;
+    setTogglingFlag('join_policy');
+    setError(null);
+    try {
+      await ops.updateSettings(groupId, { join_policy: next });
+      setSettings((prev) =>
+        prev !== null ? { ...prev, join_policy: next } : prev,
+      );
+    } catch (e) {
+      setError(`${t('groups.settings_save_failed')}: ${errorText(e)}`);
+    } finally {
+      setTogglingFlag(null);
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -383,7 +456,7 @@ export function GroupInfoDialog({
           {settings !== null &&
             (settings.description !== undefined ||
               settings.announcement !== undefined ||
-              isOwnerSelf) && (
+              canManage) && (
               <div className="space-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-muted-foreground">
@@ -433,6 +506,56 @@ export function GroupInfoDialog({
                     />
                   </label>
                 )}
+                {/* Owner/admin-editable group flags. Gated on canManage
+                    so admins can toggle them too (server enforces). */}
+                {canManage && (
+                  <>
+                    <label className="flex items-center justify-between gap-2 pt-1">
+                      <span>{t('groups.settings_allow_member_add_friend')}</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.allow_member_add_friend ?? false}
+                        disabled={togglingFlag !== null}
+                        onChange={() =>
+                          void onToggleFlag('allow_member_add_friend')
+                        }
+                        data-testid="group-allow-member-add-friend"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 pt-1">
+                      <span>{t('groups.settings_allow_search')}</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.allow_search ?? false}
+                        disabled={togglingFlag !== null}
+                        onChange={() => void onToggleFlag('allow_search')}
+                        data-testid="group-allow-search"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 pt-1">
+                      <span>{t('groups.settings_join_policy')}</span>
+                      <select
+                        className="rounded border bg-background px-2 py-1 text-sm"
+                        value={settings.join_policy ?? 1}
+                        disabled={togglingFlag !== null}
+                        onChange={(e) =>
+                          void onChangeJoinPolicy(Number(e.target.value))
+                        }
+                        data-testid="group-join-policy"
+                      >
+                        <option value={0}>
+                          {t('groups.settings_join_policy_none')}
+                        </option>
+                        <option value={1}>
+                          {t('groups.settings_join_policy_approval')}
+                        </option>
+                        <option value={2}>
+                          {t('groups.settings_join_policy_open')}
+                        </option>
+                      </select>
+                    </label>
+                  </>
+                )}
               </div>
             )}
 
@@ -469,6 +592,10 @@ export function GroupInfoDialog({
                 const isSelfRow = String(m.user_id) === selfUid;
                 const showAdmin = canManage && !isSelfRow && m.role !== 'owner';
                 const rowBusy = busyUid === m.user_id;
+                const isFriendRow = friendUids.has(String(m.user_id));
+                const justApplied = appliedUids.has(m.user_id);
+                const showAddFriend = !isSelfRow && !isFriendRow;
+                const applyingRow = applyingUid === m.user_id;
                 return (
                   <li
                     key={m.user_id}
@@ -497,6 +624,27 @@ export function GroupInfoDialog({
                         {roleLabel}
                       </span>
                     )}
+                    {showAddFriend &&
+                      (justApplied ? (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {t('contacts.applied')}
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 px-2 text-xs"
+                          disabled={applyingUid !== null}
+                          onClick={() => void onAddFriend(m)}
+                          data-testid="group-member-add-friend"
+                        >
+                          {applyingRow ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            t('contacts.apply')
+                          )}
+                        </Button>
+                      ))}
                     {showAdmin && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

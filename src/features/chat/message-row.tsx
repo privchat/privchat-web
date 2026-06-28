@@ -41,6 +41,9 @@ export function MessageRow({
   replyVm,
   onReply,
   onJumpToReply,
+  canPin,
+  pinnedIds,
+  onTogglePin,
 }: {
   vm: MessageItemVM;
   peerReadPts: string | undefined;
@@ -60,6 +63,13 @@ export function MessageRow({
   onReply: () => void;
   /** Click handler for the reply-quote (jump to the original). */
   onJumpToReply: (serverMessageId: string) => void;
+  /** Group-only: whether the current user (owner/admin) may pin. When
+   *  falsy the Pin/Unpin menu item is hidden (direct chats, members). */
+  canPin?: boolean;
+  /** Group-only: set of pinned `server_message_id`s — drives label toggle. */
+  pinnedIds?: Set<string>;
+  /** Group-only: toggle pin state for this row. */
+  onTogglePin?: (vm: MessageItemVM) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const ts = useMemo(
@@ -131,7 +141,15 @@ export function MessageRow({
       )}
     >
       {vm.is_self && pendingTxnId === undefined && (
-        <MessageActionsMenu vm={vm} channelId={channelId} side="left" onReply={onReply} />
+        <MessageActionsMenu
+          vm={vm}
+          channelId={channelId}
+          side="left"
+          onReply={onReply}
+          canPin={canPin}
+          pinnedIds={pinnedIds}
+          onTogglePin={onTogglePin}
+        />
       )}
       {!vm.is_self && <MessageRowAvatar fromUid={vm.from_uid} />}
       {mediaNode !== null ? (
@@ -215,7 +233,15 @@ export function MessageRow({
         </div>
       )}
       {!vm.is_self && (
-        <MessageActionsMenu vm={vm} channelId={channelId} side="right" onReply={onReply} />
+        <MessageActionsMenu
+          vm={vm}
+          channelId={channelId}
+          side="right"
+          onReply={onReply}
+          canPin={canPin}
+          pinnedIds={pinnedIds}
+          onTogglePin={onTogglePin}
+        />
       )}
     </div>
   );
@@ -439,11 +465,17 @@ function MessageActionsMenu({
   channelId,
   side,
   onReply,
+  canPin,
+  pinnedIds,
+  onTogglePin,
 }: {
   vm: MessageItemVM;
   channelId: string;
   side: 'left' | 'right';
   onReply: () => void;
+  canPin?: boolean;
+  pinnedIds?: Set<string>;
+  onTogglePin?: (vm: MessageItemVM) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const revoke = useRevokeMessage();
@@ -456,8 +488,29 @@ function MessageActionsMenu({
   const canCopy = vm.content !== '';
   // Reply requires the original to have a server id.
   const canReply = vm.server_message_id !== undefined;
+  // Pin is group-only (canPin gates owner/admin) and needs a server id
+  // plus a toggle handler. Members / direct chats never see it.
+  const showPin =
+    canPin === true &&
+    onTogglePin !== undefined &&
+    vm.server_message_id !== undefined;
+  const isPinned =
+    vm.server_message_id !== undefined &&
+    pinnedIds?.has(vm.server_message_id) === true;
 
-  if (!canRevoke && !canCopy && !canReply) return null;
+  if (!canRevoke && !canCopy && !canReply && !showPin) return null;
+
+  const onPin = async () => {
+    if (!showPin || busy) return;
+    setBusy(true);
+    try {
+      await onTogglePin(vm);
+    } catch (e) {
+      alert(`${t(isPinned ? 'message_actions.unpin' : 'message_actions.pin')}: ${errorText(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const onRevoke = async () => {
     if (!canRevoke || busy) return;
@@ -500,6 +553,14 @@ function MessageActionsMenu({
         {canCopy && (
           <DropdownMenuItem onSelect={onCopy}>
             {t('message_actions.copy')}
+          </DropdownMenuItem>
+        )}
+        {showPin && (
+          <DropdownMenuItem
+            onSelect={() => void onPin()}
+            disabled={busy}
+          >
+            {t(isPinned ? 'message_actions.unpin' : 'message_actions.pin')}
           </DropdownMenuItem>
         )}
         {canRevoke && (

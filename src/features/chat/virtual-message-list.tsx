@@ -106,6 +106,9 @@ export function VirtualMessageList({
   loadingOlder,
   onLoadOlder,
   onReply,
+  canPin,
+  pinnedIds,
+  onTogglePin,
 }: MessageListProps) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -770,6 +773,9 @@ export function VirtualMessageList({
                   replyVm={replyVm}
                   onReply={() => onReply(m)}
                   onJumpToReply={handleReplyJump}
+                  canPin={canPin}
+                  pinnedIds={pinnedIds}
+                  onTogglePin={onTogglePin}
                 />
               </div>
             );

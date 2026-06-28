@@ -9,7 +9,7 @@
 // Visual concerns (timeline rendering, virtualization, theming) live here in
 // the web app — `@privchat/react` only ships hooks/VMs.
 
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ImageIcon, Info, Paperclip, X as XIcon } from 'lucide-react';
 import {
@@ -17,6 +17,7 @@ import {
   useChannelList,
   useConversation,
   useFriendship,
+  useGroupOps,
   useGroupProfile,
   usePresence,
   usePrivchatClient,
@@ -24,6 +25,7 @@ import {
   useUserProfile,
 } from '@privchat/react';
 import type { MessageItemVM } from '@privchat/react';
+import type { PinnedMessageItem } from '@privchat/sdk';
 import { stopAll as stopVoicePlayback } from './voice-playback';
 import { projectEntry, removeEntry } from './media-send-store';
 import { useChannelMediaSends, useMediaSender } from './use-media-send';
@@ -37,6 +39,7 @@ import { useLastSeenI18n } from './use-presence-i18n';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { MessageList } from './message-list';
 import { BotMenuButton } from './bot-menu-button';
+import { PinnedBar } from './pinned-bar';
 
 // Lazy-loaded — group info pulls roster data + admin actions, none
 // of which is on the first-paint path. Only opens when the user
@@ -141,6 +144,94 @@ export function ConversationPanel({
   const mediaSender = useMediaSender();
   const mediaSends = useChannelMediaSends(channelId);
   const selfUid = usePrivchatClient().sessionSnapshot().user_id;
+
+  // ---- group message pinning ----
+  //
+  // Group-only. We resolve `isManager` (owner/admin) from the roster and
+  // keep the pinned-message list in local state (refreshed after every
+  // pin/unpin). Direct chats skip all of this — the effects below bail
+  // out when `record` isn't a group, and the props stay undefined so the
+  // timeline / menu never show pin affordances.
+  const groupOps = useGroupOps();
+  const groupId = record?.channel_type === 2 ? record.channel_id : undefined;
+  const [isManager, setIsManager] = useState(false);
+  const [pinnedItems, setPinnedItems] = useState<PinnedMessageItem[]>([]);
+
+  // Resolve owner/admin role for the current user. Same algorithm the
+  // group-info dialog uses: find self in the roster, treat owner/admin
+  // as "can manage". Failures degrade to read-only (isManager=false).
+  useEffect(() => {
+    if (groupId === undefined) {
+      setIsManager(false);
+      return;
+    }
+    let cancelled = false;
+    void groupOps
+      .listMembers(groupId)
+      .then((resp) => {
+        if (cancelled) return;
+        const self = resp.members.find(
+          (m) => String(m.user_id) === selfUid,
+        );
+        setIsManager(self?.role === 'owner' || self?.role === 'admin');
+      })
+      .catch(() => {
+        if (!cancelled) setIsManager(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, groupOps, selfUid]);
+
+  // Refreshable pinned-message list. Wrapped so both the initial load
+  // effect and the pin/unpin toggle can re-pull and keep the bar + the
+  // row-menu labels in sync.
+  const refreshPinned = useCallback(async () => {
+    if (groupId === undefined) {
+      setPinnedItems([]);
+      return;
+    }
+    try {
+      const resp = await groupOps.pinnedMessages(groupId);
+      setPinnedItems(resp.items);
+    } catch {
+      // Non-fatal: leave the last-known list; a later toggle retries.
+    }
+  }, [groupId, groupOps]);
+
+  useEffect(() => {
+    void refreshPinned();
+  }, [refreshPinned]);
+
+  const pinnedIds = useMemo(
+    () => new Set(pinnedItems.map((i) => String(i.message_id))),
+    [pinnedItems],
+  );
+
+  const onTogglePin = useCallback(
+    async (vm: MessageItemVM) => {
+      if (groupId === undefined || vm.server_message_id === undefined) return;
+      const alreadyPinned = pinnedIds.has(vm.server_message_id);
+      // Group invariant: channel_id == group_id, so we pass groupId twice.
+      await groupOps.pinMessage(
+        groupId,
+        groupId,
+        vm.server_message_id,
+        !alreadyPinned,
+      );
+      await refreshPinned();
+    },
+    [groupId, groupOps, pinnedIds, refreshPinned],
+  );
+
+  const onUnpinFromBar = useCallback(
+    async (messageId: string) => {
+      if (groupId === undefined) return;
+      await groupOps.pinMessage(groupId, groupId, messageId, false);
+      await refreshPinned();
+    },
+    [groupId, groupOps, refreshPinned],
+  );
 
   // Voice playback is a single-active controller across the whole app.
   // When the user navigates to a different conversation (channelId
@@ -420,6 +511,15 @@ export function ConversationPanel({
         </div>
       </header>
 
+      {!isDirect && groupId !== undefined && (
+        <PinnedBar
+          items={pinnedItems}
+          messages={timelineMessages}
+          canManage={isManager}
+          onUnpin={onUnpinFromBar}
+        />
+      )}
+
       <MessageList
         messages={timelineMessages}
         channelId={channelId}
@@ -431,6 +531,11 @@ export function ConversationPanel({
         loadingOlder={loadingOlder}
         onLoadOlder={onLoadOlder}
         onReply={(m) => setReplyTo(m)}
+        canPin={!isDirect && groupId !== undefined ? isManager : undefined}
+        pinnedIds={!isDirect && groupId !== undefined ? pinnedIds : undefined}
+        onTogglePin={
+          !isDirect && groupId !== undefined ? onTogglePin : undefined
+        }
       />
 
       {error !== null && (

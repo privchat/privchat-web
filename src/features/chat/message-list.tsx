@@ -32,6 +32,16 @@ export interface MessageListProps {
   loadingOlder: boolean;
   onLoadOlder: () => void;
   onReply: (vm: MessageItemVM) => void;
+  /** Group-only: whether the current user (owner/admin) may pin messages.
+   *  Undefined / false for direct chats and regular members — the pin
+   *  menu item stays hidden. */
+  canPin?: boolean;
+  /** Group-only: set of `server_message_id`s currently pinned. Drives the
+   *  Pin/Unpin menu-item label toggle. */
+  pinnedIds?: Set<string>;
+  /** Group-only: toggle pin state for a row. Resolves after the pinned
+   *  list has been refreshed so the menu label + pinned bar stay in sync. */
+  onTogglePin?: (vm: MessageItemVM) => Promise<void>;
 }
 
 export function MessageList(props: MessageListProps) {

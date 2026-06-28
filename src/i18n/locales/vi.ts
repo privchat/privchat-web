@@ -122,6 +122,20 @@ export const vi: LocaleSchema = {
     avatar_error_mime: 'Ảnh đại diện phải là JPEG / PNG / WebP',
     avatar_error_size: 'Ảnh đại diện phải nhỏ hơn 5 MB',
   },
+  sign_in: {
+    open_button: 'Điểm danh hằng ngày',
+    title: 'Điểm danh hằng ngày',
+    continuous_days: 'Liên tục',
+    total_days: 'Tổng cộng',
+    rewards_heading: 'Phần thưởng',
+    day_label: 'Ngày {{day}}',
+    points: '{{points}} điểm',
+    earned: 'Đã điểm danh! +{{points}} điểm',
+    sign_now: 'Điểm danh',
+    already_signed: 'Hôm nay đã điểm danh',
+    sign_failed: 'Điểm danh thất bại',
+    no_session: 'Không có phiên đăng nhập.',
+  },
   workspace: {
     logout: 'Đăng xuất',
     conversations: 'Cuộc trò chuyện',
@@ -269,6 +283,8 @@ export const vi: LocaleSchema = {
     cancel_reply: 'Hủy trả lời',
     reply_unavailable: '[Tin nhắn gốc không khả dụng]',
     reply_out_of_window: 'Tin nhắn gốc không có trong cửa sổ hiện tại',
+    pin: 'Ghim',
+    unpin: 'Bỏ ghim',
   },
   theme: {
     system: 'Giao diện: theo hệ thống',
@@ -317,6 +333,7 @@ export const vi: LocaleSchema = {
     block_confirm:
       'Chặn {{name}}? Họ sẽ không thể gửi tin nhắn cho bạn nữa.',
     block_failed: 'Chặn thất bại',
+    add_friend_failed: 'Không thể gửi lời mời kết bạn',
   },
   groups: {
     empty: 'Chưa có nhóm nào.',
@@ -370,6 +387,12 @@ export const vi: LocaleSchema = {
     settings_announcement_placeholder:
       'Được ghim đầu nhóm, hiển thị với thành viên mới',
     settings_mute_all: 'Chặn nói cả nhóm',
+    settings_allow_member_add_friend: 'Cho phép thành viên kết bạn với nhau',
+    settings_allow_search: 'Cho phép tìm thấy nhóm qua tìm kiếm',
+    settings_join_policy: 'Cách tham gia',
+    settings_join_policy_none: 'Không cho thành viên mới',
+    settings_join_policy_approval: 'Cần phê duyệt',
+    settings_join_policy_open: 'Ai cũng có thể tham gia',
     settings_save: 'Lưu',
     settings_cancel: 'Hủy',
     settings_save_failed: 'Lưu thất bại',
@@ -380,6 +403,7 @@ export const vi: LocaleSchema = {
     mute_duration_7d: '7 ngày',
     mute_duration_30d: '30 ngày',
     mute_duration_forever: 'Vĩnh viễn',
+    pinned_bar_title: 'Tin nhắn đã ghim',
   },
   connection: {
     connected: 'Đã kết nối',

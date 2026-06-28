@@ -121,6 +121,20 @@ export const en: LocaleSchema = {
     avatar_error_mime: 'Avatar must be JPEG, PNG, or WebP',
     avatar_error_size: 'Avatar must be 5 MB or smaller',
   },
+  sign_in: {
+    open_button: 'Daily sign-in',
+    title: 'Daily sign-in',
+    continuous_days: 'Streak',
+    total_days: 'Total',
+    rewards_heading: 'Rewards',
+    day_label: 'Day {{day}}',
+    points: '{{points}} pts',
+    earned: 'Signed in! +{{points}} points',
+    sign_now: 'Sign in',
+    already_signed: 'Already signed in today',
+    sign_failed: 'Sign-in failed',
+    no_session: 'No active session.',
+  },
   workspace: {
     logout: 'Logout',
     conversations: 'Conversations',
@@ -270,6 +284,8 @@ export const en: LocaleSchema = {
     cancel_reply: 'Cancel reply',
     reply_unavailable: '[Original message unavailable]',
     reply_out_of_window: 'Original message not loaded in this window',
+    pin: 'Pin',
+    unpin: 'Unpin',
   },
   theme: {
     system: 'Theme: follow system',
@@ -317,6 +333,7 @@ export const en: LocaleSchema = {
     block: 'Block',
     block_confirm: 'Block {{name}}? They will no longer be able to message you.',
     block_failed: 'Could not block',
+    add_friend_failed: 'Could not send friend request',
   },
   groups: {
     empty: 'No groups yet.',
@@ -366,6 +383,12 @@ export const en: LocaleSchema = {
     settings_announcement: 'Announcement',
     settings_announcement_placeholder: 'Pinned at the top for new members',
     settings_mute_all: 'Mute everyone',
+    settings_allow_member_add_friend: 'Allow members to add each other',
+    settings_allow_search: 'Allow this group to be found in search',
+    settings_join_policy: 'Join policy',
+    settings_join_policy_none: 'No new members',
+    settings_join_policy_approval: 'Approval required',
+    settings_join_policy_open: 'Anyone can join',
     settings_save: 'Save',
     settings_cancel: 'Cancel',
     settings_save_failed: 'Save failed',
@@ -376,6 +399,7 @@ export const en: LocaleSchema = {
     mute_duration_7d: '7 days',
     mute_duration_30d: '30 days',
     mute_duration_forever: 'Forever',
+    pinned_bar_title: 'Pinned message',
   },
   connection: {
     connected: 'Connected',
@@ -509,6 +533,20 @@ export interface LocaleSchema {
     avatar_error_mime: string;
     avatar_error_size: string;
   };
+  sign_in: {
+    open_button: string;
+    title: string;
+    continuous_days: string;
+    total_days: string;
+    rewards_heading: string;
+    day_label: string;
+    points: string;
+    earned: string;
+    sign_now: string;
+    already_signed: string;
+    sign_failed: string;
+    no_session: string;
+  };
   workspace: {
     logout: string;
     conversations: string;
@@ -606,6 +644,8 @@ export interface LocaleSchema {
     cancel_reply: string;
     reply_unavailable: string;
     reply_out_of_window: string;
+    pin: string;
+    unpin: string;
   };
   theme: { system: string; light: string; dark: string };
   tabs: { chats: string; contacts: string; groups: string };
@@ -642,6 +682,7 @@ export interface LocaleSchema {
     remove_friend: string;
     remove_friend_confirm: string;
     remove_friend_failed: string;
+    add_friend_failed: string;
     block: string;
     block_confirm: string;
     block_failed: string;
@@ -693,6 +734,12 @@ export interface LocaleSchema {
     settings_announcement: string;
     settings_announcement_placeholder: string;
     settings_mute_all: string;
+    settings_allow_member_add_friend: string;
+    settings_allow_search: string;
+    settings_join_policy: string;
+    settings_join_policy_none: string;
+    settings_join_policy_approval: string;
+    settings_join_policy_open: string;
     settings_save: string;
     settings_cancel: string;
     settings_save_failed: string;
@@ -703,6 +750,7 @@ export interface LocaleSchema {
     mute_duration_7d: string;
     mute_duration_30d: string;
     mute_duration_forever: string;
+    pinned_bar_title: string;
   };
   connection: {
     connected: string;

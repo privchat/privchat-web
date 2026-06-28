@@ -47,6 +47,9 @@ export function PlainMessageList({
   loadingOlder,
   onLoadOlder,
   onReply,
+  canPin,
+  pinnedIds,
+  onTogglePin,
 }: MessageListProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -180,6 +183,9 @@ export function PlainMessageList({
             replyVm={replyVm}
             onReply={() => onReply(m)}
             onJumpToReply={(targetId) => jumpToMessage(targetId, scrollRef.current)}
+            canPin={canPin}
+            pinnedIds={pinnedIds}
+            onTogglePin={onTogglePin}
           />
         );
       })}

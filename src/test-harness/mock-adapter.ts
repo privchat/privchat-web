@@ -681,6 +681,12 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async muteGroupAll() {
       throw new Error('muteGroupAll not implemented in smoke harness');
     },
+    async pinGroupMessage() {
+      throw new Error('pinGroupMessage not implemented in smoke harness');
+    },
+    async listGroupPinnedMessages() {
+      throw new Error('listGroupPinnedMessages not implemented in smoke harness');
+    },
 
     // ---- Reactions ----
     async addReaction() {
