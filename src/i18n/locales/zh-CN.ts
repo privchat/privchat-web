@@ -159,6 +159,8 @@ export const zhCN: LocaleSchema = {
     location: '[位置]',
     link: '[链接]',
     forward: '[转发]',
+    red_packet: '[红包]',
+    money_transfer: '[转账]',
     unknown: '[未知消息]',
   },
   media_send: {

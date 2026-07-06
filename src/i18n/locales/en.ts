@@ -165,6 +165,8 @@ export const en: LocaleSchema = {
     location: '[Location]',
     link: '[Link]',
     forward: '[Forwarded]',
+    red_packet: '[Red packet]',
+    money_transfer: '[Transfer]',
     unknown: '[Message]',
   },
   media_send: {
@@ -689,6 +691,8 @@ export interface LocaleSchema {
     location: string;
     link: string;
     forward: string;
+    red_packet: string;
+    money_transfer: string;
     unknown: string;
   };
   media_send: {

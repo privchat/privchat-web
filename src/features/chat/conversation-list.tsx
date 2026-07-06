@@ -187,10 +187,21 @@ function ConversationRow({
   // a locale-specific placeholder ("[图片]" / "[Image]"). Older cached rows
   // without a resolved type fall back to the stored preview string.
   const ct = vm.last_message_content_type;
+  // 资金消息兜底：SDK 升级前缓存的行 ct 缺失，preview 是注入的原始 JSON——
+  // 绝不把它露在列表里（RP-12 防泄露），按内容嗅探替换占位符。
+  const raw = vm.last_message_preview;
+  const moneyFallback =
+    raw !== undefined && raw.startsWith('{')
+      ? raw.includes('"redPacketId"')
+        ? t('message_preview.red_packet')
+        : raw.includes('"transferId"')
+          ? t('message_preview.money_transfer')
+          : undefined
+      : undefined;
   const previewText =
     ct !== undefined && ct !== 'text'
       ? t(`message_preview.${ct}`)
-      : vm.last_message_preview;
+      : (moneyFallback ?? raw);
 
   return (
     <li>

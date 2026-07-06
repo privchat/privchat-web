@@ -164,6 +164,8 @@ export const vi: LocaleSchema = {
     location: '[Vị trí]',
     link: '[Liên kết]',
     forward: '[Chuyển tiếp]',
+    red_packet: '[Lì xì]',
+    money_transfer: '[Chuyển tiền]',
     unknown: '[Tin nhắn]',
   },
   media_send: {
