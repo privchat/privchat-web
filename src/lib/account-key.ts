@@ -28,6 +28,8 @@
  *  literal. */
 export type AccountKey = string & { readonly __accountKeyBrand: unique symbol };
 
+import { sha256Digest } from './sha256';
+
 /** Derive the AccountKey for `(gateway_url, user_id)`. Async
  *  because SubtleCrypto.digest is async; called once at login,
  *  not on every render. */
@@ -37,8 +39,9 @@ export async function accountKeyFor(
 ): Promise<AccountKey> {
   const input = `${gatewayUrl}|${userId}`;
   const bytes = new TextEncoder().encode(input);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  const hex = Array.from(new Uint8Array(digest))
+  // HTTP(非安全上下文)下 crypto.subtle 为 undefined —— sha256Digest 内置纯 JS 兜底。
+  const digest = await sha256Digest(bytes);
+  const hex = Array.from(digest)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
   return hex.substring(0, 16) as AccountKey;
