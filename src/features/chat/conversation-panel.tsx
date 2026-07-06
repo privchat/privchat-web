@@ -11,7 +11,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ImageIcon, Info, Paperclip, X as XIcon } from 'lucide-react';
+import { Gift, ImageIcon, Info, Paperclip, X as XIcon } from 'lucide-react';
 import {
   resolveConversationTitle,
   useChannelList,
@@ -40,6 +40,16 @@ import { useLazyMount } from '@/lib/use-lazy-mount';
 import { MessageList } from './message-list';
 import { BotMenuButton } from './bot-menu-button';
 import { PinnedBar } from './pinned-bar';
+import { useMoneyUi } from '@/features/money/money-ui';
+import { RedPacketLiveStatusContext, MoneyPeerNameContext } from '@/features/money/money-card';
+import { parseSystemContent } from '@/features/money/system-message';
+import { getConfiguredAccountMode } from '@/lib/account-mode';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 // Lazy-loaded — group info pulls roster data + admin actions, none
 // of which is on the first-paint path. Only opens when the user
@@ -386,6 +396,30 @@ export function ConversationPanel({
     );
   }, [messages, mediaSends]);
 
+  // 红包实时状态（App redPacketStatusOf 对齐）：扫会话系统消息，
+  // 「抢完/过期」→2；「领取」且 user ref 是自己 →1。卡片据此覆盖注入快照。
+  const rpLiveStatus = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of timelineMessages) {
+      if (m.content_type !== 'system') continue;
+      const parsed = parseSystemContent(m.content);
+      if (parsed?.template === undefined) continue;
+      const rp = parsed.refs.find((r) => r.type === 'red_packet');
+      if (rp?.target_id === undefined) continue;
+      if (parsed.template.includes('抢完') || parsed.template.includes('过期')) {
+        map.set(rp.target_id, 2);
+      } else if (parsed.template.includes('领取')) {
+        const u = parsed.refs.find((r) => r.type === 'user');
+        if (u?.target_id === selfUid) map.set(rp.target_id, 1);
+      }
+    }
+    return map;
+  }, [timelineMessages, selfUid]);
+
+  // 红包/转账入口 PLATFORM-only（对齐 App/H5 gating）；转账仅单聊。
+  const moneyUi = useMoneyUi();
+  const isPlatform = getConfiguredAccountMode() === 'platform';
+
   // Hand-off: drop the overlay entry once the real cache row exists.
   useEffect(() => {
     if (mediaSends.length === 0) return;
@@ -412,6 +446,8 @@ export function ConversationPanel({
   };
 
   return (
+    <RedPacketLiveStatusContext.Provider value={rpLiveStatus}>
+    <MoneyPeerNameContext.Provider value={isDirect ? headerTitle : undefined}>
     <div
       className={cn(
         // No default border/rounded — visual chrome is the consumer's job.
@@ -625,6 +661,31 @@ export function ConversationPanel({
             }}
           />
         )}
+        {isPlatform && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label={t('money.entry.red_packet')} data-testid="composer-money-menu">
+                <Gift className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top">
+              <DropdownMenuItem
+                onSelect={() => moneyUi.open({ type: 'rp-send', channelId, channelType })}
+              >
+                🧧 {t('money.entry.red_packet')}
+              </DropdownMenuItem>
+              {isDirect && peerUid !== undefined && peerUid !== '' && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    moneyUi.open({ type: 'tf-send', channelId, toUserId: peerUid, toName: headerTitle })
+                  }
+                >
+                  💸 {t('money.entry.transfer')}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -683,6 +744,8 @@ export function ConversationPanel({
         </Button>
       </footer>
     </div>
+    </MoneyPeerNameContext.Provider>
+    </RedPacketLiveStatusContext.Provider>
   );
 }
 

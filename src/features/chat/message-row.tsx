@@ -16,6 +16,8 @@ import {
   useUserProfile,
 } from '@privchat/react';
 import type { MessageItemVM } from '@privchat/react';
+import { SystemMessageBar } from '@/features/money/system-message';
+import { MoneyCardBubble } from '@/features/money/money-card';
 import { pickMediaBubble } from './media-bubbles';
 import { MessageReactions } from './message-reactions';
 import { getEntry, removeEntry, txnIdFromRecordKey } from './media-send-store';
@@ -119,10 +121,21 @@ export function MessageRow({
     );
   }
 
+  // Structured system gray-bar (content type 5) — centered, no bubble chrome.
+  if (vm.content_type === 'system') {
+    return <SystemMessageBar content={vm.content} />;
+  }
+
   // Media bubble or text bubble. Media bubbles own their own width
   // (image dimensions, file chip width) so we don't apply the
   // max-width-75 container around them — they nest a per-type chrome.
-  const mediaNode = pickMediaBubble(vm);
+  // Money cards (11/12, server-injected) ride the media slot: they own their
+  // chrome and must not get the text-bubble background.
+  const moneyNode =
+    vm.content_type === 'red_packet' || vm.content_type === 'money_transfer' ? (
+      <MoneyCardBubble contentType={vm.content_type} content={vm.content} isSelf={vm.is_self} />
+    ) : null;
+  const mediaNode = moneyNode ?? pickMediaBubble(vm);
   // Synthetic in-flight media row (upload phase) — see media-send-store.
   const pendingTxnId = txnIdFromRecordKey(vm.record_key);
 

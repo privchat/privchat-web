@@ -22,6 +22,17 @@ interface ImportMetaEnv {
    *  `https://app.example.com/app`), no trailing slash. Ignored
    *  in builtin mode. */
   readonly VITE_PRIVCHAT_PLATFORM_BASE_URL?: string;
+  /** 白标：品牌 id（gen-web-env.mjs 生成）。 */
+  readonly VITE_PRIVCHAT_BRAND_ID?: string;
+  /** 白标：品牌名（登录页标题 / document.title / 顶栏）。 */
+  readonly VITE_PRIVCHAT_APP_NAME?: string;
+  /** 白标：品牌标语（登录页副标题）。 */
+  readonly VITE_PRIVCHAT_TAGLINE?: string;
+  /** BUILTIN 模式静态 ws 网关；PLATFORM 模式网关由 bootstrap 下发。 */
+  readonly VITE_PRIVCHAT_GATEWAY_URL?: string;
+  /** 白标主题 token（CSS 变量注入）。 */
+  readonly VITE_PRIVCHAT_THEME_PRIMARY?: string;
+  readonly VITE_PRIVCHAT_THEME_ACCENT?: string;
 }
 
 interface ImportMeta {

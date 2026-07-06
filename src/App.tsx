@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConnectionState, useUserProfile } from '@privchat/react';
 import { AppProviders } from '@/app/providers';
+import { MoneyDialogsProvider } from '@/features/money/money-ui';
 import { LoginPage } from '@/features/auth/login-page';
 import { ChatWorkspace } from '@/features/chat/chat-workspace';
 import { RequiredActionsGate } from '@/features/onboarding/required-actions-gate';
@@ -447,6 +448,7 @@ export default function App() {
         // subscription against the new adapter.
         providerKey={gateAccountKey}
       >
+        <MoneyDialogsProvider>
         <PostClientRoot
           handle={handle}
           onLogout={onLogout}
@@ -457,6 +459,7 @@ export default function App() {
           switchError={switchError}
           clearSwitchError={clearSwitchError}
         />
+        </MoneyDialogsProvider>
       </AppProviders>
     </RequiredActionsGate>
     </>

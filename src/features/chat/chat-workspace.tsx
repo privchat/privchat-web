@@ -38,6 +38,7 @@ import {
   ScanLine,
   Volume2,
   VolumeX,
+  Wallet,
 } from 'lucide-react';
 import {
   useChannelList,
@@ -60,6 +61,9 @@ import { GroupList } from './group-list';
 import { SidebarTabs, type SidebarTab } from './sidebar-tabs';
 import { Avatar } from './avatar';
 import { ProfileCard } from './profile-card';
+import { useMoneyUi } from '@/features/money/money-ui';
+import { getConfiguredAccountMode } from '@/lib/account-mode';
+import { brandConfig } from '@/lib/brand-config';
 import { useTabBadge } from './use-tab-badge';
 import { useIncomingNotifier, type IncomingNotifier } from './use-incoming-notifier';
 import { QrcodeDisplayDialog } from './qrcode-display-dialog';
@@ -330,6 +334,7 @@ function TopBar({
   const display = me?.nickname ?? me?.username ?? t('app.name');
   const seed = uid !== undefined && uid !== '' ? `u:${uid}` : 'self';
   const [myQrOpen, setMyQrOpen] = useState(false);
+  const moneyUi = useMoneyUi();
   const [scanQrOpen, setScanQrOpen] = useState(false);
 
   return (
@@ -343,7 +348,7 @@ function TopBar({
           <Avatar seed={seed} label={display} size="sm" />
           <span className="text-sm font-semibold">
             {display}
-            <span className="text-muted-foreground font-normal">@PrivChat</span>
+            <span className="text-muted-foreground font-normal">@{brandConfig.appName}</span>
           </span>
           <ConnectionPill state={state} />
         </button>
@@ -360,6 +365,18 @@ function TopBar({
             errorI18nKey={switchError?.i18nKey ?? null}
             onDismissError={clearSwitchError}
           />
+        )}
+        {getConfiguredAccountMode() === 'platform' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => moneyUi.open({ type: 'wallet' })}
+            aria-label={t('money.wallet.title')}
+            title={t('money.wallet.title')}
+            data-testid="topbar-wallet"
+          >
+            <Wallet className="h-4 w-4" />
+          </Button>
         )}
         <Button
           variant="ghost"

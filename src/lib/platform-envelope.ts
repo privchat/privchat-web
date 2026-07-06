@@ -111,6 +111,25 @@ export async function putEnvelope<T>(
   return requestEnvelope<T>(url, 'PUT', accessToken, body);
 }
 
+/** Authed JSON POST. Same envelope semantics as `getEnvelope` /
+ *  `putEnvelope`; carries the bearer token. `body` may be undefined for
+ *  POST endpoints whose inputs ride entirely in the query string. */
+export async function postAuthedEnvelope<T>(
+  url: string,
+  accessToken: string,
+  body?: unknown,
+): Promise<T | undefined> {
+  return requestEnvelope<T>(url, 'POST', accessToken, body);
+}
+
+/** Authed DELETE. Same envelope semantics. */
+export async function deleteAuthedEnvelope<T>(
+  url: string,
+  accessToken: string,
+): Promise<T | undefined> {
+  return requestEnvelope<T>(url, 'DELETE', accessToken, undefined);
+}
+
 /** R8.4d-2 — authed multipart POST. Don't set `Content-Type` — the
  *  browser fills in the multipart boundary automatically when given a
  *  `FormData` body. Same `{code,message,data}` envelope semantics. */
@@ -173,7 +192,7 @@ export async function postMultipartEnvelope<T>(
 
 async function requestEnvelope<T>(
   url: string,
-  method: 'GET' | 'PUT',
+  method: 'GET' | 'PUT' | 'POST' | 'DELETE',
   accessToken: string,
   body: unknown,
 ): Promise<T | undefined> {

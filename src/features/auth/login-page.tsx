@@ -16,6 +16,8 @@ import { OtpInput, type OtpInputHandle } from '@/components/ui/otp-input';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LangSwitcher } from '@/components/lang-switcher';
 import { getAuthProvider } from '@/lib/account-auth-provider';
+import { brandConfig } from '@/lib/brand-config';
+import { ensureBootstrap, getBootstrapGateway } from '@/lib/bootstrap';
 import { useAccountCapabilities } from '@/lib/account-capabilities';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { getOrCreateDeviceId } from '@/lib/device-id';
@@ -66,7 +68,18 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
   // explicitly grants `qrLogin`. BUILTIN never sees it.
   const hasQrTab = capabilities.qrLogin === true;
 
-  const [url, setUrl] = useState(initialUrl ?? 'ws://127.0.0.1:9080/');
+  // 网关解析：调用方显式传入 > bootstrap(动态/缓存) > 品牌静态(BUILTIN) > 本地开发缺省。
+  const [url, setUrl] = useState(
+    initialUrl ?? getBootstrapGateway() ?? (brandConfig.gatewayUrl || 'ws://127.0.0.1:9080/'),
+  );
+  useEffect(() => {
+    // PLATFORM：启动即拉 bootstrap；成功且用户没手工改过网关时刷新为下发值。
+    void ensureBootstrap().then(() => {
+      const g = getBootstrapGateway();
+      if (g !== null && initialUrl === undefined) setUrl((prev) => (prev === g ? prev : g));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // R8.5c: which PLATFORM-mode auth method is active. Persisted in
@@ -85,8 +98,8 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
       </div>
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>{t('login.title')}</CardTitle>
-          <CardDescription>{t('login.description')}</CardDescription>
+          <CardTitle>{brandConfig.appName}</CardTitle>
+          <CardDescription>{brandConfig.tagline !== '' ? brandConfig.tagline : t('login.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {import.meta.env.DEV && (

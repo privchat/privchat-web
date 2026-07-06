@@ -4,6 +4,7 @@ import App from './App';
 import { ThemeProvider } from './app/theme-provider';
 import { ErrorBoundary } from './app/error-boundary';
 import { installGlobalErrorHandlers } from './lib/error-reporter';
+import { applyBrand } from './lib/brand-config';
 import './i18n';
 import './index.css';
 
@@ -11,6 +12,9 @@ import './index.css';
 // promise rejection into the same reporter funnel that the React
 // error boundary uses.
 installGlobalErrorHandlers();
+
+// 白标：document.title + 品牌 CSS 变量（构建期 env 固化）。
+applyBrand();
 
 const rootEl = document.getElementById('root');
 if (rootEl === null) throw new Error('#root element not found in index.html');

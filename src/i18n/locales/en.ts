@@ -415,6 +415,120 @@ export const en: LocaleSchema = {
     days_ago: 'last seen {{count}}d ago',
     long_ago: 'last seen {{date}}',
   },
+  money: {
+    card: {
+      rp_default_greeting: 'Best wishes and prosperity',
+      rp_type_normal: 'Red packet',
+      rp_type_lucky: 'Lucky red packet',
+      rp_open: 'Open red packet',
+      rp_claimed_mine: 'Claimed, added to balance',
+      rp_finished: 'All claimed',
+      rp_expired: 'Expired',
+      tf_title: 'Transfer',
+      tf_to: 'Transfer to {{name}}',
+      tf_from: '{{name}} sent you money',
+      tf_arrived: 'Delivered',
+      tf_saved: 'Added to balance',
+      tf_refunded: 'Refunded',
+      unavailable: '[money message]',
+    },
+    entry: {
+      red_packet: 'Red packet',
+      transfer: 'Transfer',
+      wallet: 'Wallet',
+    },
+    rp: {
+      send_title: 'Send red packet',
+      type_lucky: 'Lucky draw',
+      type_normal: 'Normal',
+      amount_label: 'Total amount (¥)',
+      count_label: 'Count',
+      greeting_label: 'Greeting',
+      greeting_placeholder: 'Best wishes and prosperity',
+      submit: 'Stuff the red packet',
+      submit_ok: 'Red packet sent',
+      expire_hint: 'Unclaimed red packets are refunded after 24 hours',
+      err_amount: 'Please enter a valid amount',
+      err_count: 'Please enter a valid count',
+      err_dm_count: 'Direct chats allow only 1 red packet',
+      err_min_per: 'Amount must cover every packet (at least 1 cent each)',
+      detail_title: 'Red packet',
+      from: "{{name}}'s red packet",
+      claimed_saved: 'Added to wallet balance',
+      open_btn: 'Open',
+      summary_lucky: 'Claimed {{claimed}}/{{total}}, {{claimedAmount}}/{{totalAmount}}',
+      summary_normal: '{{count}} packet(s) totalling {{amount}} — {{status}}',
+      best_luck: '🏆 Best luck',
+      status_refunded_to_you: 'Unclaimed {{amount}} refunded to your wallet',
+      status_all_claimed: 'All claimed',
+      status_expired: 'Expired',
+      status_waiting: 'Waiting to be claimed',
+      status_claimed_by_me: 'Added to wallet balance',
+      status_too_slow: 'Too slow — all claimed',
+      status_claimable: 'Claimable',
+    },
+    tf: {
+      send_title: 'Transfer',
+      to: 'Transfer to {{name}}',
+      amount_label: 'Amount (¥)',
+      remark_label: 'Note',
+      remark_placeholder: 'Optional',
+      next: 'Transfer',
+      confirm_title: 'Confirm transfer to {{name}}',
+      confirm_hint: 'Transfers are instant and cannot be undone. Verify the recipient.',
+      confirm: 'Confirm transfer',
+      cancel: 'Cancel',
+      sent: 'Transfer completed',
+      detail_title: 'Transfer details',
+      status_ok: 'Transfer successful',
+      status_refunded: 'Refunded',
+      field_amount: 'Amount',
+      field_from: 'From',
+      field_to: 'To',
+      field_remark: 'Note',
+      field_time: 'Time',
+      field_order: 'Order ID',
+      dm_only: 'Transfers are direct-chat only',
+      err_amount: 'Please enter a valid amount',
+    },
+    wallet: {
+      title: 'Wallet',
+      available: 'Available',
+      total: 'Balance',
+      frozen: 'Frozen',
+      transactions: 'Transactions',
+      tx_empty: 'No transactions yet',
+      tx_balance_after: 'Balance {{amount}}',
+      load_more: 'Load more',
+      loading: 'Loading…',
+    },
+    biz: {
+      recharge: 'Recharge',
+      recharge_refund: 'Recharge refund',
+      admin_adjust: 'Adjustment',
+      withdraw_freeze: 'Withdrawal hold',
+      withdraw_unfreeze: 'Withdrawal release',
+      withdraw_deduct: 'Withdrawal',
+      withdraw_refund: 'Withdrawal refund',
+      red_packet_send: 'Red packet sent',
+      red_packet_claim: 'Red packet received',
+      red_packet_refund: 'Red packet refund',
+      transfer_out: 'Transfer out',
+      transfer_in: 'Transfer in',
+      transfer_refund: 'Transfer refund',
+      other: 'Balance change',
+    },
+    err: {
+      not_platform: 'Not a platform account',
+      permission: 'Permission denied',
+      not_found: 'Record not found',
+      conflict_or_balance: 'Operation not allowed in the current state, or insufficient balance',
+      bad_params: 'Invalid request, please check and retry',
+      auth_expired: 'Session expired, please sign in again',
+      load_failed: 'Failed to load, please retry',
+      op_failed: 'Operation failed, please retry',
+    },
+  },
 };
 
 export interface LocaleSchema {
@@ -812,5 +926,119 @@ export interface LocaleSchema {
     scan_group_open: string;
     scan_group_pending: string;
     scan_group_unknown_status: string;
+  };
+  money: {
+    card: {
+      rp_default_greeting: string;
+      rp_type_normal: string;
+      rp_type_lucky: string;
+      rp_open: string;
+      rp_claimed_mine: string;
+      rp_finished: string;
+      rp_expired: string;
+      tf_title: string;
+      tf_to: string;
+      tf_from: string;
+      tf_arrived: string;
+      tf_saved: string;
+      tf_refunded: string;
+      unavailable: string;
+    };
+    entry: {
+      red_packet: string;
+      transfer: string;
+      wallet: string;
+    };
+    rp: {
+      send_title: string;
+      type_lucky: string;
+      type_normal: string;
+      amount_label: string;
+      count_label: string;
+      greeting_label: string;
+      greeting_placeholder: string;
+      submit: string;
+      submit_ok: string;
+      expire_hint: string;
+      err_amount: string;
+      err_count: string;
+      err_dm_count: string;
+      err_min_per: string;
+      detail_title: string;
+      from: string;
+      claimed_saved: string;
+      open_btn: string;
+      summary_lucky: string;
+      summary_normal: string;
+      best_luck: string;
+      status_refunded_to_you: string;
+      status_all_claimed: string;
+      status_expired: string;
+      status_waiting: string;
+      status_claimed_by_me: string;
+      status_too_slow: string;
+      status_claimable: string;
+    };
+    tf: {
+      send_title: string;
+      to: string;
+      amount_label: string;
+      remark_label: string;
+      remark_placeholder: string;
+      next: string;
+      confirm_title: string;
+      confirm_hint: string;
+      confirm: string;
+      cancel: string;
+      sent: string;
+      detail_title: string;
+      status_ok: string;
+      status_refunded: string;
+      field_amount: string;
+      field_from: string;
+      field_to: string;
+      field_remark: string;
+      field_time: string;
+      field_order: string;
+      dm_only: string;
+      err_amount: string;
+    };
+    wallet: {
+      title: string;
+      available: string;
+      total: string;
+      frozen: string;
+      transactions: string;
+      tx_empty: string;
+      tx_balance_after: string;
+      load_more: string;
+      loading: string;
+    };
+    biz: {
+      recharge: string;
+      recharge_refund: string;
+      admin_adjust: string;
+      withdraw_freeze: string;
+      withdraw_unfreeze: string;
+      withdraw_deduct: string;
+      withdraw_refund: string;
+      red_packet_send: string;
+      red_packet_claim: string;
+      red_packet_refund: string;
+      transfer_out: string;
+      transfer_in: string;
+      transfer_refund: string;
+      other: string;
+    };
+    err: {
+      not_platform: string;
+      permission: string;
+      not_found: string;
+      conflict_or_balance: string;
+      bad_params: string;
+      auth_expired: string;
+      load_failed: string;
+      op_failed: string;
+    };
   };
 }
