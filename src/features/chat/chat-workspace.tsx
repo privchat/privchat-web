@@ -111,6 +111,9 @@ interface ActiveChannel {
   channelType: number;
   /** Re-mount key so reopening the same channel resets composer/scroll/error. */
   key: number;
+  /** 从联系人打开的新 DM:record 未同步时的 peer 兜底(标题/presence/资金入口)。 */
+  peerUid?: string;
+  peerName?: string;
 }
 
 export function ChatWorkspace({
@@ -158,21 +161,25 @@ export function ChatWorkspace({
 
   const openDirect = useOpenDirectConversation();
 
-  const onSelect = useCallback((channelId: string, channelType: number) => {
+  const onSelect = useCallback((channelId: string, channelType: number, peer?: { uid: string; name?: string }) => {
     setActive((prev) => ({
       channelId,
       channelType,
       key: (prev?.key ?? 0) + 1,
+      peerUid: peer?.uid,
+      peerName: peer?.name,
     }));
   }, []);
 
   const onOpenContact = useCallback(
-    async (user_id: string) => {
+    async (user_id: string, displayName?: string) => {
       if (openingDirectUid !== null) return;
       setOpeningDirectUid(user_id);
       try {
         const { channelId, channelType } = await openDirect(user_id);
-        onSelect(channelId, channelType);
+        // 新建 DM 时 channel record 尚未同步(title=对方uid 拿不到,标题会回退成
+        // channel_id)—— 显式带上 peer 信息,面板即时可用(H5 peer_uid 同款修复)。
+        onSelect(channelId, channelType, { uid: user_id, name: displayName });
         setTab('chats');
       } catch (err) {
         captureException(err, { source: 'chat-workspace.openDirect' });
@@ -259,6 +266,8 @@ export function ChatWorkspace({
               key={active.key}
               channelId={active.channelId}
               channelType={active.channelType}
+              title={active.peerName}
+              peerUidHint={active.peerUid}
               onBack={onBackToList}
             />
           ) : (

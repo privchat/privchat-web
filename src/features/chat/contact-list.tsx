@@ -43,7 +43,7 @@ const ContactFindDialog = lazy(() =>
 );
 
 export interface ContactListProps {
-  onOpen: (user_id: string) => void;
+  onOpen: (user_id: string, displayName?: string) => void;
   openingUid: string | null;
   className?: string;
 }
@@ -141,7 +141,7 @@ export function ContactList({ onOpen, openingUid, className }: ContactListProps)
                 subtitle={friend.subtitle}
                 disabled={openingUid !== null}
                 opening={opening}
-                onSelect={() => onOpen(friend.user_id)}
+                onSelect={() => onOpen(friend.user_id, friend.title)}
               />
             );
           })}

@@ -65,6 +65,8 @@ export interface ConversationPanelProps {
   channelType: number;
   /** Optional title for the panel header. */
   title?: string;
+  /** 新建 DM record 未同步时的对端 uid 兜底(chat-workspace 从联系人打开时传)。 */
+  peerUidHint?: string;
   /**
    * Optional back-navigation handler. When provided, a back button renders
    * in the panel header. Web layout uses this for H5's single-pane mode
@@ -78,6 +80,7 @@ export function ConversationPanel({
   channelId,
   channelType,
   title,
+  peerUidHint,
   onBack,
   className,
 }: ConversationPanelProps) {
@@ -105,7 +108,7 @@ export function ConversationPanel({
       ),
     [records, channelId, channelType],
   );
-  const peerUid = record?.channel_type === 1 ? record.title : undefined;
+  const peerUid = (record?.channel_type === 1 ? record.title : undefined) ?? peerUidHint;
   const userProfile = useUserProfile(peerUid ?? '');
   // BOT_INTERACTION_SPEC §3.1：DM 对端 user_type=2 (Bot) 时显示菜单按钮。
   // System (user_type=1) v1 不显示（系统用户没有 bot service binding）。
