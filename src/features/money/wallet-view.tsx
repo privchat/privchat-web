@@ -80,6 +80,18 @@ export function WalletView() {
         </div>
       )}
 
+      <div className="grid grid-cols-3 gap-2">
+        <Button variant="outline" size="sm" data-testid="wallet-withdraw" onClick={() => money.open({ type: 'withdraw' })}>
+          {t('money.wd.entry_withdraw')}
+        </Button>
+        <Button variant="outline" size="sm" data-testid="wallet-cards" onClick={() => money.open({ type: 'bank-cards' })}>
+          {t('money.wd.entry_cards')}
+        </Button>
+        <Button variant="outline" size="sm" data-testid="wallet-orders" onClick={() => money.open({ type: 'withdraw-orders' })}>
+          {t('money.wd.entry_orders')}
+        </Button>
+      </div>
+
       <div className="text-sm font-semibold">{t('money.wallet.transactions')}</div>
       {err !== null && <p className="text-sm text-destructive">{err}</p>}
       {loaded && items.length === 0 && err === null && (

@@ -533,6 +533,47 @@ export const en: LocaleSchema = {
       load_more: 'Load more',
       loading: 'Loading…',
     },
+    wd: {
+      entry_withdraw: 'Withdraw',
+      entry_cards: 'Bank cards',
+      entry_orders: 'Withdrawals',
+      cards_title: 'My bank cards',
+      cards_empty: 'No bank card bound yet',
+      add_card: 'Add bank card',
+      delete_card: 'Delete',
+      delete_confirm: 'Delete bank card {{card}}?',
+      bind_title: 'Add bank card',
+      holder_ph: 'Cardholder name',
+      bank_ph: 'Bank name',
+      bank_code_ph: 'Bank code (optional)',
+      card_no_ph: 'Card number',
+      bind_submit: 'Bind',
+      withdraw_title: 'Withdraw',
+      available: 'Available {{amount}}',
+      amount_ph: 'Amount (yuan)',
+      exceed_available: 'Exceeds available balance',
+      select_card: 'Payout card',
+      need_card: 'Bind a bank card first',
+      submit: 'Submit withdrawal',
+      freeze_hint: 'Funds are frozen after submission pending review and payout',
+      orders_title: 'Withdrawal history',
+      orders_empty: 'No withdrawals yet',
+      detail_title: 'Withdrawal detail',
+      f_amount: 'Amount',
+      f_fee: 'Fee',
+      f_actual: 'Actual payout',
+      f_status: 'Status',
+      f_time: 'Requested at',
+      f_reason: 'Reason',
+      status_0: 'Pending review',
+      status_1: 'Approved',
+      status_2: 'Processing',
+      status_3: 'Paid',
+      status_4: 'Rejected',
+      status_5: 'Failed',
+      status_6: 'Cancelled',
+      status_unknown: 'Unknown',
+    },
     biz: {
       recharge: 'Recharge',
       recharge_refund: 'Recharge refund',
@@ -1075,6 +1116,47 @@ export interface LocaleSchema {
       tx_balance_after: string;
       load_more: string;
       loading: string;
+    };
+    wd: {
+      entry_withdraw: string;
+      entry_cards: string;
+      entry_orders: string;
+      cards_title: string;
+      cards_empty: string;
+      add_card: string;
+      delete_card: string;
+      delete_confirm: string;
+      bind_title: string;
+      holder_ph: string;
+      bank_ph: string;
+      bank_code_ph: string;
+      card_no_ph: string;
+      bind_submit: string;
+      withdraw_title: string;
+      available: string;
+      amount_ph: string;
+      exceed_available: string;
+      select_card: string;
+      need_card: string;
+      submit: string;
+      freeze_hint: string;
+      orders_title: string;
+      orders_empty: string;
+      detail_title: string;
+      f_amount: string;
+      f_fee: string;
+      f_actual: string;
+      f_status: string;
+      f_time: string;
+      f_reason: string;
+      status_0: string;
+      status_1: string;
+      status_2: string;
+      status_3: string;
+      status_4: string;
+      status_5: string;
+      status_6: string;
+      status_unknown: string;
     };
     biz: {
       recharge: string;

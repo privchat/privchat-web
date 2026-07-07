@@ -4,6 +4,7 @@
 // Amounts are integer cents (分). Display strings are i18n KEYS here — the
 // UI layer translates (web is fully i18n'd, unlike H5's inline zh).
 import {
+  deleteAuthedEnvelope,
   getEnvelope,
   postAuthedEnvelope,
   requireData,
@@ -320,4 +321,140 @@ export function mapWalletErrorKey(err: unknown, isLoad: boolean): string {
     }
   }
   return isLoad ? 'money.err.load_failed' : 'money.err.op_failed';
+}
+
+// ── Bank cards & withdraw (P4 user-side loop, aligned with App/H5) ──────────
+
+export interface BankCard {
+  id: number;
+  userId: number;
+  holderName: string;
+  bankName: string;
+  bankCode?: string;
+  cardNoMasked: string;
+  status: number;
+  createdAt?: string;
+}
+
+/** Withdraw order (user view, cents). Internal review fields are not exposed. */
+export interface WithdrawOrder {
+  id: number;
+  bankCardId: number;
+  amount: number;
+  fee: number;
+  actualAmount: number;
+  currency: string;
+  /** 0=pending review 1=approved 2=processing 3=paid 4=rejected 5=failed 6=cancelled */
+  status: number;
+  /** User-visible reject/failure reason. */
+  freezeRemarkUserVisible?: string;
+  createdAt?: string;
+  reviewedAt: number;
+  paidAt: number;
+}
+
+export interface WithdrawPage {
+  list: WithdrawOrder[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface BindBankCardInput {
+  holderName: string;
+  bankName: string;
+  bankCode?: string;
+  cardNo: string;
+}
+
+// kotlinx encodeDefaults=false: default-valued fields (status=0, fee=0 …) are
+// absent from the wire JSON — normalize before use.
+function toWithdrawOrder(o: Partial<WithdrawOrder>): WithdrawOrder {
+  return {
+    id: 0,
+    bankCardId: 0,
+    amount: 0,
+    fee: 0,
+    actualAmount: 0,
+    currency: 'CNY',
+    status: 0,
+    reviewedAt: 0,
+    paidAt: 0,
+    ...o,
+  };
+}
+
+/** GET /wallet/bank-cards/list */
+export async function listBankCards(): Promise<BankCard[]> {
+  const { baseUrl, token } = activePlatform();
+  const cards = (await getEnvelope<Partial<BankCard>[]>(`${baseUrl}/wallet/bank-cards/list`, token)) ?? [];
+  return cards.map((c) => ({ id: 0, userId: 0, holderName: '', bankName: '', cardNoMasked: '', status: 0, ...c }));
+}
+
+/** POST /wallet/bank-cards/bind — field presence is validated by the UI. */
+export async function bindBankCard(input: BindBankCardInput): Promise<BankCard> {
+  const { baseUrl, token } = activePlatform();
+  return requireData(
+    await postAuthedEnvelope<BankCard>(`${baseUrl}/wallet/bank-cards/bind`, token, {
+      holderName: input.holderName.trim(),
+      bankName: input.bankName.trim(),
+      bankCode: input.bankCode?.trim() || undefined,
+      cardNo: input.cardNo.trim(),
+    }),
+    'wallet.bind-card',
+  );
+}
+
+/** DELETE /wallet/bank-cards/delete/{id} */
+export async function deleteBankCard(id: number): Promise<void> {
+  const { baseUrl, token } = activePlatform();
+  await deleteAuthedEnvelope<boolean>(`${baseUrl}/wallet/bank-cards/delete/${id}`, token);
+}
+
+/** POST /wallet/withdraw/create — freezes funds on submit (PENDING), payout after review. */
+export async function createWithdraw(input: { bankCardId: number; amount: number }): Promise<WithdrawOrder> {
+  const { baseUrl, token } = activePlatform();
+  return toWithdrawOrder(
+    requireData(
+      await postAuthedEnvelope<Partial<WithdrawOrder>>(`${baseUrl}/wallet/withdraw/create`, token, {
+        bankCardId: input.bankCardId,
+        amount: input.amount,
+        currency: 'CNY',
+      }),
+      'wallet.create-withdraw',
+    ),
+  );
+}
+
+/** GET /wallet/withdraw/list?pageNo&pageSize */
+export async function listWithdrawOrders(pageNo = 1, pageSize = 50): Promise<WithdrawPage> {
+  const { baseUrl, token } = activePlatform();
+  const data = await getEnvelope<{ list?: Partial<WithdrawOrder>[]; total?: number; page?: number; size?: number; totalPages?: number }>(
+    `${baseUrl}/wallet/withdraw/list?pageNo=${pageNo}&pageSize=${pageSize}`,
+    token,
+  );
+  return {
+    list: (data?.list ?? []).map(toWithdrawOrder),
+    total: data?.total ?? 0,
+    page: data?.page ?? pageNo,
+    size: data?.size ?? pageSize,
+    totalPages: data?.totalPages ?? 0,
+  };
+}
+
+/** GET /wallet/withdraw/detail/{id} */
+export async function getWithdrawDetail(id: number): Promise<WithdrawOrder> {
+  const { baseUrl, token } = activePlatform();
+  return toWithdrawOrder(
+    requireData(
+      await getEnvelope<Partial<WithdrawOrder>>(`${baseUrl}/wallet/withdraw/detail/${id}`, token),
+      'wallet.withdraw-detail',
+    ),
+  );
+}
+
+/** Withdraw status → i18n key (labels aligned with App/H5). */
+export function withdrawStatusKey(status: number): string {
+  return status >= 0 && status <= 6 ? `money.wd.status_${status}` : 'money.wd.status_unknown';
 }

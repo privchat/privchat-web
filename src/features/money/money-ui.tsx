@@ -9,13 +9,38 @@ import { RedPacketDetailView } from './rp-detail';
 import { TransferSendView } from './tf-send';
 import { TransferDetailView } from './tf-detail';
 import { WalletView } from './wallet-view';
+import {
+  BankCardsView,
+  BindCardView,
+  WithdrawView,
+  WithdrawOrdersView,
+  WithdrawDetailView,
+} from './withdraw-views';
 
 export type MoneyView =
   | { type: 'rp-send'; channelId: string; channelType: number }
   | { type: 'rp-detail'; id: string }
   | { type: 'tf-send'; channelId: string; toUserId: string; toName: string }
   | { type: 'tf-detail'; id: string }
-  | { type: 'wallet' };
+  | { type: 'wallet' }
+  | { type: 'bank-cards' }
+  | { type: 'bind-card' }
+  | { type: 'withdraw' }
+  | { type: 'withdraw-orders' }
+  | { type: 'withdraw-detail'; id: number };
+
+const TITLE_KEYS: Record<MoneyView['type'], string> = {
+  'rp-send': 'money.rp.send_title',
+  'rp-detail': 'money.rp.detail_title',
+  'tf-send': 'money.tf.send_title',
+  'tf-detail': 'money.tf.detail_title',
+  wallet: 'money.wallet.title',
+  'bank-cards': 'money.wd.cards_title',
+  'bind-card': 'money.wd.bind_title',
+  withdraw: 'money.wd.withdraw_title',
+  'withdraw-orders': 'money.wd.orders_title',
+  'withdraw-detail': 'money.wd.detail_title',
+};
 
 interface MoneyUi {
   open: (view: MoneyView) => void;
@@ -35,18 +60,7 @@ export function MoneyDialogsProvider({ children }: { children: React.ReactNode }
   const close = useCallback(() => setView(null), []);
   const api = useMemo(() => ({ open, close }), [open, close]);
 
-  const title =
-    view === null
-      ? ''
-      : view.type === 'rp-send'
-        ? t('money.rp.send_title')
-        : view.type === 'rp-detail'
-          ? t('money.rp.detail_title')
-          : view.type === 'tf-send'
-            ? t('money.tf.send_title')
-            : view.type === 'tf-detail'
-              ? t('money.tf.detail_title')
-              : t('money.wallet.title');
+  const title = view === null ? '' : t(TITLE_KEYS[view.type]);
 
   return (
     <MoneyUiContext.Provider value={api}>
@@ -71,6 +85,11 @@ export function MoneyDialogsProvider({ children }: { children: React.ReactNode }
             )}
             {view?.type === 'tf-detail' && <TransferDetailView transferId={view.id} />}
             {view?.type === 'wallet' && <WalletView />}
+            {view?.type === 'bank-cards' && <BankCardsView />}
+            {view?.type === 'bind-card' && <BindCardView />}
+            {view?.type === 'withdraw' && <WithdrawView />}
+            {view?.type === 'withdraw-orders' && <WithdrawOrdersView />}
+            {view?.type === 'withdraw-detail' && <WithdrawDetailView orderId={view.id} />}
           </div>
         </DialogContent>
       </Dialog>
