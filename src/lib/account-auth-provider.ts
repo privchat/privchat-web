@@ -64,6 +64,10 @@ export interface SmsLoginInput {
   mobile: string;
   smsCode: string;
   device: DeviceInfo;
+  /** 邀请码(MEMBER_INVITE_CODE:仅新注册生效;老用户登录忽略) */
+  inviteCode?: string;
+  /** 注册直填昵称(填了跳过 complete_profile) */
+  nickname?: string;
 }
 
 export interface SendSmsCodeInput {

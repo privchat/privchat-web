@@ -26,6 +26,7 @@ import type {
   SendSmsCodeInput,
   SendSmsCodeResult,
   SmsLoginInput,
+  DeviceInfo,
 } from './account-auth-provider';
 import type { RequiredAction } from './required-action';
 import { normalizePlatformBaseUrl } from './platform-base-url';
@@ -106,6 +107,8 @@ export class PlatformAuthProvider implements AccountAuthProvider {
           mobile: input.mobile,
           smsCode: input.smsCode,
           device: serializeDevice(input.device),
+          ...(input.inviteCode ? { inviteCode: input.inviteCode } : {}),
+          ...(input.nickname ? { nickname: input.nickname } : {}),
         },
       ),
       'sms-login',
@@ -121,6 +124,69 @@ export class PlatformAuthProvider implements AccountAuthProvider {
       platformBaseUrl: baseUrl,
       refreshToken: data.refreshToken,
       // Wire-defense: server omits empty arrays.
+      requiredActions: data.requiredActions ?? [],
+    };
+  }
+
+  /** USERNAME_PASSWORD 注册(MEMBER_INVITE_CODE §5.1)。 */
+  async registerWithUsername(input: {
+    serverUrl: string;
+    platformBaseUrl: string;
+    username: string;
+    password: string;
+    nickname?: string;
+    inviteCode?: string;
+    device: DeviceInfo;
+  }): Promise<LoginResult> {
+    const baseUrl = normalizePlatformBaseUrl(input.platformBaseUrl);
+    const data = requireData(
+      await postEnvelope<UnifiedLoginResponseData>(`${baseUrl}/auth/register`, {
+        mode: 'USERNAME_PASSWORD',
+        username: input.username,
+        password: input.password,
+        ...(input.nickname ? { nickname: input.nickname } : {}),
+        ...(input.inviteCode ? { inviteCode: input.inviteCode } : {}),
+        device: serializeDevice(input.device),
+      }),
+      'register',
+    );
+    return {
+      serverUrl: input.serverUrl,
+      userId: String(data.userId),
+      accessToken: data.accessToken,
+      deviceId: data.deviceId,
+      accountMode: 'platform',
+      platformBaseUrl: baseUrl,
+      refreshToken: data.refreshToken,
+      requiredActions: data.requiredActions ?? [],
+    };
+  }
+
+  /** 账号密码登录。 */
+  async loginWithUsername(input: {
+    serverUrl: string;
+    platformBaseUrl: string;
+    username: string;
+    password: string;
+    device: DeviceInfo;
+  }): Promise<LoginResult> {
+    const baseUrl = normalizePlatformBaseUrl(input.platformBaseUrl);
+    const data = requireData(
+      await postEnvelope<UnifiedLoginResponseData>(`${baseUrl}/auth/login-username`, {
+        username: input.username,
+        password: input.password,
+        device: serializeDevice(input.device),
+      }),
+      'login-username',
+    );
+    return {
+      serverUrl: input.serverUrl,
+      userId: String(data.userId),
+      accessToken: data.accessToken,
+      deviceId: data.deviceId,
+      accountMode: 'platform',
+      platformBaseUrl: baseUrl,
+      refreshToken: data.refreshToken,
       requiredActions: data.requiredActions ?? [],
     };
   }
