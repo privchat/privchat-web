@@ -38,6 +38,7 @@ import {
   ScanLine,
   Volume2,
   VolumeX,
+  Ticket,
   Wallet,
 } from 'lucide-react';
 import {
@@ -62,6 +63,7 @@ import { SidebarTabs, type SidebarTab } from './sidebar-tabs';
 import { Avatar } from './avatar';
 import { ProfileCard } from './profile-card';
 import { useMoneyUi } from '@/features/money/money-ui';
+import { InviteBindDialog } from '@/features/profile/invite-bind-dialog';
 import { getConfiguredAccountMode } from '@/lib/account-mode';
 import { brandConfig } from '@/lib/brand-config';
 import { useTabBadge } from './use-tab-badge';
@@ -344,6 +346,7 @@ function TopBar({
   const seed = uid !== undefined && uid !== '' ? `u:${uid}` : 'self';
   const [myQrOpen, setMyQrOpen] = useState(false);
   const moneyUi = useMoneyUi();
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [scanQrOpen, setScanQrOpen] = useState(false);
 
   return (
@@ -374,6 +377,21 @@ function TopBar({
             errorI18nKey={switchError?.i18nKey ?? null}
             onDismissError={clearSwitchError}
           />
+        )}
+        {getConfiguredAccountMode() === 'platform' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setInviteOpen(true)}
+            aria-label={t('invite.entry')}
+            title={t('invite.entry')}
+            data-testid="topbar-invite"
+          >
+            <Ticket className="h-4 w-4" />
+          </Button>
+        )}
+        {getConfiguredAccountMode() === 'platform' && (
+          <InviteBindDialog open={inviteOpen} onOpenChange={setInviteOpen} />
         )}
         {getConfiguredAccountMode() === 'platform' && (
           <Button

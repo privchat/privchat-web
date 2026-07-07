@@ -17,7 +17,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { LangSwitcher } from '@/components/lang-switcher';
 import { getAuthProvider } from '@/lib/account-auth-provider';
 import { brandConfig } from '@/lib/brand-config';
-import { ensureBootstrap, getBootstrapGateway } from '@/lib/bootstrap';
+import { ensureBootstrap, getBootstrapAuth, getBootstrapGateway } from '@/lib/bootstrap';
 import { useAccountCapabilities } from '@/lib/account-capabilities';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { getOrCreateDeviceId } from '@/lib/device-id';
@@ -84,7 +84,15 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
   const [error, setError] = useState<string | null>(null);
   // R8.5c: which PLATFORM-mode auth method is active. Persisted in
   // component state (not URL) — fresh on each login attempt.
-  const [activeTab, setActiveTab] = useState<'sms' | 'qr'>('sms');
+  const [activeTab, setActiveTab] = useState<'sms' | 'qr' | 'password'>('sms');
+  // 注册策略(MEMBER_INVITE_CODE §5.0):bootstrap 异步返回后刷新(缓存命中首帧即正确)。
+  const [authCfg, setAuthCfg] = useState(() => getBootstrapAuth());
+  useEffect(() => {
+    void ensureBootstrap().then(() => setAuthCfg(getBootstrapAuth()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const hasPasswordTab =
+    isSmsMode && authCfg.registerModes.includes('USERNAME_PASSWORD');
   // R8.5c: monotonic counter the QR panel reads as `sessionEpoch`
   // so re-selecting the QR tab restarts the session (the panel
   // stays mounted to preserve the in-flight cleanup hook).
@@ -114,9 +122,11 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
             </FormRow>
           )}
 
-          {isSmsMode && hasQrTab ? (
+          {isSmsMode && (hasQrTab || hasPasswordTab) ? (
             <AuthMethodTabs
               active={activeTab}
+              hasQr={hasQrTab}
+              hasPassword={hasPasswordTab}
               onChange={(next) => {
                 setActiveTab(next);
                 setError(null);
@@ -131,6 +141,16 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
                 serverUrl={url}
                 onLoggedIn={onLoggedIn}
                 sessionEpoch={qrEpoch}
+              />
+            ) : activeTab === 'password' && hasPasswordTab ? (
+              <PlatformPasswordForm
+                serverUrl={url}
+                busy={busy}
+                setBusy={setBusy}
+                setError={setError}
+                onLoggedIn={onLoggedIn}
+                inviteCodeRequired={authCfg.inviteCodeRequired}
+                nicknameRequired={authCfg.nicknameRequired}
               />
             ) : (
               <PlatformSmsForm
@@ -311,6 +331,147 @@ function BuiltinPasswordForm({
  *  server's 6-digit code length (and existing `sms_code_placeholder`
  *  copy). Change here and in `OtpInput` callers if the server moves. */
 const OTP_LENGTH = 6;
+
+/** 账号密码 登录/注册(MEMBER_INVITE_CODE §5.1)。注册态加昵称/邀请码(与昵称同级)。 */
+function PlatformPasswordForm({
+  serverUrl,
+  busy,
+  setBusy,
+  setError,
+  onLoggedIn,
+  inviteCodeRequired,
+  nicknameRequired,
+}: FormBranchProps & { inviteCodeRequired: boolean; nicknameRequired: boolean }) {
+  const { t } = useTranslation();
+  const [registerMode, setRegisterMode] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+
+  const submit = async () => {
+    if (username.trim() === '' || password === '') return;
+    if (registerMode && password.length < 8) {
+      setError(t('login.password_new_ph'));
+      return;
+    }
+    if (registerMode && inviteCodeRequired && inviteCode.trim() === '') {
+      setError(t('login.invite_code_required_ph'));
+      return;
+    }
+    if (registerMode && nicknameRequired && nickname.trim() === '') {
+      setError(t('login.nickname_required_ph'));
+      return;
+    }
+    const baseUrl = getPlatformBaseUrl();
+    if (baseUrl === null) {
+      setError(t('login.error_config'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const provider = await getAuthProvider();
+      const result = registerMode
+        ? await (provider.registerWithUsername ??
+            (() => Promise.reject(new Error('register unsupported'))))({
+            serverUrl,
+            platformBaseUrl: baseUrl,
+            username: username.trim(),
+            password,
+            nickname: nickname.trim() || undefined,
+            inviteCode: inviteCode.trim() || undefined,
+            device: makeDevice(),
+          })
+        : await (provider.loginWithUsername ??
+            (() => Promise.reject(new Error('login unsupported'))))({
+            serverUrl,
+            platformBaseUrl: baseUrl,
+            username: username.trim(),
+            password,
+            device: makeDevice(),
+          });
+      onLoggedIn(
+        {
+          url: result.serverUrl,
+          user_id: result.userId,
+          access_token: result.accessToken,
+          device_id: result.deviceId,
+          account_mode: result.accountMode,
+          ...(result.platformBaseUrl !== undefined
+            ? { platform_base_url: result.platformBaseUrl }
+            : {}),
+          ...(result.refreshToken !== undefined
+            ? { refresh_token: result.refreshToken }
+            : {}),
+        },
+        result.requiredActions,
+      );
+    } catch (e) {
+      setError(getLoginErrorMessage(e, 'login', t));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3" data-testid="password-form">
+      <Input
+        value={username}
+        onChange={(e) => setUsername(e.currentTarget.value)}
+        placeholder={t('login.username_ph')}
+        autoComplete="username"
+        disabled={busy}
+        data-testid="password-username"
+      />
+      <Input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.currentTarget.value)}
+        placeholder={registerMode ? t('login.password_new_ph') : t('login.password_ph')}
+        autoComplete={registerMode ? 'new-password' : 'current-password'}
+        disabled={busy}
+        data-testid="password-password"
+      />
+      {registerMode && (
+        <>
+          <Input
+            value={nickname}
+            onChange={(e) => setNickname(e.currentTarget.value)}
+            placeholder={nicknameRequired ? t('login.nickname_required_ph') : t('login.nickname_ph')}
+            maxLength={24}
+            disabled={busy}
+            data-testid="password-nickname"
+          />
+          <Input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.currentTarget.value.toUpperCase())}
+            placeholder={inviteCodeRequired ? t('login.invite_code_required_ph') : t('login.invite_code_ph')}
+            maxLength={32}
+            disabled={busy}
+            data-testid="password-invite-code"
+          />
+        </>
+      )}
+      <Button
+        className="w-full"
+        onClick={() => void submit()}
+        disabled={busy || username.trim() === '' || password === ''}
+        data-testid="password-submit"
+      >
+        {registerMode ? t('login.register_btn') : t('login.login')}
+      </Button>
+      <button
+        type="button"
+        className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
+        onClick={() => setRegisterMode((v) => !v)}
+        data-testid="password-toggle-register"
+      >
+        {registerMode ? t('login.to_login') : t('login.to_register')}
+      </button>
+    </div>
+  );
+}
 
 function PlatformSmsForm({
   serverUrl,
@@ -593,15 +754,20 @@ function pickDefaultCountry(): CountryEntry {
 
 function AuthMethodTabs({
   active,
+  hasQr,
+  hasPassword,
   onChange,
 }: {
-  active: 'sms' | 'qr';
-  onChange: (next: 'sms' | 'qr') => void;
+  active: 'sms' | 'qr' | 'password';
+  hasQr: boolean;
+  hasPassword: boolean;
+  onChange: (next: 'sms' | 'qr' | 'password') => void;
 }) {
   const { t } = useTranslation();
+  const cols = 1 + (hasQr ? 1 : 0) + (hasPassword ? 1 : 0);
   return (
     <div
-      className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1"
+      className={cn('grid gap-1 rounded-md bg-muted p-1', cols === 3 ? 'grid-cols-3' : 'grid-cols-2')}
       role="tablist"
       data-testid="login-tabs"
     >
@@ -612,13 +778,24 @@ function AuthMethodTabs({
       >
         {t('login.sms_tab')}
       </TabButton>
-      <TabButton
-        active={active === 'qr'}
-        onClick={() => onChange('qr')}
-        testId="login-tab-qr"
-      >
-        {t('login.qr_tab')}
-      </TabButton>
+      {hasPassword && (
+        <TabButton
+          active={active === 'password'}
+          onClick={() => onChange('password')}
+          testId="login-tab-password"
+        >
+          {t('login.password_tab')}
+        </TabButton>
+      )}
+      {hasQr && (
+        <TabButton
+          active={active === 'qr'}
+          onClick={() => onChange('qr')}
+          testId="login-tab-qr"
+        >
+          {t('login.qr_tab')}
+        </TabButton>
+      )}
     </div>
   );
 }

@@ -4,8 +4,36 @@
 import { getPlatformBaseUrl } from './account-mode';
 
 const CACHE_KEY = 'privchat.bootstrap.gateways';
+const AUTH_CACHE_KEY = 'privchat.bootstrap.auth';
 let dynamicGateways: string[] = [];
 let fetchedThisRun = false;
+
+/** 注册策略(MEMBER_INVITE_CODE §5.0)。encodeDefaults=false:缺席字段用默认。 */
+export interface BootstrapAuth {
+  registerModes: string[];
+  defaultRegisterMode: string;
+  inviteCodeRequired: boolean;
+  nicknameRequired: boolean;
+}
+
+const DEFAULT_AUTH: BootstrapAuth = {
+  registerModes: ['PHONE_SMS'],
+  defaultRegisterMode: 'PHONE_SMS',
+  inviteCodeRequired: false,
+  nicknameRequired: false,
+};
+
+let dynamicAuth: BootstrapAuth | null = null;
+
+/** 当前注册策略(动态 > 缓存 > 默认)。 */
+export function getBootstrapAuth(): BootstrapAuth {
+  if (dynamicAuth !== null) return dynamicAuth;
+  try {
+    const raw = localStorage.getItem(AUTH_CACHE_KEY);
+    if (raw !== null) return { ...DEFAULT_AUTH, ...(JSON.parse(raw) as Partial<BootstrapAuth>) };
+  } catch { /* 忽略 */ }
+  return DEFAULT_AUTH;
+}
 
 function isWsGateway(url: string): boolean {
   return url.startsWith('ws://') || url.startsWith('wss://');
@@ -40,7 +68,14 @@ export async function ensureBootstrap(): Promise<void> {
       signal: controller.signal,
     });
     clearTimeout(timer);
-    const data = (await resp.json()) as { code?: number; data?: { gateways?: string[] } };
+    const data = (await resp.json()) as {
+      code?: number;
+      data?: { gateways?: string[]; auth?: Partial<BootstrapAuth> };
+    };
+    if (data.code === 0 && data.data?.auth !== undefined) {
+      dynamicAuth = { ...DEFAULT_AUTH, ...data.data.auth };
+      try { localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(dynamicAuth)); } catch { /* 忽略 */ }
+    }
     if (data.code === 0 && data.data?.gateways !== undefined) {
       const ws = data.data.gateways.filter(isWsGateway);
       if (ws.length > 0) {

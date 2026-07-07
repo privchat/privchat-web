@@ -48,6 +48,17 @@ export const en: LocaleSchema = {
     error_config: 'Platform configuration error. Contact your administrator.',
     qr_tab: 'Scan QR',
     sms_tab: 'SMS',
+    password_tab: 'Account',
+    username_ph: 'Username (starts with a letter, 3-32)',
+    password_ph: 'Password',
+    password_new_ph: 'Password (min 8 chars)',
+    nickname_ph: 'Nickname (optional)',
+    nickname_required_ph: 'Nickname',
+    invite_code_ph: 'Invite code (optional)',
+    invite_code_required_ph: 'Invite code',
+    to_register: "No account? Create one",
+    to_login: 'Have an account? Sign in',
+    register_btn: 'Create account',
     qr_loading: 'Generating QR code…',
     qr_waiting_title: 'Scan with PrivChat',
     qr_waiting_subtitle: 'Open PrivChat on your phone, tap "Scan", and point at this QR code.',
@@ -417,6 +428,24 @@ export const en: LocaleSchema = {
     days_ago: 'last seen {{count}}d ago',
     long_ago: 'last seen {{date}}',
   },
+  invite: {
+    title: 'Invite code',
+    entry: 'Invite code',
+    input_ph: 'Enter invite code',
+    bind_btn: 'Bind invite code',
+    bound_code: 'Invite code',
+    bound_inviter: 'Inviter',
+    bound_at: 'Bound at',
+    bound_hint: 'Each account can bind one invite code; it cannot be changed.',
+    bind_hint: 'Bind an inviter-owned code to become friends automatically.',
+    success_friend: 'Bound — you are now friends with the inviter',
+    success: 'Invite code bound',
+    err_already: 'You have already bound an invite code',
+    err_self: 'You cannot bind your own invite code',
+    err_invalid: 'Invite code is invalid or expired',
+    err_failed: 'Failed to bind, please retry',
+    loading: 'Loading…',
+  },
   money: {
     card: {
       rp_default_greeting: 'Best wishes and prosperity',
@@ -576,6 +605,17 @@ export interface LocaleSchema {
     error_config: string;
     qr_tab: string;
     sms_tab: string;
+    password_tab: string;
+    username_ph: string;
+    password_ph: string;
+    password_new_ph: string;
+    nickname_ph: string;
+    nickname_required_ph: string;
+    invite_code_ph: string;
+    invite_code_required_ph: string;
+    to_register: string;
+    to_login: string;
+    register_btn: string;
     qr_loading: string;
     qr_waiting_title: string;
     qr_waiting_subtitle: string;
@@ -930,6 +970,24 @@ export interface LocaleSchema {
     scan_group_open: string;
     scan_group_pending: string;
     scan_group_unknown_status: string;
+  };
+  invite: {
+    title: string;
+    entry: string;
+    input_ph: string;
+    bind_btn: string;
+    bound_code: string;
+    bound_inviter: string;
+    bound_at: string;
+    bound_hint: string;
+    bind_hint: string;
+    success_friend: string;
+    success: string;
+    err_already: string;
+    err_self: string;
+    err_invalid: string;
+    err_failed: string;
+    loading: string;
   };
   money: {
     card: {

@@ -134,6 +134,26 @@ export interface AccountAuthProvider {
    *  from a prior `sendSmsCode` call. First-time login on a
    *  mobile auto-registers (server-side; no separate UX). */
   loginWithSms?(input: SmsLoginInput): Promise<LoginResult>;
+
+  /** USERNAME_PASSWORD 注册(MEMBER_INVITE_CODE §5.1;PLATFORM only)。 */
+  registerWithUsername?(input: {
+    serverUrl: string;
+    platformBaseUrl: string;
+    username: string;
+    password: string;
+    nickname?: string;
+    inviteCode?: string;
+    device: DeviceInfo;
+  }): Promise<LoginResult>;
+
+  /** 账号密码登录(PLATFORM only)。 */
+  loginWithUsername?(input: {
+    serverUrl: string;
+    platformBaseUrl: string;
+    username: string;
+    password: string;
+    device: DeviceInfo;
+  }): Promise<LoginResult>;
   /** Refresh the access token from a persisted session. PLATFORM
    *  hits the application `/auth/refresh-token` endpoint and
    *  returns a freshened `PersistedSession` blob (refresh token
