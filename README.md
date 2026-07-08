@@ -127,6 +127,27 @@ on the proxied `/app` host.
 | `npm run test:e2e:ui` | Playwright UI mode |
 | `npm run test:e2e:virtual` | Playwright with the virtual timeline enabled |
 
+## Brand (white-label) build & deploy
+
+Brand single source of truth is the app repo's `privchat/config/profiles/<brand>.json`
+(spec: privchat-docs `04-client/WHITE_LABEL_BRANDING.md`):
+
+```bash
+# profile JSON → .env.<brand> (never hand-maintain env files)
+node scripts/gen-web-env.mjs fushou
+# brand production build; the postbuild hook emits dist/version.json
+npm run build -- --mode fushou
+```
+
+Note: keep version.json generation in the npm `postbuild` hook — chaining it with
+`&&` inside the build script makes `npm run build -- --mode <brand>` deliver the
+mode flag to the wrong command and vite silently builds the default brand.
+
+Deploy is a whole-directory static swap (prod nginx root `/data/apps/privchat-web`,
+extract to `.new` then atomic mv). `dist/version.json` (buildId) drives the
+"new version available" prompt: the app compares it every 5 minutes and on
+visibilitychange, offering a refresh; see privchat-docs `06-ops/DEPLOYMENT_SPEC.md` §11.
+
 ## Architecture
 
 The host (this app) owns the `PrivchatClient` instance and drives its
