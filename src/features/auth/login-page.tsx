@@ -149,8 +149,6 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
                 setBusy={setBusy}
                 setError={setError}
                 onLoggedIn={onLoggedIn}
-                inviteCodeRequired={authCfg.inviteCodeRequired}
-                nicknameRequired={authCfg.nicknameRequired}
               />
             ) : (
               <PlatformSmsForm
@@ -339,28 +337,18 @@ function PlatformPasswordForm({
   setBusy,
   setError,
   onLoggedIn,
-  inviteCodeRequired,
-  nicknameRequired,
-}: FormBranchProps & { inviteCodeRequired: boolean; nicknameRequired: boolean }) {
+}: FormBranchProps) {
   const { t } = useTranslation();
+  // Register collects username+password only; nickname / invite code are
+  // completed post-login via required-actions (complete_profile / bind_invite_code).
   const [registerMode, setRegisterMode] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
 
   const submit = async () => {
     if (username.trim() === '' || password === '') return;
     if (registerMode && password.length < 8) {
       setError(t('login.password_new_ph'));
-      return;
-    }
-    if (registerMode && inviteCodeRequired && inviteCode.trim() === '') {
-      setError(t('login.invite_code_required_ph'));
-      return;
-    }
-    if (registerMode && nicknameRequired && nickname.trim() === '') {
-      setError(t('login.nickname_required_ph'));
       return;
     }
     const baseUrl = getPlatformBaseUrl();
@@ -379,8 +367,6 @@ function PlatformPasswordForm({
             platformBaseUrl: baseUrl,
             username: username.trim(),
             password,
-            nickname: nickname.trim() || undefined,
-            inviteCode: inviteCode.trim() || undefined,
             device: makeDevice(),
           })
         : await (provider.loginWithUsername ??
@@ -433,26 +419,6 @@ function PlatformPasswordForm({
         disabled={busy}
         data-testid="password-password"
       />
-      {registerMode && (
-        <>
-          <Input
-            value={nickname}
-            onChange={(e) => setNickname(e.currentTarget.value)}
-            placeholder={nicknameRequired ? t('login.nickname_required_ph') : t('login.nickname_ph')}
-            maxLength={24}
-            disabled={busy}
-            data-testid="password-nickname"
-          />
-          <Input
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.currentTarget.value.toUpperCase())}
-            placeholder={inviteCodeRequired ? t('login.invite_code_required_ph') : t('login.invite_code_ph')}
-            maxLength={32}
-            disabled={busy}
-            data-testid="password-invite-code"
-          />
-        </>
-      )}
       <Button
         className="w-full"
         onClick={() => void submit()}

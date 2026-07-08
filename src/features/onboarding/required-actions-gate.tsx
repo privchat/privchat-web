@@ -41,6 +41,7 @@ import {
 } from '@/lib/required-actions-pending';
 import { captureException } from '@/lib/error-reporter';
 import { CompleteProfileAction } from './complete-profile-action';
+import { BindInviteCodeAction } from './bind-invite-code-action';
 import { UnsupportedRequiredActionPage } from './unsupported-required-action-page';
 
 export interface RequiredActionsGateProps {
@@ -181,9 +182,17 @@ export function RequiredActionsGate({
   }
 
   if (state.kind === 'pending') {
-    // v1: only `complete_profile` is handlable, so head-of-queue is
-    // always that action. R8.5+ will dispatch by `action` machine name.
+    // Dispatch by `action` machine name (head-of-queue first; completing
+    // one re-lists, so the queue drains in server order).
     const head = state.actions[0]!;
+    if (head.action === 'bind_invite_code') {
+      return (
+        <BindInviteCodeAction
+          accountKey={accountKey}
+          onCompleted={handleActionCompleted}
+        />
+      );
+    }
     return (
       <CompleteProfileAction
         action={head}

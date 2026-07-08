@@ -419,6 +419,8 @@ export const zhCN: LocaleSchema = {
     long_ago: '{{date}} 在线',
   },
   invite: {
+    required_subtitle: '需要填写邀请码才能继续使用',
+    binding: '绑定中…',
     title: '填写邀请码',
     entry: '填写邀请码',
     input_ph: '请输入邀请码',

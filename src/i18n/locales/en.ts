@@ -429,6 +429,8 @@ export const en: LocaleSchema = {
     long_ago: 'last seen {{date}}',
   },
   invite: {
+    required_subtitle: 'An invite code is required to continue',
+    binding: 'Binding…',
     title: 'Invite code',
     entry: 'Invite code',
     input_ph: 'Enter invite code',
@@ -1013,6 +1015,8 @@ export interface LocaleSchema {
     scan_group_unknown_status: string;
   };
   invite: {
+    required_subtitle: string;
+    binding: string;
     title: string;
     entry: string;
     input_ph: string;

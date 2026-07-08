@@ -35,7 +35,7 @@ export interface RequiredAction {
 }
 
 /** v1 known action types this client knows how to handle. R8.5+ extends. */
-const HANDLABLE_ACTIONS = new Set<string>(['complete_profile']);
+const HANDLABLE_ACTIONS = new Set<string>(['complete_profile', 'bind_invite_code']);
 
 /** True iff this build can dispatch to a concrete handler component. */
 export function isHandlableAction(action: string): boolean {

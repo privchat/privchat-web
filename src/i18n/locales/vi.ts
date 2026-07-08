@@ -433,6 +433,8 @@ export const vi: LocaleSchema = {
     long_ago: 'truy cập {{date}}',
   },
   invite: {
+    required_subtitle: 'Cần nhập mã mời để tiếp tục',
+    binding: 'Đang liên kết…',
     title: 'Mã mời',
     entry: 'Mã mời',
     input_ph: 'Nhập mã mời',
