@@ -35,6 +35,10 @@ export function getLoginErrorMessage(
       if (message.includes('ACCOUNT_DISABLED') || message.includes('Account is disabled')) {
         return t('login.error_account_disabled');
       }
+      if (message.includes('USERNAME_TAKEN')) return t('login.error_username_taken');
+      if (message.includes('USERNAME_RESERVED')) return t('login.error_username_reserved');
+      if (message.includes('INVALID_USERNAME_FORMAT')) return t('login.error_username_format');
+      if (message.includes('PASSWORD_TOO_SHORT')) return t('login.error_password_short');
       return message;
     case 'PlatformHttpError':
       return t('login.error_network');

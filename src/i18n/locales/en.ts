@@ -49,6 +49,10 @@ export const en: LocaleSchema = {
     error_invalid_mobile: 'Please enter a valid mobile number, e.g. +8613800138000',
     error_send_sms: 'Send code: {{message}}',
     error_sms_login: 'SMS login: {{message}}',
+    error_username_taken: 'This username is already taken.',
+    error_username_reserved: 'This username is unavailable. Please choose another.',
+    error_username_format: 'Invalid username format (lowercase letter first, 3-32 chars).',
+    error_password_short: 'Password must be at least 8 characters.',
     error_invalid_credentials: 'Incorrect username or password.',
     error_account_disabled: 'This account has been disabled.',
     error_network: 'Network error. Please try again later.',
@@ -658,6 +662,10 @@ export interface LocaleSchema {
     error_send_sms: string;
     error_sms_login: string;
     error_network: string;
+    error_username_taken: string;
+    error_username_reserved: string;
+    error_username_format: string;
+    error_password_short: string;
     error_invalid_credentials: string;
     error_account_disabled: string;
     error_protocol: string;
