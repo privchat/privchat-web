@@ -41,7 +41,7 @@ export function InviteBindDialog({
   }, [open, uid]);
 
   const submit = async () => {
-    const trimmed = code.trim().toUpperCase();
+    const trimmed = code.trim();
     if (trimmed === '' || busy) return;
     setBusy(true);
     setMsg(null);
@@ -114,7 +114,7 @@ export function InviteBindDialog({
           <div className="space-y-3">
             <Input
               value={code}
-              onChange={(e) => setCode(e.currentTarget.value.toUpperCase())}
+              onChange={(e) => setCode(e.currentTarget.value)}
               placeholder={t('invite.input_ph')}
               maxLength={32}
               disabled={busy}

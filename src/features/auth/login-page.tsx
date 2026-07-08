@@ -93,6 +93,13 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
   }, []);
   const hasPasswordTab =
     isSmsMode && authCfg.registerModes.includes('USERNAME_PASSWORD');
+  const hasSmsTab = !isSmsMode || authCfg.registerModes.includes('PHONE_SMS');
+  // bootstrap 异步返回后收敛:当前 tab 模式被平台关掉时切到可用模式(单模式部署)。
+  useEffect(() => {
+    if (activeTab === 'sms' && !hasSmsTab && hasPasswordTab) setActiveTab('password');
+    if (activeTab === 'password' && !hasPasswordTab && hasSmsTab) setActiveTab('sms');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authCfg]);
   // R8.5c: monotonic counter the QR panel reads as `sessionEpoch`
   // so re-selecting the QR tab restarts the session (the panel
   // stays mounted to preserve the in-flight cleanup hook).
@@ -125,6 +132,7 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
           {isSmsMode && (hasQrTab || hasPasswordTab) ? (
             <AuthMethodTabs
               active={activeTab}
+              hasSms={hasSmsTab}
               hasQr={hasQrTab}
               hasPassword={hasPasswordTab}
               onChange={(next) => {
@@ -142,7 +150,7 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
                 onLoggedIn={onLoggedIn}
                 sessionEpoch={qrEpoch}
               />
-            ) : activeTab === 'password' && hasPasswordTab ? (
+            ) : (activeTab === 'password' || !hasSmsTab) && hasPasswordTab ? (
               <PlatformPasswordForm
                 serverUrl={url}
                 busy={busy}
@@ -720,30 +728,37 @@ function pickDefaultCountry(): CountryEntry {
 
 function AuthMethodTabs({
   active,
+  hasSms,
   hasQr,
   hasPassword,
   onChange,
 }: {
   active: 'sms' | 'qr' | 'password';
+  hasSms: boolean;
   hasQr: boolean;
   hasPassword: boolean;
   onChange: (next: 'sms' | 'qr' | 'password') => void;
 }) {
   const { t } = useTranslation();
-  const cols = 1 + (hasQr ? 1 : 0) + (hasPassword ? 1 : 0);
+  const cols = (hasSms ? 1 : 0) + (hasQr ? 1 : 0) + (hasPassword ? 1 : 0);
   return (
     <div
-      className={cn('grid gap-1 rounded-md bg-muted p-1', cols === 3 ? 'grid-cols-3' : 'grid-cols-2')}
+      className={cn(
+        'grid gap-1 rounded-md bg-muted p-1',
+        cols === 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1',
+      )}
       role="tablist"
       data-testid="login-tabs"
     >
-      <TabButton
-        active={active === 'sms'}
-        onClick={() => onChange('sms')}
-        testId="login-tab-sms"
-      >
-        {t('login.sms_tab')}
-      </TabButton>
+      {hasSms && (
+        <TabButton
+          active={active === 'sms'}
+          onClick={() => onChange('sms')}
+          testId="login-tab-sms"
+        >
+          {t('login.sms_tab')}
+        </TabButton>
+      )}
       {hasPassword && (
         <TabButton
           active={active === 'password'}

@@ -39,7 +39,7 @@ export function BindInviteCodeAction({
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    const trimmed = code.trim().toUpperCase();
+    const trimmed = code.trim();
     if (trimmed === '' || busy) return;
     const userId = loadRegistry()?.accounts[accountKey]?.user_id ?? '';
     if (userId === '') {
@@ -82,7 +82,7 @@ export function BindInviteCodeAction({
               id="onboarding-invite-code"
               autoFocus
               value={code}
-              onChange={(e) => setCode(e.currentTarget.value.toUpperCase())}
+              onChange={(e) => setCode(e.currentTarget.value)}
               placeholder={t('invite.input_ph')}
               maxLength={32}
               disabled={busy}
