@@ -43,6 +43,8 @@ export const en: LocaleSchema = {
     error_invalid_mobile: 'Please enter a valid mobile number, e.g. +8613800138000',
     error_send_sms: 'Send code: {{message}}',
     error_sms_login: 'SMS login: {{message}}',
+    error_invalid_credentials: 'Incorrect username or password.',
+    error_account_disabled: 'This account has been disabled.',
     error_network: 'Network error. Please try again later.',
     error_protocol: 'Unexpected response from server. Please try again later.',
     error_config: 'Platform configuration error. Contact your administrator.',
@@ -644,6 +646,8 @@ export interface LocaleSchema {
     error_send_sms: string;
     error_sms_login: string;
     error_network: string;
+    error_invalid_credentials: string;
+    error_account_disabled: string;
     error_protocol: string;
     error_config: string;
     qr_tab: string;

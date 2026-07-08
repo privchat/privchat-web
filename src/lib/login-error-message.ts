@@ -27,8 +27,14 @@ export function getLoginErrorMessage(
 
   switch (name) {
     case 'PlatformApiError':
-      // Server-side validation message is already localized /
-      // user-facing per application convention. Surface verbatim.
+      // Machine codes map to localized copy; other server validation
+      // messages are user-facing per application convention.
+      if (message.includes('INVALID_CREDENTIALS') || /username or password/i.test(message)) {
+        return t('login.error_invalid_credentials');
+      }
+      if (message.includes('ACCOUNT_DISABLED') || message.includes('Account is disabled')) {
+        return t('login.error_account_disabled');
+      }
       return message;
     case 'PlatformHttpError':
       return t('login.error_network');

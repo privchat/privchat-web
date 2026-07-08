@@ -39,6 +39,8 @@ export const zhCN: LocaleSchema = {
     error_invalid_mobile: '请输入正确的手机号，例如 +8613800138000',
     error_send_sms: '发送验证码失败：{{message}}',
     error_sms_login: '短信登录失败：{{message}}',
+    error_invalid_credentials: '账号或密码错误',
+    error_account_disabled: '该账号已被禁用',
     error_network: '网络异常，请稍后重试。',
     error_protocol: '服务返回异常，请稍后重试。',
     error_config: '平台配置错误，请联系管理员。',

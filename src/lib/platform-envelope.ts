@@ -50,6 +50,17 @@ export async function postEnvelope<T>(
     );
   }
   if (!response.ok) {
+    // Business errors (4xx) still carry the JSON envelope (code/message):
+    // surface the business code so the UI can map localized copy; only
+    // non-envelope bodies (e.g. gateway 502 HTML) become transport errors.
+    try {
+      const env = (await response.json()) as PlatformEnvelope<unknown>;
+      if (env && typeof env.code === 'number' && env.code !== 0) {
+        throw new PlatformApiError(env.code, env.message ?? `code=${env.code}`);
+      }
+    } catch (err) {
+      if (err instanceof PlatformApiError) throw err;
+    }
     throw new PlatformHttpError(
       response.status,
       `HTTP ${response.status} from ${url}`,
@@ -158,6 +169,17 @@ export async function postMultipartEnvelope<T>(
     );
   }
   if (!response.ok) {
+    // Business errors (4xx) still carry the JSON envelope (code/message):
+    // surface the business code so the UI can map localized copy; only
+    // non-envelope bodies (e.g. gateway 502 HTML) become transport errors.
+    try {
+      const env = (await response.json()) as PlatformEnvelope<unknown>;
+      if (env && typeof env.code === 'number' && env.code !== 0) {
+        throw new PlatformApiError(env.code, env.message ?? `code=${env.code}`);
+      }
+    } catch (err) {
+      if (err instanceof PlatformApiError) throw err;
+    }
     throw new PlatformHttpError(
       response.status,
       `HTTP ${response.status} from ${url}`,
@@ -217,6 +239,17 @@ async function requestEnvelope<T>(
     );
   }
   if (!response.ok) {
+    // Business errors (4xx) still carry the JSON envelope (code/message):
+    // surface the business code so the UI can map localized copy; only
+    // non-envelope bodies (e.g. gateway 502 HTML) become transport errors.
+    try {
+      const env = (await response.json()) as PlatformEnvelope<unknown>;
+      if (env && typeof env.code === 'number' && env.code !== 0) {
+        throw new PlatformApiError(env.code, env.message ?? `code=${env.code}`);
+      }
+    } catch (err) {
+      if (err instanceof PlatformApiError) throw err;
+    }
     throw new PlatformHttpError(
       response.status,
       `HTTP ${response.status} from ${url}`,

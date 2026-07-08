@@ -44,6 +44,8 @@ export const vi: LocaleSchema = {
     error_invalid_mobile: 'Vui lòng nhập số điện thoại hợp lệ, ví dụ +84901234567',
     error_send_sms: 'Gửi mã thất bại: {{message}}',
     error_sms_login: 'Đăng nhập SMS thất bại: {{message}}',
+    error_invalid_credentials: 'Tên đăng nhập hoặc mật khẩu không đúng',
+    error_account_disabled: 'Tài khoản này đã bị vô hiệu hóa',
     error_network: 'Lỗi mạng, vui lòng thử lại sau.',
     error_protocol: 'Phản hồi máy chủ bất thường, vui lòng thử lại sau.',
     error_config: 'Lỗi cấu hình nền tảng, vui lòng liên hệ quản trị viên.',
