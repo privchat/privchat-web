@@ -8,6 +8,12 @@ export const zhCN: LocaleSchema = {
     unknown_user: '用户 #{{id}}',
     unknown_group: '群 #{{id}}',
   },
+  update: {
+    title: '新版本可用',
+    desc: '点击刷新以获取最新版本',
+    refresh: '刷新',
+    cancel: '取消',
+  },
   login: {
     title: 'PrivChat',
     description: '请登录或注册新账号继续。',

@@ -12,7 +12,8 @@
     "check:i18n": "node scripts/check-i18n-keys.mjs",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:virtual": "VITE_PRIVCHAT_VIRTUAL_TIMELINE=1 playwright test"
+    "test:e2e:virtual": "VITE_PRIVCHAT_VIRTUAL_TIMELINE=1 playwright test",
+    "postbuild": "node scripts/gen-version.mjs"
   },
   "dependencies": {
     "@privchat/react": "file:../privchat-react",

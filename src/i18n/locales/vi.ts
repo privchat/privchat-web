@@ -13,6 +13,12 @@ export const vi: LocaleSchema = {
     unknown_user: 'Người dùng #{{id}}',
     unknown_group: 'Nhóm #{{id}}',
   },
+  update: {
+    title: 'Có phiên bản mới',
+    desc: 'Làm mới để nhận phiên bản mới nhất',
+    refresh: 'Làm mới',
+    cancel: 'Hủy',
+  },
   login: {
     title: 'PrivChat',
     description: 'Đăng nhập để tiếp tục, hoặc đăng ký tài khoản mới.',

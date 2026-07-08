@@ -1,6 +1,7 @@
 import { StrictMode, type ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { UpdatePrompt } from './components/update-prompt';
 import { ThemeProvider } from './app/theme-provider';
 import { ErrorBoundary } from './app/error-boundary';
 import { installGlobalErrorHandlers } from './lib/error-reporter';
@@ -38,6 +39,7 @@ async function bootstrap() {
       <ErrorBoundary>
         <ThemeProvider>
           <Root />
+          <UpdatePrompt />
         </ThemeProvider>
       </ErrorBoundary>
     </StrictMode>,

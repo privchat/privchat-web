@@ -12,6 +12,12 @@ export const en: LocaleSchema = {
     unknown_user: 'User #{{id}}',
     unknown_group: 'Group #{{id}}',
   },
+  update: {
+    title: 'New version available',
+    desc: 'Refresh to get the latest version',
+    refresh: 'Refresh',
+    cancel: 'Cancel',
+  },
   login: {
     title: 'PrivChat',
     description: 'Sign in to continue, or create a new account.',
@@ -614,6 +620,12 @@ export interface LocaleSchema {
     system_notifications: string;
     unknown_user: string;
     unknown_group: string;
+  };
+  update: {
+    title: string;
+    desc: string;
+    refresh: string;
+    cancel: string;
   };
   login: {
     title: string;
