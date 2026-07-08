@@ -223,10 +223,10 @@ export class PlatformProfileProvider implements AccountProfileProvider {
     }
     const form = new FormData();
     form.append('businessType', 'member_avatar');
-    // Browser-native File carries its own name + mime, which it passes
-    // through FormData automatically. Server's `AppFileController` reads
-    // the file-part headers; no extra setup needed here.
-    form.append('file', file);
+    // Force a safe filename: original names with CJK/quotes/semicolons can
+    // break multipart Content-Disposition parsing (MISSING_FILE_FIELD).
+    const ext = (file.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    form.append('file', file, `avatar.${ext}`);
     return requireData(
       await postMultipartEnvelope<UploadedFile>(
         `${this.baseUrl}/infra/file/upload`,
