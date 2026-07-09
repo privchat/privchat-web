@@ -2,9 +2,9 @@ import type { LocaleSchema } from './en';
 
 export const zhCN: LocaleSchema = {
   app: {
-    name: 'PrivChat',
+    name: '{{brand}}',
     loading: '加载中…',
-    system_notifications: '系统通知',
+    system_notifications: '系统消息',
     unknown_user: '用户 #{{id}}',
     unknown_group: '群 #{{id}}',
   },
@@ -15,7 +15,7 @@ export const zhCN: LocaleSchema = {
     cancel: '取消',
   },
   login: {
-    title: 'PrivChat',
+    title: '{{brand}}',
     description: '请登录或注册新账号继续。',
     gateway_url: '网关地址',
     username: '用户名',
@@ -68,7 +68,7 @@ export const zhCN: LocaleSchema = {
     to_login: '已有账号？去登录',
     register_btn: '注册并登录',
     qr_loading: '正在生成二维码…',
-    qr_waiting_title: '使用 PrivChat 扫码',
+    qr_waiting_title: '使用 {{brand}} App 扫码',
     qr_waiting_subtitle: '打开手机 App，进入"扫一扫"，对准下方二维码。',
     qr_expires_in: '{{seconds}} 秒后过期',
     qr_scanned_title: '已扫码',
@@ -85,7 +85,7 @@ export const zhCN: LocaleSchema = {
   onboarding: {
     splash_loading: '正在检查待办事项…',
     complete_profile: {
-      title: '欢迎使用 PrivChat',
+      title: '欢迎使用 {{brand}}',
       subtitle: '设置一个昵称，方便朋友识别你。',
       nickname_label: '昵称',
       nickname_placeholder: '请输入 2-32 个字符',
@@ -100,8 +100,8 @@ export const zhCN: LocaleSchema = {
     },
     unsupported: {
       title: '需要更新客户端',
-      message: '你的账号需要完成「{{title}}」，但当前版本暂不支持。请升级 PrivChat 到最新版本后继续使用。',
-      message_fallback: '你的账号需要完成一项当前版本暂不支持的必需操作。请升级 PrivChat 到最新版本后继续使用。',
+      message: '你的账号需要完成「{{title}}」，但当前版本暂不支持。请升级 App 到最新版本后继续使用。',
+      message_fallback: '你的账号需要完成一项当前版本暂不支持的必需操作。请升级 App 到最新版本后继续使用。',
       reload: '已升级，重新加载',
       logout: '退出登录',
     },
@@ -236,8 +236,8 @@ export const zhCN: LocaleSchema = {
     scan_input_label: '粘贴你扫到的或别人分享的链接。',
     scan_submit: '打开',
     scan_reset: '完成',
-    scan_not_privchat: '这不是一个 PrivChat 链接。',
-    scan_unsupported: 'PrivChat 链接 "{{entity}}/{{action}}" 当前版本不支持，请升级。',
+    scan_not_privchat: '无法识别的二维码链接。',
+    scan_unsupported: '链接 "{{entity}}/{{action}}" 当前版本不支持，请升级。',
     scan_user_self: '这是你自己的二维码。',
     scan_user_open_chat: '打开聊天',
     scan_user_send_message: '发送消息',

@@ -8,6 +8,7 @@ import { initReactI18next } from 'react-i18next';
 import { en } from './locales/en';
 import { zhCN } from './locales/zh-CN';
 import { vi } from './locales/vi';
+import { brandConfig } from '@/lib/brand-config';
 
 export type SupportedLanguage = 'en' | 'zh-CN' | 'vi';
 
@@ -27,6 +28,8 @@ void i18n
     supportedLngs: SUPPORTED_LANGUAGES,
     fallbackLng: 'en',
     interpolation: {
+      // 品牌名插值:文案里用 {{brand}},白标包自动替换(brandConfig 单一真源)
+      defaultVariables: { brand: brandConfig.appName },
       escapeValue: false, // React handles XSS escaping
     },
     detection: {

@@ -7,9 +7,9 @@ import type { LocaleSchema } from './en';
 // "liên hệ" for "contacts", "nhóm" for "group" etc.
 export const vi: LocaleSchema = {
   app: {
-    name: 'PrivChat',
+    name: '{{brand}}',
     loading: 'Đang tải…',
-    system_notifications: 'Thông báo hệ thống',
+    system_notifications: 'Tin nhắn hệ thống',
     unknown_user: 'Người dùng #{{id}}',
     unknown_group: 'Nhóm #{{id}}',
   },
@@ -20,7 +20,7 @@ export const vi: LocaleSchema = {
     cancel: 'Hủy',
   },
   login: {
-    title: 'PrivChat',
+    title: '{{brand}}',
     description: 'Đăng nhập để tiếp tục, hoặc đăng ký tài khoản mới.',
     gateway_url: 'Địa chỉ máy chủ',
     username: 'Tên đăng nhập',
@@ -73,8 +73,8 @@ export const vi: LocaleSchema = {
     to_login: 'Đã có tài khoản? Đăng nhập',
     register_btn: 'Đăng ký và đăng nhập',
     qr_loading: 'Đang tạo mã QR…',
-    qr_waiting_title: 'Quét bằng PrivChat',
-    qr_waiting_subtitle: 'Mở PrivChat trên điện thoại, chọn "Quét", và hướng vào mã QR bên dưới.',
+    qr_waiting_title: 'Quét bằng ứng dụng {{brand}}',
+    qr_waiting_subtitle: 'Mở {{brand}} trên điện thoại, chọn "Quét", và hướng vào mã QR bên dưới.',
     qr_expires_in: 'Hết hạn sau {{seconds}}s',
     qr_scanned_title: 'Đã quét mã',
     qr_scanned_subtitle: 'Nhấn "Xác nhận" trên điện thoại để hoàn tất đăng nhập.',
@@ -90,7 +90,7 @@ export const vi: LocaleSchema = {
   onboarding: {
     splash_loading: 'Đang kiểm tra tài khoản…',
     complete_profile: {
-      title: 'Chào mừng đến PrivChat',
+      title: 'Chào mừng đến {{brand}}',
       subtitle: 'Đặt biệt danh để bạn bè dễ nhận ra bạn.',
       nickname_label: 'Biệt danh',
       nickname_placeholder: 'Nhập 2-32 ký tự',
@@ -105,8 +105,8 @@ export const vi: LocaleSchema = {
     },
     unsupported: {
       title: 'Cần cập nhật ứng dụng',
-      message: 'Tài khoản của bạn cần hoàn tất "{{title}}", nhưng phiên bản hiện tại chưa hỗ trợ. Vui lòng cập nhật PrivChat để tiếp tục.',
-      message_fallback: 'Tài khoản của bạn cần hoàn tất một thao tác bắt buộc mà phiên bản hiện tại chưa hỗ trợ. Vui lòng cập nhật PrivChat để tiếp tục.',
+      message: 'Tài khoản của bạn cần hoàn tất "{{title}}", nhưng phiên bản hiện tại chưa hỗ trợ. Vui lòng cập nhật ứng dụng để tiếp tục.',
+      message_fallback: 'Tài khoản của bạn cần hoàn tất một thao tác bắt buộc mà phiên bản hiện tại chưa hỗ trợ. Vui lòng cập nhật ứng dụng để tiếp tục.',
       reload: 'Đã cập nhật, tải lại',
       logout: 'Đăng xuất',
     },
@@ -241,8 +241,8 @@ export const vi: LocaleSchema = {
     scan_input_label: 'Dán URL bạn đã quét hoặc nhận được.',
     scan_submit: 'Mở',
     scan_reset: 'Xong',
-    scan_not_privchat: 'Đây không phải liên kết PrivChat.',
-    scan_unsupported: 'Liên kết PrivChat "{{entity}}/{{action}}" không được hỗ trợ trong phiên bản hiện tại. Vui lòng cập nhật ứng dụng.',
+    scan_not_privchat: 'Liên kết QR không được nhận dạng.',
+    scan_unsupported: 'Liên kết "{{entity}}/{{action}}" không được hỗ trợ trong phiên bản hiện tại. Vui lòng cập nhật ứng dụng.',
     scan_user_self: 'Đây là mã QR của chính bạn.',
     scan_user_open_chat: 'Mở cuộc trò chuyện',
     scan_user_send_message: 'Gửi tin nhắn',

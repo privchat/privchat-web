@@ -6,9 +6,9 @@
 // type explicitly without `as const`.
 export const en: LocaleSchema = {
   app: {
-    name: 'PrivChat',
+    name: '{{brand}}',
     loading: 'Loading…',
-    system_notifications: 'System Notifications',
+    system_notifications: 'System Messages',
     unknown_user: 'User #{{id}}',
     unknown_group: 'Group #{{id}}',
   },
@@ -19,7 +19,7 @@ export const en: LocaleSchema = {
     cancel: 'Cancel',
   },
   login: {
-    title: 'PrivChat',
+    title: '{{brand}}',
     description: 'Sign in to continue, or create a new account.',
     gateway_url: 'Gateway URL',
     username: 'Username',
@@ -72,8 +72,8 @@ export const en: LocaleSchema = {
     to_login: 'Have an account? Sign in',
     register_btn: 'Create account',
     qr_loading: 'Generating QR code…',
-    qr_waiting_title: 'Scan with PrivChat',
-    qr_waiting_subtitle: 'Open PrivChat on your phone, tap "Scan", and point at this QR code.',
+    qr_waiting_title: 'Scan with the {{brand}} app',
+    qr_waiting_subtitle: 'Open {{brand}} on your phone, tap "Scan", and point at this QR code.',
     qr_expires_in: 'Expires in {{seconds}}s',
     qr_scanned_title: 'QR scanned',
     qr_scanned_subtitle: 'Tap "Confirm" on your phone to finish signing in.',
@@ -89,7 +89,7 @@ export const en: LocaleSchema = {
   onboarding: {
     splash_loading: 'Checking your account…',
     complete_profile: {
-      title: 'Welcome to PrivChat',
+      title: 'Welcome to {{brand}}',
       subtitle: 'Choose a nickname so your friends can recognize you.',
       nickname_label: 'Nickname',
       nickname_placeholder: 'Between 2 and 32 characters',
@@ -104,8 +104,8 @@ export const en: LocaleSchema = {
     },
     unsupported: {
       title: 'Client update required',
-      message: 'Your account needs to complete "{{title}}", but the current build does not support it yet. Please update PrivChat to continue.',
-      message_fallback: 'Your account needs to complete a required action that the current build does not support yet. Please update PrivChat to continue.',
+      message: 'Your account needs to complete "{{title}}", but the current build does not support it yet. Please update the app to continue.',
+      message_fallback: 'Your account needs to complete a required action that the current build does not support yet. Please update the app to continue.',
       reload: 'I updated, reload now',
       logout: 'Sign out',
     },
@@ -245,8 +245,8 @@ export const en: LocaleSchema = {
     scan_input_label: 'Paste the URL you scanned or received.',
     scan_submit: 'Open',
     scan_reset: 'Done',
-    scan_not_privchat: 'This URL is not a PrivChat link.',
-    scan_unsupported: 'PrivChat link "{{entity}}/{{action}}" is not supported by this version. Please update the app.',
+    scan_not_privchat: 'Unrecognized QR link.',
+    scan_unsupported: 'Link "{{entity}}/{{action}}" is not supported by this version. Please update the app.',
     scan_user_self: 'This is your own QR code.',
     scan_user_open_chat: 'Open chat',
     scan_user_send_message: 'Send a message',
