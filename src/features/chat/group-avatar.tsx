@@ -88,7 +88,7 @@ export function GroupAvatar({
   className,
 }: GroupAvatarProps) {
   const { listMembers } = useGroupOps();
-  const hasUrl = avatarUrl !== undefined && avatarUrl !== '';
+  const hasUrl = typeof avatarUrl === 'string' && avatarUrl !== '';
   // state 带 channelId 标记，切换群时不闪上一个群的九宫格；
   // 渲染值优先读同步缓存，命中则首帧即出格子。
   const [loaded, setLoaded] = useState<{
@@ -183,7 +183,7 @@ function NineGrid({
 function MemberCell({ member, cell }: { member: GroupMember; cell: number }) {
   const [imgFailed, setImgFailed] = useState(false);
   const radius = cell * 0.12;
-  if (member.avatar_url !== undefined && member.avatar_url !== '' && !imgFailed) {
+  if (typeof member.avatar_url === 'string' && member.avatar_url !== '' && !imgFailed) {
     return (
       <img
         src={member.avatar_url}

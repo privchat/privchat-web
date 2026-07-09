@@ -31,7 +31,7 @@ const SIZE_CLS: Record<NonNullable<AvatarProps['size']>, string> = {
 
 export function Avatar({ seed, label, src, size = 'md', className }: AvatarProps) {
   const [imgFailed, setImgFailed] = useState(false);
-  if (src !== undefined && src !== '' && !imgFailed) {
+  if (typeof src === 'string' && src !== '' && !imgFailed) {
     return (
       <img
         src={src}
