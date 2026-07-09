@@ -151,8 +151,9 @@ function NineGrid({
   className?: string;
 }) {
   // 固定 3x3 九格：无论成员多少格子恒 9 个，从左上按行填，空位画浅色空格块。
-  const pad = S * 0.04;
-  const gap = S * 0.04;
+  // 微信风：外边距偏大、格间距很小、格子直角（无圆角，省渲染）。
+  const pad = S * 0.09;
+  const gap = S * 0.02;
   const cell = (S - 2 * pad - 2 * gap) / 3;
 
   return (
@@ -177,7 +178,6 @@ function NineGrid({
                 style={{
                   width: cell,
                   height: cell,
-                  borderRadius: cell * 0.12,
                   backgroundColor: '#edeff2',
                 }}
               />
@@ -191,7 +191,6 @@ function NineGrid({
 
 function MemberCell({ member, cell }: { member: GroupMember; cell: number }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const radius = cell * 0.12;
   if (typeof member.avatar_url === 'string' && member.avatar_url !== '' && !imgFailed) {
     return (
       <img
@@ -199,7 +198,7 @@ function MemberCell({ member, cell }: { member: GroupMember; cell: number }) {
         alt=""
         onError={() => setImgFailed(true)}
         className="shrink-0 object-cover"
-        style={{ width: cell, height: cell, borderRadius: radius }}
+        style={{ width: cell, height: cell }}
       />
     );
   }
@@ -211,7 +210,6 @@ function MemberCell({ member, cell }: { member: GroupMember; cell: number }) {
       style={{
         width: cell,
         height: cell,
-        borderRadius: radius,
         fontSize: cell * 0.5,
         lineHeight: 1,
         backgroundColor: `hsl(${hashHue(`u:${member.user_id}`)} 62% 36%)`,
