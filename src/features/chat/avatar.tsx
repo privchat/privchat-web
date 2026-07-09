@@ -1,10 +1,12 @@
 // Avatar — first-letter placeholder with a hue derived from the seed.
 //
-// Real avatar URLs land in a later phase; for now we render a colored
-// circle with the first character of the label (or seed). Two avatars
-// for the SAME seed always look the same; different seeds get visibly
-// different hues so eyes can scan a list quickly.
+// Renders `src` as an <img> when provided (falling back to the colored
+// circle on load failure). Otherwise we render a colored circle with the
+// first character of the label (or seed). Two avatars for the SAME seed
+// always look the same; different seeds get visibly different hues so
+// eyes can scan a list quickly.
 
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface AvatarProps {
@@ -14,6 +16,8 @@ export interface AvatarProps {
   /** Display label — first non-whitespace character is used as the
    *  glyph. Falls back to the first char of the seed if empty. */
   label?: string;
+  /** 头像图片地址；加载失败时回退到色块首字。 */
+  src?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
@@ -25,7 +29,23 @@ const SIZE_CLS: Record<NonNullable<AvatarProps['size']>, string> = {
   xl: 'h-16 w-16 text-xl',
 };
 
-export function Avatar({ seed, label, size = 'md', className }: AvatarProps) {
+export function Avatar({ seed, label, src, size = 'md', className }: AvatarProps) {
+  const [imgFailed, setImgFailed] = useState(false);
+  if (src !== undefined && src !== '' && !imgFailed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        onError={() => setImgFailed(true)}
+        className={cn(
+          'inline-block shrink-0 select-none rounded-full object-cover shadow-sm',
+          SIZE_CLS[size],
+          className,
+        )}
+        aria-hidden="true"
+      />
+    );
+  }
   const glyph = pickGlyph(label ?? seed);
   const hue = hashHue(seed);
   return (
@@ -35,7 +55,7 @@ export function Avatar({ seed, label, size = 'md', className }: AvatarProps) {
         SIZE_CLS[size],
         className,
       )}
-      style={{ backgroundColor: `hsl(${hue} 60% 50%)` }}
+      style={{ backgroundColor: `hsl(${hue} 62% 36%)` }}
       aria-hidden="true"
     >
       {glyph}
@@ -43,7 +63,7 @@ export function Avatar({ seed, label, size = 'md', className }: AvatarProps) {
   );
 }
 
-function pickGlyph(s: string): string {
+export function pickGlyph(s: string): string {
   const trimmed = s.trim();
   if (trimmed === '') return '?';
   // Use Array.from so emoji / surrogate pairs / wide CJK render as one glyph.
@@ -51,12 +71,16 @@ function pickGlyph(s: string): string {
   return first.toUpperCase();
 }
 
-function hashHue(seed: string): number {
-  // Deterministic FNV-1a 32-bit hash → mapped to 0..359.
+const utf8 = new TextEncoder();
+
+export function hashHue(seed: string): number {
+  // FNV-1a 32-bit over UTF-8 bytes → mapped to 0..359.
+  // 三端统一算法（62% 36% 白字配套），参数勿改。
+  const bytes = utf8.encode(seed);
   let h = 0x811c9dc5;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
+  for (const b of bytes) {
+    h ^= b;
+    h = Math.imul(h, 0x01000193) >>> 0;
   }
-  return Math.abs(h) % 360;
+  return h % 360;
 }

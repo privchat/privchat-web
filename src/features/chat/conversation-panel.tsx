@@ -132,6 +132,9 @@ export function ConversationPanel({
   }, [record, userProfile, friendship, groupProfile, peerUid, titleI18n]);
   const headerTitle = title ?? resolvedTitle?.title ?? channelId;
   const isDirect = record?.channel_type === 1;
+  // 群标题带人数「名称 (N)」；member_count 是 best-effort 缓存，>0 才显示。
+  const groupMemberCount =
+    record?.channel_type === 2 ? (groupProfile?.member_count ?? 0) : 0;
   // Pull presence for direct chats; the header subtitle and the
   // profile-card popover share this single fetch.
   const presence = usePresence(isDirect ? peerUid : undefined);
@@ -529,7 +532,11 @@ export function ConversationPanel({
               className="flex min-w-0 flex-col items-start text-left rounded-md px-1 -mx-1 hover:bg-accent/50"
               onClick={() => setGroupInfoOpen(true)}
             >
-              <span className="truncate text-sm font-semibold">{headerTitle}</span>
+              <span className="truncate text-sm font-semibold">
+                {groupMemberCount > 0
+                  ? `${headerTitle} (${groupMemberCount})`
+                  : headerTitle}
+              </span>
             </button>
           )}
         </div>

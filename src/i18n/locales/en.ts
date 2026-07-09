@@ -10,7 +10,7 @@ export const en: LocaleSchema = {
     loading: 'Loading…',
     system_notifications: 'System Messages',
     unknown_user: 'User #{{id}}',
-    unknown_group: 'Group #{{id}}',
+    unknown_group: 'Group Chat',
   },
   update: {
     title: 'New version available',

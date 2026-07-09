@@ -6,7 +6,7 @@ export const zhCN: LocaleSchema = {
     loading: '加载中…',
     system_notifications: '系统消息',
     unknown_user: '用户 #{{id}}',
-    unknown_group: '群 #{{id}}',
+    unknown_group: '群聊',
   },
   update: {
     title: '新版本可用',

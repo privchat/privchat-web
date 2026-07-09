@@ -11,7 +11,7 @@ export const vi: LocaleSchema = {
     loading: 'Đang tải…',
     system_notifications: 'Tin nhắn hệ thống',
     unknown_user: 'Người dùng #{{id}}',
-    unknown_group: 'Nhóm #{{id}}',
+    unknown_group: 'Nhóm chat',
   },
   update: {
     title: 'Có phiên bản mới',

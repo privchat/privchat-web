@@ -28,6 +28,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useConversationTitleI18n } from './use-title-i18n';
 import { Avatar } from './avatar';
+import { GroupAvatar } from './group-avatar';
 import { ProfileCard } from './profile-card';
 import { errorText } from './error-text';
 
@@ -218,6 +219,8 @@ function ConversationRow({
           title={titleVm.title}
           peerUser={isDirect ? user : undefined}
           isDirect={isDirect}
+          groupChannelId={record.channel_type === 2 ? record.channel_id : undefined}
+          groupAvatarUrl={record.channel_type === 2 ? group?.avatar_url : undefined}
           onSelect={onClick}
         />
 
@@ -368,16 +371,21 @@ function ConversationAvatar({
   title,
   peerUser,
   isDirect,
+  groupChannelId,
+  groupAvatarUrl,
   onSelect,
 }: {
   seed: string;
   title: string;
   peerUser: UserRecord | undefined;
   isDirect: boolean;
+  groupChannelId?: string;
+  groupAvatarUrl?: string;
   onSelect: () => void;
 }) {
   // Group rows currently fall through to the row click; friend/system
-  // rows get a profile-card popover.
+  // rows get a profile-card popover. 群行用 GroupAvatar（自定义头像 /
+  // 九宫格合成 / 色块兜底三级降级）。
   if (!isDirect) {
     return (
       <button
@@ -386,7 +394,16 @@ function ConversationAvatar({
         className="shrink-0 px-3 py-3"
         aria-label={title}
       >
-        <Avatar seed={seed} label={title} size="md" />
+        {groupChannelId !== undefined ? (
+          <GroupAvatar
+            channelId={groupChannelId}
+            name={title}
+            avatarUrl={groupAvatarUrl}
+            size="md"
+          />
+        ) : (
+          <Avatar seed={seed} label={title} size="md" />
+        )}
       </button>
     );
   }
