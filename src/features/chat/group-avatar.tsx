@@ -150,17 +150,10 @@ function NineGrid({
   sizePx: number;
   className?: string;
 }) {
-  const n = Math.min(members.length, 9);
-  const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
-  const firstRow =
-    n <= 1 ? 1 : n <= 4 ? (n % 2 === 0 ? 2 : 1) : n % 3 === 0 ? 3 : n % 3;
+  // 固定 3x3 九格：无论成员多少格子恒 9 个，从左上按行填，空位画浅色空格块。
   const pad = S * 0.04;
   const gap = S * 0.04;
-  const cell = (S - 2 * pad - (cols - 1) * gap) / cols;
-
-  // 按行切分：首行 firstRow 个，其余每行 cols 个。
-  const rows: GroupMember[][] = [members.slice(0, firstRow)];
-  for (let i = firstRow; i < n; i += cols) rows.push(members.slice(i, i + cols));
+  const cell = (S - 2 * pad - 2 * gap) / 3;
 
   return (
     <span
@@ -171,11 +164,25 @@ function NineGrid({
       style={{ width: S, height: S, padding: pad, gap, backgroundColor: '#d9dce0' }}
       aria-hidden="true"
     >
-      {rows.map((row, ri) => (
+      {[0, 1, 2].map((ri) => (
         <span key={ri} className="flex shrink-0 justify-center" style={{ gap }}>
-          {row.map((m) => (
-            <MemberCell key={m.user_id} member={m} cell={cell} />
-          ))}
+          {[0, 1, 2].map((ci) => {
+            const m = members[ri * 3 + ci];
+            return m !== undefined ? (
+              <MemberCell key={m.user_id} member={m} cell={cell} />
+            ) : (
+              <span
+                key={`e${ci}`}
+                className="shrink-0"
+                style={{
+                  width: cell,
+                  height: cell,
+                  borderRadius: cell * 0.12,
+                  backgroundColor: '#edeff2',
+                }}
+              />
+            );
+          })}
         </span>
       ))}
     </span>

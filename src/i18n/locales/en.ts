@@ -12,6 +12,11 @@ export const en: LocaleSchema = {
     unknown_user: 'User #{{id}}',
     unknown_group: 'Group Chat',
   },
+  system_template: {
+    member_invited: '{0} invited {1+} to the group',
+    group_mute_all_on: '{0} muted all members',
+    group_mute_all_off: '{0} unmuted all members',
+  },
   update: {
     title: 'New version available',
     desc: 'Refresh to get the latest version',
@@ -624,6 +629,11 @@ export interface LocaleSchema {
     system_notifications: string;
     unknown_user: string;
     unknown_group: string;
+  };
+  system_template: {
+    member_invited: string;
+    group_mute_all_on: string;
+    group_mute_all_off: string;
   };
   update: {
     title: string;

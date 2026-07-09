@@ -13,6 +13,11 @@ export const vi: LocaleSchema = {
     unknown_user: 'Người dùng #{{id}}',
     unknown_group: 'Nhóm chat',
   },
+  system_template: {
+    member_invited: '{0} đã mời {1+} vào nhóm',
+    group_mute_all_on: '{0} đã bật cấm chat toàn nhóm',
+    group_mute_all_off: '{0} đã tắt cấm chat toàn nhóm',
+  },
   update: {
     title: 'Có phiên bản mới',
     desc: 'Làm mới để nhận phiên bản mới nhất',

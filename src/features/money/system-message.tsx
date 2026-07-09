@@ -5,6 +5,7 @@
 // - non-JSON / missing template renders as plain text (legacy rows); never
 //   throws, never leaks raw JSON structure.
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMoneyUi } from './money-ui';
 
 export interface SystemRef {
@@ -43,8 +44,23 @@ export function parseSystemContent(content: string): ParsedSystemContent | null 
 
 const PLACEHOLDER = /\{(\d+)(\+)?\}/g;
 
-function RenderedTemplate({ template, refs }: { template: string; refs: SystemRef[] }) {
+// template 既可能是字面模板("{0} 领取了 {1} 的{2}"),也可能是 i18n key
+// ("system.member_invited")。key 形态先查表映射成本地化模板再渲染;
+// 未知 key 原样透出(fail-open,新 server 老客户端时至少可读)。
+function resolveTemplate(
+  template: string,
+  t: (k: string, o?: { defaultValue?: string }) => string,
+): string {
+  if (!template.startsWith('system.')) return template;
+  return t(`system_template.${template.slice('system.'.length)}`, {
+    defaultValue: template,
+  });
+}
+
+function RenderedTemplate({ template: rawTemplate, refs }: { template: string; refs: SystemRef[] }) {
   const money = useMoneyUi();
+  const { t } = useTranslation();
+  const template = resolveTemplate(rawTemplate, t as (k: string, o?: { defaultValue?: string }) => string);
   const out: ReactNode[] = [];
   let last = 0;
   let key = 0;

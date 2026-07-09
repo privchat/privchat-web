@@ -8,6 +8,11 @@ export const zhCN: LocaleSchema = {
     unknown_user: '用户 #{{id}}',
     unknown_group: '群聊',
   },
+  system_template: {
+    member_invited: '{0} 邀请 {1+} 加入了群聊',
+    group_mute_all_on: '{0} 开启了全员禁言',
+    group_mute_all_off: '{0} 解除了全员禁言',
+  },
   update: {
     title: '新版本可用',
     desc: '点击刷新以获取最新版本',
