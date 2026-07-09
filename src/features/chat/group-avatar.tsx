@@ -66,8 +66,10 @@ function fetchTopMembers(
 
 // 排序：role 权重 owner(0) < admin(1) < 其他(2) → joined_at 升序 → user_id 升序。
 function roleWeight(role: string): number {
-  if (role === 'owner') return 0;
-  if (role === 'admin') return 1;
+  // server 历史序列化过 "Owner"/"Admin" 大写形态,做大小写兼容
+  const r = role.toLowerCase();
+  if (r === 'owner') return 0;
+  if (r === 'admin') return 1;
   return 2;
 }
 
