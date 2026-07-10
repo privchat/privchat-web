@@ -27,11 +27,11 @@ import { Label } from '@/components/ui/label';
 import { Avatar } from '@/features/chat/avatar';
 import {
   AVATAR_ALLOWED_MIMES,
-  AVATAR_MAX_SIZE_BYTES,
   getProfileProvider,
   type AccountProfileProvider,
   type MemberProfile,
 } from '@/lib/account-profile-provider';
+import { prepareAvatarImage } from '@/lib/prepare-avatar-image';
 import { getActiveAccessToken } from '@/lib/active-access-token';
 import { captureException } from '@/lib/error-reporter';
 import { cn } from '@/lib/utils';
@@ -135,17 +135,23 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       form.gender !== original.gender ||
       form.birthday !== original.birthday);
 
-  /** Pick-time file validation: surface error immediately rather than
-   *  letting upload-time guard fire. Provider re-validates as defense-
-   *  in-depth so caller code can't bypass. */
-  const onPickFile = (file: File | null) => {
+  /** Pick-time: validate format, then centre-crop to a ≤480 square PNG
+   *  before staging (same pipeline as App/H5). The cropped file is what
+   *  gets previewed and uploaded, so the preview matches the final avatar
+   *  and the upload is always small (no pre-crop size cap needed — the
+   *  provider still guards the final size as defense-in-depth). */
+  const onPickFile = async (file: File | null) => {
     if (file === null) return;
     if (!AVATAR_ALLOWED_MIMES.includes(file.type)) {
       setError(t('profile_edit.avatar_error_mime'));
       return;
     }
-    if (file.size > AVATAR_MAX_SIZE_BYTES) {
-      setError(t('profile_edit.avatar_error_size'));
+    let cropped: File;
+    try {
+      cropped = await prepareAvatarImage(file);
+    } catch (err) {
+      captureException(err, { source: 'profile-edit.avatar-crop' });
+      setError(t('profile_edit.avatar_error_mime'));
       return;
     }
     // Revoke previous preview if any to avoid leaking blob URLs.
@@ -154,8 +160,8 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
     }
     setError(null);
     setPendingAvatar({
-      file,
-      previewUrl: URL.createObjectURL(file),
+      file: cropped,
+      previewUrl: URL.createObjectURL(cropped),
     });
   };
 
@@ -305,7 +311,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
                   // Reset the input so picking the same file twice still
                   // triggers onChange (browsers no-op on identical value).
                   e.currentTarget.value = '';
-                  onPickFile(file);
+                  void onPickFile(file);
                 }}
                 data-testid="profile-edit-avatar-input"
               />
