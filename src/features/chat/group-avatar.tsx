@@ -159,7 +159,7 @@ function NineGrid({
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 select-none flex-col items-center justify-center overflow-hidden rounded-full shadow-sm',
+        'inline-flex shrink-0 select-none flex-col items-center justify-center overflow-hidden rounded-[22%] shadow-sm',
         className,
       )}
       style={{ width: S, height: S, padding: pad, gap, backgroundColor: '#d9dce0' }}

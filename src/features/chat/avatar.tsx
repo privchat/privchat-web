@@ -38,7 +38,7 @@ export function Avatar({ seed, label, src, size = 'md', className }: AvatarProps
         alt=""
         onError={() => setImgFailed(true)}
         className={cn(
-          'inline-block shrink-0 select-none rounded-full object-cover shadow-sm',
+          'inline-block shrink-0 select-none rounded-[22%] object-cover shadow-sm',
           SIZE_CLS[size],
           className,
         )}
@@ -51,7 +51,7 @@ export function Avatar({ seed, label, src, size = 'md', className }: AvatarProps
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold text-white shadow-sm',
+        'inline-flex shrink-0 select-none items-center justify-center rounded-[22%] font-semibold text-white shadow-sm',
         SIZE_CLS[size],
         className,
       )}
