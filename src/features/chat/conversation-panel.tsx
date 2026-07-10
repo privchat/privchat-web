@@ -23,6 +23,7 @@ import {
   usePrivchatClient,
   useTyping,
   useUserProfile,
+  useJumpToMessage,
 } from '@privchat/react';
 import type { MessageItemVM } from '@privchat/react';
 import type { PinnedMessageItem } from '@privchat/sdk';
@@ -73,6 +74,8 @@ export interface ConversationPanelProps {
    * to return to the list; PC layout omits it (keeps list always visible).
    */
   onBack?: () => void;
+  /** 搜索命中跳转锚（server_message_id）：mount 后回灌上下文并定位高亮（spec §5）。 */
+  jumpToMessageId?: string;
   className?: string;
 }
 
@@ -81,6 +84,7 @@ export function ConversationPanel({
   channelType,
   title,
   peerUidHint,
+  jumpToMessageId,
   onBack,
   className,
 }: ConversationPanelProps) {
@@ -96,6 +100,29 @@ export function ConversationPanel({
     loadOlder,
     send,
   } = useConversation(channelId, channelType);
+
+  // spec §5 jump-to-message：搜索命中打开会话后，先经 jumpToMessageContext 回灌
+  // 本地缓存（IndexedDB + 内存 buffer，useConversation 的 messages 流随之更新），
+  // 再把锚交给 MessageList 定位高亮。锚不可见（撤回/删除/越权 not_found）提示失效。
+  const jumpTo = useJumpToMessage();
+  const [focusMessageId, setFocusMessageId] = useState<string | null>(null);
+  const [jumpFailed, setJumpFailed] = useState(false);
+  useEffect(() => {
+    if (jumpToMessageId === undefined) return;
+    let cancelled = false;
+    jumpTo(channelId, channelType, jumpToMessageId)
+      .then(() => {
+        if (!cancelled) setFocusMessageId(jumpToMessageId);
+      })
+      .catch(() => {
+        if (!cancelled) setJumpFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // channelId/channelType 由 key 重挂保证稳定；仅 anchor 驱动
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToMessageId]);
 
   // Look up the underlying ChannelRecord so the resolver has the full
   // shape it needs (peer uid for direct, group_id for group). The
@@ -566,8 +593,15 @@ export function ConversationPanel({
         />
       )}
 
+      {jumpFailed && (
+        <div className="px-4 py-1 text-center text-xs text-muted-foreground">
+          {t('workspace.msg_search_jump_failed')}
+        </div>
+      )}
       <MessageList
         messages={timelineMessages}
+        focusMessageId={focusMessageId ?? undefined}
+        onFocusConsumed={() => setFocusMessageId(null)}
         channelId={channelId}
         selfUid={selfUid}
         peerReadPts={peerReadPts}

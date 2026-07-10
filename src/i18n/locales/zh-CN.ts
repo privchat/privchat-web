@@ -160,6 +160,12 @@ export const zhCN: LocaleSchema = {
     no_session: '没有有效的登录会话。',
   },
   workspace: {
+    msg_search_title: '搜索聊天记录',
+    msg_search_placeholder: '搜索消息内容（至少 2 个字符）',
+    msg_search_empty: '未找到相关消息。',
+    msg_search_load_more: '加载更多',
+    msg_search_open: '搜索聊天记录',
+    msg_search_jump_failed: '该消息已失效',
     logout: '退出登录',
     conversations: '会话',
     refresh: '刷新',

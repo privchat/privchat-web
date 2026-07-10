@@ -164,6 +164,12 @@ export const en: LocaleSchema = {
     no_session: 'No active session.',
   },
   workspace: {
+    msg_search_title: 'Search messages',
+    msg_search_placeholder: 'Search message content (min 2 chars)',
+    msg_search_empty: 'No messages found.',
+    msg_search_load_more: 'Load more',
+    msg_search_open: 'Search messages',
+    msg_search_jump_failed: 'Message unavailable',
     logout: 'Logout',
     conversations: 'Conversations',
     refresh: 'Refresh',
@@ -781,6 +787,12 @@ export interface LocaleSchema {
     no_session: string;
   };
   workspace: {
+    msg_search_title: string;
+    msg_search_placeholder: string;
+    msg_search_empty: string;
+    msg_search_load_more: string;
+    msg_search_open: string;
+    msg_search_jump_failed: string;
     logout: string;
     conversations: string;
     refresh: string;

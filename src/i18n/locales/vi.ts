@@ -165,6 +165,12 @@ export const vi: LocaleSchema = {
     no_session: 'Không có phiên đăng nhập.',
   },
   workspace: {
+    msg_search_title: 'Tìm kiếm tin nhắn',
+    msg_search_placeholder: 'Tìm nội dung tin nhắn (tối thiểu 2 ký tự)',
+    msg_search_empty: 'Không tìm thấy tin nhắn.',
+    msg_search_load_more: 'Tải thêm',
+    msg_search_open: 'Tìm kiếm tin nhắn',
+    msg_search_jump_failed: 'Tin nhắn không khả dụng',
     logout: 'Đăng xuất',
     conversations: 'Cuộc trò chuyện',
     refresh: 'Làm mới',

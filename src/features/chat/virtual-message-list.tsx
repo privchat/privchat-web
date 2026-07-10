@@ -109,6 +109,8 @@ export function VirtualMessageList({
   canPin,
   pinnedIds,
   onTogglePin,
+  focusMessageId,
+  onFocusConsumed,
 }: MessageListProps) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -632,6 +634,19 @@ export function VirtualMessageList({
    *      i18n key. NO remote single-message fetch — paging-by-id is
    *      out of R5 scope (frozen in `project_reply_local_only`).
    */
+  // spec §5 jump-to-message：锚回灌进 messages 后走与 reply-jump 相同的
+  // 三态定位（已挂载/虚拟窗口外/不存在），一次性消费。
+  useEffect(() => {
+    if (focusMessageId === undefined) return;
+    if (!messages.some((m) => m.server_message_id === focusMessageId)) return;
+    const raf = requestAnimationFrame(() => {
+      handleReplyJump(focusMessageId);
+      onFocusConsumed?.();
+    });
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMessageId, messages]);
+
   const handleReplyJump = (serverMessageId: string) => {
     const scrollEl = parentRef.current;
     if (scrollEl === null) return;

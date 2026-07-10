@@ -56,6 +56,7 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LangSwitcher } from '@/components/lang-switcher';
 import { ConversationList } from './conversation-list';
+import { MessageSearchDialog } from './message-search-dialog';
 import { ConversationPanel } from './conversation-panel';
 import { ContactList } from './contact-list';
 import { GroupList } from './group-list';
@@ -113,6 +114,8 @@ interface ActiveChannel {
   channelType: number;
   /** Re-mount key so reopening the same channel resets composer/scroll/error. */
   key: number;
+  /** 搜索命中跳转锚（server_message_id 字符串）；panel 打开后回灌上下文并定位高亮。 */
+  jumpToMessageId?: string;
   /** 从联系人打开的新 DM:record 未同步时的 peer 兜底(标题/presence/资金入口)。 */
   peerUid?: string;
   peerName?: string;
@@ -160,6 +163,7 @@ export function ChatWorkspace({
   // mobile-Safari-style without devtools. Patches `console.*` once at
   // import time (see log-buffer.ts side effect).
   const [logsOpen, setLogsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const openDirect = useOpenDirectConversation();
 
@@ -172,6 +176,20 @@ export function ChatWorkspace({
       peerName: peer?.name,
     }));
   }, []);
+
+  // 搜索命中：打开会话并带跳转锚（MESSAGE_HISTORY spec §5 jump-to-message）。
+  const onPickSearchHit = useCallback(
+    (channelId: string, channelType: number, messageId: string) => {
+      setSearchOpen(false);
+      setActive((prev) => ({
+        channelId,
+        channelType,
+        key: (prev?.key ?? 0) + 1,
+        jumpToMessageId: messageId,
+      }));
+    },
+    [],
+  );
 
   const onOpenContact = useCallback(
     async (user_id: string, displayName?: string) => {
@@ -225,6 +243,11 @@ export function ChatWorkspace({
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row">
         {/* List pane */}
+        <MessageSearchDialog
+          open={searchOpen}
+          onOpenChange={setSearchOpen}
+          onPick={onPickSearchHit}
+        />
         <aside
           className={cn(
             'flex flex-col min-h-0 border-r bg-card',
@@ -239,7 +262,7 @@ export function ChatWorkspace({
             data-testid="pane-chats"
             className={cn('flex-1 min-h-0', tab === 'chats' ? 'flex flex-col' : 'hidden')}
           >
-            <ConversationList activeId={activeId} onSelect={onSelect} />
+            <ConversationList activeId={activeId} onSelect={onSelect} onOpenSearch={() => setSearchOpen(true)} />
           </div>
           <div
             data-testid="pane-contacts"
@@ -270,6 +293,7 @@ export function ChatWorkspace({
               channelType={active.channelType}
               title={active.peerName}
               peerUidHint={active.peerUid}
+              jumpToMessageId={active.jumpToMessageId}
               onBack={onBackToList}
             />
           ) : (

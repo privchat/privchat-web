@@ -50,9 +50,24 @@ export function PlainMessageList({
   canPin,
   pinnedIds,
   onTogglePin,
+  focusMessageId,
+  onFocusConsumed,
 }: MessageListProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // spec §5 jump-to-message：锚就绪(经 jumpToMessageContext 回灌进 messages)后
+  // 定位 + 高亮，一次性消费。rAF 等 DOM 提交；messages 每次变化都重试直到命中。
+  useEffect(() => {
+    if (focusMessageId === undefined) return;
+    const present = messages.some((m) => m.server_message_id === focusMessageId);
+    if (!present) return;
+    const raf = requestAnimationFrame(() => {
+      jumpToMessage(focusMessageId, scrollRef.current);
+      onFocusConsumed?.();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [focusMessageId, messages, onFocusConsumed]);
 
   // Track "is the user at the bottom right now". If they are, new
   // messages keep them at the bottom; if they've scrolled up to read

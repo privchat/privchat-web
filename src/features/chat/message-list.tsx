@@ -42,6 +42,10 @@ export interface MessageListProps {
   /** Group-only: toggle pin state for a row. Resolves after the pinned
    *  list has been refreshed so the menu label + pinned bar stay in sync. */
   onTogglePin?: (vm: MessageItemVM) => Promise<void>;
+  /** spec §5 跳转锚（server_message_id）：消息就绪后滚动定位 + 高亮，一次性消费。 */
+  focusMessageId?: string;
+  /** 定位完成（或确认锚不在集合中）后回调，父层清 state。 */
+  onFocusConsumed?: () => void;
 }
 
 export function MessageList(props: MessageListProps) {

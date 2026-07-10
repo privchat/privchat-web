@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MoreHorizontal, RefreshCcw } from 'lucide-react';
+import { MoreHorizontal, RefreshCcw, Search } from 'lucide-react';
 import type { ChannelRecord, UserRecord } from '@privchat/sdk';
 import {
   resolveConversationTitle,
@@ -36,12 +36,15 @@ export interface ConversationListProps {
   /** Currently-selected channel id (composite "channel_id:channel_type"), if any. */
   activeId?: string | null;
   onSelect: (channelId: string, channelType: number) => void;
+  /** 打开全局聊天记录搜索（MESSAGE_HISTORY spec §7 入口） */
+  onOpenSearch?: () => void;
   className?: string;
 }
 
 export function ConversationList({
   activeId,
   onSelect,
+  onOpenSearch,
   className,
 }: ConversationListProps) {
   const { t } = useTranslation();
@@ -92,6 +95,17 @@ export function ConversationList({
   return (
     <div className={cn('flex h-full flex-col bg-card', className)}>
       <header className="flex shrink-0 items-center justify-end border-b px-2 py-2">
+        {onOpenSearch !== undefined && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onOpenSearch}
+            aria-label={t('workspace.msg_search_open')}
+            title={t('workspace.msg_search_open')}
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+        )}
         <Button
           size="sm"
           variant="ghost"

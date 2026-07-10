@@ -565,6 +565,48 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async refreshFriendships() {},
 
     // ---- Friend / group commands ----
+    async messageHistorySearch(query: string) {
+      // Mirror the server contract shape: substring hits over all seeded
+      // channels, newest first, snippet with a highlight range.
+      const hits: import('@privchat/sdk').MessageHistorySearchHit[] = [];
+      for (const [channelId, msgs] of state.messages) {
+        for (const m of msgs) {
+          const idx = m.content.indexOf(query);
+          if (idx < 0) continue;
+          hits.push({
+            channel_id: Number(channelId),
+            message_id: Number(String(m.server_message_id ?? '0').replace(/\D/g, '') || '0'),
+            sender_user_id: Number(m.from_uid) || 0,
+            created_at: m.timestamp,
+            message_type: String(m.message_type),
+            snippet: m.content,
+            highlight_ranges: [[idx, idx + Array.from(query).length]],
+          });
+        }
+      }
+      hits.sort((a, b) => b.created_at - a.created_at);
+      return { hits, next_cursor: null };
+    },
+    async jumpToMessageContext(
+      channelId: string,
+      _channelType: number,
+      messageId: number | string,
+    ) {
+      const msgs = state.messages.get(channelId) ?? [];
+      const target = String(messageId);
+      const anchor = msgs.find(
+        (m) =>
+          m.server_message_id === target ||
+          String(m.server_message_id ?? '').replace(/\D/g, '') === target,
+      );
+      if (anchor === undefined) throw new Error('not_found');
+      return {
+        records: [...msgs],
+        anchor,
+        has_more_before: false,
+        has_more_after: false,
+      };
+    },
     async accountSearch() {
       return { users: [], total: 0, query: '' };
     },
