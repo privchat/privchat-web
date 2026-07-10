@@ -47,7 +47,6 @@ export function Avatar({ seed, label, src, size = 'md', className }: AvatarProps
     );
   }
   const glyph = pickGlyph(label ?? seed);
-  const hue = hashHue(seed);
   return (
     <span
       className={cn(
@@ -55,7 +54,7 @@ export function Avatar({ seed, label, src, size = 'md', className }: AvatarProps
         SIZE_CLS[size],
         className,
       )}
-      style={{ backgroundColor: `hsl(${hue} 62% 36%)` }}
+      style={{ backgroundColor: avatarBgColor(seed) }}
       aria-hidden="true"
     >
       {glyph}
@@ -72,6 +71,16 @@ export function pickGlyph(s: string): string {
 }
 
 const utf8 = new TextEncoder();
+
+/**
+ * The single source of truth for an avatar's placeholder background color.
+ * Both the standalone [Avatar] and the group-collage member cells call
+ * this so the SAME seed always yields the SAME color (三端统一：FNV-1a hue
+ * + 62% 36% 白字). Seed convention: `u:{uid}` for users, `g:{id}` for groups.
+ */
+export function avatarBgColor(seed: string): string {
+  return `hsl(${hashHue(seed)} 62% 36%)`;
+}
 
 export function hashHue(seed: string): number {
   // FNV-1a 32-bit over UTF-8 bytes → mapped to 0..359.

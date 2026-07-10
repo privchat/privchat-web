@@ -160,7 +160,11 @@ function ConversationRow({
   // protocol convention). Direct channels also pick up the friendship
   // row so `alias` (caller's remark name) overrides nickname.
   const isDirect = record.channel_type === 1;
-  const peerUid = isDirect ? record.title : undefined;
+  // Prefer the real peer uid (channel entity sync carries it) so the peer
+  // avatar seeds off the uid — matching the group-collage member cells and
+  // App/H5 — and system detection can key off the uid. Fall back to the
+  // resolved name in `title` only for legacy rows without a peer_user_id.
+  const peerUid = isDirect ? (record.peer_user_id ?? record.title) : undefined;
   const user = useUserProfile(peerUid ?? '');
   const friendship = useFriendship(peerUid ?? '');
   const group = useGroupProfile(record.channel_type === 2 ? record.channel_id : '');

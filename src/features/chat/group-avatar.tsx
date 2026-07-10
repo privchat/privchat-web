@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
 import type { GroupMember } from '@privchat/sdk';
 import { useGroupOps } from '@privchat/react';
 import { cn } from '@/lib/utils';
-import { Avatar, hashHue, pickGlyph, type AvatarProps } from './avatar';
+import { Avatar, avatarBgColor, pickGlyph, type AvatarProps } from './avatar';
 
 export interface GroupAvatarProps {
   /** 群 channel_id（协议约定 group_id == channel_id）。 */
@@ -212,7 +212,7 @@ function MemberCell({ member, cell }: { member: GroupMember; cell: number }) {
         height: cell,
         fontSize: cell * 0.5,
         lineHeight: 1,
-        backgroundColor: `hsl(${hashHue(`u:${member.user_id}`)} 62% 36%)`,
+        backgroundColor: avatarBgColor(`u:${member.user_id}`),
       }}
     >
       {pickGlyph(displayName)}
