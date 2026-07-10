@@ -73,15 +73,20 @@ export function MessageRow({
   /** Group-only: toggle pin state for this row. */
   onTogglePin?: (vm: MessageItemVM) => Promise<void>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const ts = useMemo(
     () =>
-      new Date(vm.timestamp).toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }),
-    [vm.timestamp],
+      // 24 小时制（hour12:false），语言随界面。
+      new Date(vm.timestamp).toLocaleTimeString(
+        i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US',
+        {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        },
+      ),
+    [vm.timestamp, i18n.language],
   );
 
   // Revoked rows render as a centered system-style placeholder, not as

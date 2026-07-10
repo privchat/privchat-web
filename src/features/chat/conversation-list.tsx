@@ -152,7 +152,7 @@ function ConversationRow({
   active: boolean;
   onClick: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // Direct channels: server emits the peer uid in `ChannelRecord.title`.
   // We look up that uid in the profile cache so the row can show the
   // peer's nickname / username instead of a raw uid. Group channels:
@@ -258,7 +258,7 @@ function ConversationRow({
             )}
           </div>
           <span className="shrink-0 text-[10px] font-mono text-muted-foreground tabular-nums">
-            {vm.updated_at > 0 ? formatTimeShort(vm.updated_at) : ''}
+            {vm.updated_at > 0 ? formatTimeShort(vm.updated_at, i18n.language) : ''}
           </span>
         </button>
 
@@ -421,18 +421,24 @@ function ConversationAvatar({
   );
 }
 
-function formatTimeShort(ms: number): string {
+function formatTimeShort(ms: number, lang: string): string {
   const d = new Date(ms);
   const now = new Date();
   const sameDay =
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
+  const zh = lang.startsWith('zh');
   if (sameDay) {
-    return d.toLocaleTimeString(undefined, {
+    // 当天：24 小时制。
+    return d.toLocaleTimeString(zh ? 'zh-CN' : 'en-US', {
       hour: '2-digit',
       minute: '2-digit',
+      hour12: false,
     });
   }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  // 往日：中文「7月9日」，英文「Jul 9」。
+  return zh
+    ? `${d.getMonth() + 1}月${d.getDate()}日`
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
