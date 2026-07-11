@@ -146,9 +146,13 @@ export function ChatWorkspace({
   // We sum unread_count across the user's channel list — same number the
   // sidebar would render if we showed a global counter.
   const channelList = useChannelList({ skipAutoBootstrap: true });
+  // P6-2 §24：总未读口径统一 = 非静音会话未读之和（对齐 App BadgeState / H5），静音会话不计入标题角标。
   const unreadTotal = useMemo(
     () =>
-      channelList.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0),
+      channelList.conversations.reduce(
+        (sum, c) => sum + (c.muted ? 0 : c.unread_count || 0),
+        0,
+      ),
     [channelList.conversations],
   );
   useTabBadge(unreadTotal);
