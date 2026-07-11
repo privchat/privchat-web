@@ -64,6 +64,12 @@ export function PlainMessageList({
     if (!present) return;
     const raf = requestAnimationFrame(() => {
       jumpToMessage(focusMessageId, scrollRef.current);
+      // Claim the initial position so the scroll-to-bottom effect (below,
+      // keyed on messages.length) can't override the anchor when the jump
+      // backfill lands before openConversation settled. Matches the Android
+      // jumpPending fix.
+      initialPositionedRef.current = true;
+      atBottomRef.current = false;
       onFocusConsumed?.();
     });
     return () => cancelAnimationFrame(raf);
@@ -97,6 +103,9 @@ export function PlainMessageList({
     if (el === null) return;
     if (initialPositionedRef.current) return;
     if (messages.length === 0) return;
+    // Jump pending: let the focus effect anchor first; scrolling to bottom
+    // here would win the race and bury the matched message (long chats).
+    if (focusMessageId !== undefined) return;
     const anchor = loadScrollAnchor(channelId);
     if (anchor !== undefined && !anchor.atBottom && anchor.messageId !== undefined) {
       const target = el.querySelector<HTMLElement>(
@@ -115,7 +124,7 @@ export function PlainMessageList({
     el.scrollTop = el.scrollHeight;
     initialPositionedRef.current = true;
     atBottomRef.current = true;
-  }, [messages.length, channelId]);
+  }, [messages.length, channelId, focusMessageId]);
 
   // Stick-to-bottom on new messages — only AFTER initial position is
   // settled, and only when the user is currently at the bottom. R5

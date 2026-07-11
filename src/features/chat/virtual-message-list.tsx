@@ -287,6 +287,9 @@ export function VirtualMessageList({
   useEffect(() => {
     if (positionedForChannelRef.current === channelId) return;
     if (messages.length === 0) return;
+    // Jump pending: defer to the focus effect so scroll-to-bottom can't
+    // bury the matched message when the jump backfill lands first.
+    if (focusMessageId !== undefined) return;
 
     let restored = false;
     const saved = loadVirtualScrollAnchor(channelId);
@@ -641,6 +644,10 @@ export function VirtualMessageList({
     if (!messages.some((m) => m.server_message_id === focusMessageId)) return;
     const raf = requestAnimationFrame(() => {
       handleReplyJump(focusMessageId);
+      // Claim initial positioning so the scroll-to-bottom effect can't
+      // override the anchor (long-chat jump race; matches plain list).
+      positionedForChannelRef.current = channelId;
+      atBottomRef.current = false;
       onFocusConsumed?.();
     });
     return () => cancelAnimationFrame(raf);
