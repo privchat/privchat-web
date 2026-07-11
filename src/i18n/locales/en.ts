@@ -441,6 +441,10 @@ export const en: LocaleSchema = {
     connected: 'Connected',
     connecting: 'Connecting…',
     disconnected: 'Disconnected',
+    reconnecting: 'Reconnecting…',
+    syncing: 'Syncing…',
+    server_busy: 'Server busy',
+    auth_expired: 'Session expired',
   },
   presence: {
     online: 'Online',
@@ -1003,6 +1007,10 @@ export interface LocaleSchema {
     connected: string;
     connecting: string;
     disconnected: string;
+    reconnecting: string;
+    syncing: string;
+    server_busy: string;
+    auth_expired: string;
   };
   presence: {
     online: string;

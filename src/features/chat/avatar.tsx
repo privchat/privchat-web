@@ -5,8 +5,16 @@
 // first character of the label (or seed). Two avatars for the SAME seed
 // always look the same; different seeds get visibly different hues so
 // eyes can scan a list quickly.
+//
+// P4.2 local-first: when `userId` is provided the image source resolves
+// through `useAvatarModel` — the Cache Storage copy is the display source
+// of truth, the remote URL is only the download source, and a stale local
+// copy keeps rendering while a background refresh runs. Without `userId`
+// behavior is unchanged (plain `src`, remote-first) so group avatars and
+// other non-user surfaces are unaffected.
 
 import { useState } from 'react';
+import { useAvatarModel } from '@privchat/react';
 import { cn } from '@/lib/utils';
 
 export interface AvatarProps {
@@ -18,6 +26,10 @@ export interface AvatarProps {
   label?: string;
   /** 头像图片地址；加载失败时回退到色块首字。 */
   src?: string;
+  /** P4.2:提供用户 uid 时走 local-first(useAvatarModel,缓存优先)。 */
+  userId?: string;
+  /** local-first 模式的远端下载源;缺省沿用 `src`。 */
+  remoteUrl?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
@@ -29,14 +41,28 @@ const SIZE_CLS: Record<NonNullable<AvatarProps['size']>, string> = {
   xl: 'h-16 w-16 text-xl',
 };
 
-export function Avatar({ seed, label, src, size = 'md', className }: AvatarProps) {
-  const [imgFailed, setImgFailed] = useState(false);
-  if (typeof src === 'string' && src !== '' && !imgFailed) {
+export function Avatar({ seed, label, src, userId, remoteUrl, size = 'md', className }: AvatarProps) {
+  // Track the exact URL that failed so a later source switch (e.g. the
+  // local-first background refresh swapping remote → blob URL) retries
+  // cleanly instead of being stuck on the initials fallback.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  // Unconditional hook call (rules of hooks). With `userId` undefined the
+  // hook resolves a pure fallback model and performs no caching work.
+  const model = useAvatarModel({
+    userId,
+    remoteUrl: remoteUrl ?? src,
+    displayName: label,
+  });
+  const resolvedSrc =
+    userId !== undefined && userId !== ''
+      ? (model.localUrl ?? model.remoteUrl ?? undefined)
+      : src;
+  if (typeof resolvedSrc === 'string' && resolvedSrc !== '' && failedSrc !== resolvedSrc) {
     return (
       <img
-        src={src}
+        src={resolvedSrc}
         alt=""
-        onError={() => setImgFailed(true)}
+        onError={() => setFailedSrc(resolvedSrc)}
         className={cn(
           'inline-block shrink-0 select-none rounded-[22%] object-cover shadow-sm',
           SIZE_CLS[size],

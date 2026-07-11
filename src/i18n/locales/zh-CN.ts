@@ -431,6 +431,10 @@ export const zhCN: LocaleSchema = {
     connected: '已连接',
     connecting: '连接中…',
     disconnected: '已断开',
+    reconnecting: '重连中…',
+    syncing: '同步中…',
+    server_busy: '服务器繁忙',
+    auth_expired: '登录已过期',
   },
   presence: {
     online: '在线',

@@ -43,9 +43,9 @@ import {
 } from 'lucide-react';
 import {
   useChannelList,
-  useConnectionState,
   useOpenDirectConversation,
   usePrivchatClient,
+  useRuntimeBanner,
   useUserProfile,
 } from '@privchat/react';
 import type { PrivchatHandle } from '@/lib/privchat-client';
@@ -131,7 +131,6 @@ export function ChatWorkspace({
   switchError,
   clearSwitchError,
 }: ChatWorkspaceProps) {
-  const state = useConnectionState();
   // Read session uid via the adapter seam rather than `handle.client`
   // directly so test harnesses can mount this workspace with a mock
   // adapter and no real `PrivchatClient` instance.
@@ -226,7 +225,6 @@ export function ChatWorkspace({
     <div className="flex h-dvh flex-col bg-muted">
       <TopBar
         uid={sessionUid}
-        state={state}
         onLogout={onLogout}
         notifier={notifier}
         onOpenLogs={() => setLogsOpen(true)}
@@ -326,7 +324,6 @@ function LazyLogsDialog({
 
 function TopBar({
   uid,
-  state,
   onLogout,
   notifier,
   onOpenLogs,
@@ -340,7 +337,6 @@ function TopBar({
   onOpenGroupChannel,
 }: {
   uid: string | undefined;
-  state: string;
   onLogout: () => void;
   notifier: IncomingNotifier;
   onOpenLogs: () => void;
@@ -381,12 +377,19 @@ function TopBar({
           type="button"
           className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent"
         >
-          <Avatar seed={seed} label={display} size="sm" />
+          {/* P4.2 local-first:自己的头像也按 uid 走 useAvatarModel。 */}
+          <Avatar
+            seed={seed}
+            label={display}
+            size="sm"
+            userId={uid}
+            remoteUrl={me?.avatar_url}
+          />
           <span className="text-sm font-semibold">
             {display}
             <span className="text-muted-foreground font-normal">@{brandConfig.appName}</span>
           </span>
-          <ConnectionPill state={state} />
+          <ConnectionPill />
         </button>
       </ProfileCard>
 
@@ -551,28 +554,30 @@ function NotifyToggles({ notifier }: { notifier: IncomingNotifier }) {
   );
 }
 
-function ConnectionPill({ state }: { state: string }) {
+function ConnectionPill() {
   const { t } = useTranslation();
-  // Map every SDK ConnectionState into one of three UX buckets so users
-  // don't have to learn the SDK vocabulary. The dot color signals at a
-  // glance: green = good, amber = transitional, red = nothing's getting
-  // through.
-  const bucket: 'connected' | 'connecting' | 'disconnected' =
-    state === 'authenticated'
-      ? 'connected'
-      : state === 'connecting' || state === 'connected' || state === 'reconnecting'
-        ? 'connecting'
-        : 'disconnected';
+  // P4.2 统一运行时语义:pill 状态由 SDK 唯一决策函数给出(固定优先级,
+  // 与 App/H5 同源):auth_expired > offline > [server_busy > syncing >
+  // connected] > reconnecting > connecting。工作区在登录后挂载,所以
+  // hasStartedConnectionFlow=true;web 的绿点常显,故 showConnectedBanner
+  // =true(connected 稳态不会退成 hidden)。
+  const kind = useRuntimeBanner(true, true);
+  if (kind === 'hidden') return null;
+  // Dot color: green = good, amber = transitional/degraded, red =
+  // nothing's getting through (or the session needs a re-login).
   const dot =
-    bucket === 'connected'
+    kind === 'connected'
       ? 'bg-emerald-500'
-      : bucket === 'connecting'
-        ? 'bg-amber-500'
-        : 'bg-rose-500';
+      : kind === 'offline' || kind === 'auth_expired'
+        ? 'bg-rose-500'
+        : 'bg-amber-500';
+  // 'offline' reuses the existing "已断开" copy; the other kinds have
+  // dedicated keys (added to every locale — LocaleSchema enforces parity).
+  const textKey = kind === 'offline' ? 'disconnected' : kind;
   return (
     <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
       <span className={cn('h-1.5 w-1.5 rounded-full', dot)} />
-      {t(`connection.${bucket}`)}
+      {t(`connection.${textKey}`)}
     </span>
   );
 }

@@ -222,7 +222,14 @@ function ContactRow({
             aria-label={title}
             onClick={(e) => e.stopPropagation()}
           >
-            <Avatar seed={`u:${userId}`} label={title} size="md" />
+            {/* P4.2 local-first:联系人行 uid 在作用域,头像走 useAvatarModel。 */}
+            <Avatar
+              seed={`u:${userId}`}
+              label={title}
+              size="md"
+              userId={userId}
+              remoteUrl={user?.avatar_url}
+            />
           </button>
         </ProfileCard>
         <button

@@ -236,6 +236,10 @@ function ConversationRow({
           seed={avatarSeed}
           title={titleVm.title}
           peerUser={isDirect ? user : undefined}
+          // P4.2 local-first:direct 行用 peer uid 走 useAvatarModel(缓存
+          // 命中即显本地图;行上没有 url 时只传 uid 也能吃到缓存)。system
+          // 行保持固定 S 色块(seed='system'),不接 uid。
+          peerUid={isDirect && titleVm.kind !== 'system' ? peerUid : undefined}
           isDirect={isDirect}
           groupChannelId={record.channel_type === 2 ? record.channel_id : undefined}
           groupAvatarUrl={record.channel_type === 2 ? group?.avatar_url : undefined}
@@ -388,6 +392,7 @@ function ConversationAvatar({
   seed,
   title,
   peerUser,
+  peerUid,
   isDirect,
   groupChannelId,
   groupAvatarUrl,
@@ -396,6 +401,8 @@ function ConversationAvatar({
   seed: string;
   title: string;
   peerUser: UserRecord | undefined;
+  /** P4.2:direct 行的 peer uid(system 行不传)——头像走 local-first。 */
+  peerUid?: string;
   isDirect: boolean;
   groupChannelId?: string;
   groupAvatarUrl?: string;
@@ -433,7 +440,13 @@ function ConversationAvatar({
         aria-label={title}
         onClick={(e) => e.stopPropagation()}
       >
-        <Avatar seed={seed} label={title} size="md" />
+        <Avatar
+          seed={seed}
+          label={title}
+          size="md"
+          userId={peerUid}
+          remoteUrl={peerUser?.avatar_url}
+        />
       </button>
     </ProfileCard>
   );

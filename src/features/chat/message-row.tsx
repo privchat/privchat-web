@@ -403,7 +403,14 @@ function MessageRowAvatar({ fromUid }: { fromUid: string }) {
         className="shrink-0 self-start"
         aria-label={display}
       >
-        <Avatar seed={`u:${fromUid}`} label={display} size="sm" />
+        {/* P4.2 local-first:sender uid 在作用域,头像走 useAvatarModel。 */}
+        <Avatar
+          seed={`u:${fromUid}`}
+          label={display}
+          size="sm"
+          userId={fromUid}
+          remoteUrl={user?.avatar_url}
+        />
       </button>
     </ProfileCard>
   );

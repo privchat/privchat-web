@@ -445,6 +445,10 @@ export const vi: LocaleSchema = {
     connected: 'Đã kết nối',
     connecting: 'Đang kết nối…',
     disconnected: 'Đã ngắt kết nối',
+    reconnecting: 'Đang kết nối lại…',
+    syncing: 'Đang đồng bộ…',
+    server_busy: 'Máy chủ đang bận',
+    auth_expired: 'Phiên đăng nhập đã hết hạn',
   },
   presence: {
     online: 'Trực tuyến',
