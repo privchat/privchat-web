@@ -171,6 +171,7 @@ export const vi: LocaleSchema = {
     msg_search_load_more: 'Tải thêm',
     msg_search_open: 'Tìm kiếm tin nhắn',
     msg_search_jump_failed: 'Tin nhắn không khả dụng',
+    msg_search_error: 'Tìm kiếm thất bại, vui lòng thử lại',
     logout: 'Đăng xuất',
     conversations: 'Cuộc trò chuyện',
     refresh: 'Làm mới',

@@ -1,15 +1,17 @@
 // Global message-history search (MESSAGE_HISTORY spec §4/§7). Cloud search
-// over the caller's visible channels, debounced 400ms — the server rate-limits
-// one search per user per 300ms, and bumping the request id drops stale
-// in-flight responses. Hits are snippet projections and are never written
+// over the caller's visible channels. The debounce (400ms), <2-char skip,
+// stale-response drop (request-id), cursor paging and terminal error state
+// all live in @privchat/react's shared `useMessageSearchState` — the single
+// cross-client (web/h5/App) search state machine — so this dialog only wires
+// that state to the UI. Hits are snippet projections and are never written
 // into the message cache; picking one asks ChatWorkspace to open the channel
 // anchored at the matched message (jump-to-message, spec §5).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Search } from 'lucide-react';
 import type { MessageHistorySearchHit } from '@privchat/sdk';
-import { useChannelList, useMessageSearch } from '@privchat/react';
+import { useChannelList, useMessageSearchState } from '@privchat/react';
 import {
   Dialog,
   DialogContent,
@@ -18,10 +20,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { captureException } from '@/lib/error-reporter';
-
-const DEBOUNCE_MS = 400;
-const MIN_QUERY_CHARS = 2;
 
 /** Render a snippet with its first server-computed highlight range tinted.
  *  Ranges are char offsets; out-of-bounds (astral chars) degrades gracefully
@@ -57,7 +55,6 @@ export function MessageSearchDialog({
   onPick: (channelId: string, channelType: number, messageId: string) => void;
 }) {
   const { t } = useTranslation();
-  const search = useMessageSearch();
   const { conversations } = useChannelList({ skipAutoBootstrap: true });
   const channelInfo = useMemo(() => {
     const m = new Map<string, { title: string; channelType: number }>();
@@ -66,68 +63,15 @@ export function MessageSearchDialog({
     return m;
   }, [conversations]);
 
-  const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<MessageHistorySearchHit[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const reqIdRef = useRef(0);
+  // Shared search state machine owns query + result/loading/error lifecycle.
+  const s = useMessageSearchState();
 
+  // Reset on each open (false→true); the hook clears query and results.
   useEffect(() => {
     if (!open) return;
-    setQuery('');
-    setHits([]);
-    setNextCursor(null);
-    setSearched(false);
+    s.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  // Debounced cloud search; request-id guard drops stale responses.
-  useEffect(() => {
-    const q = query.trim();
-    setHits([]);
-    setNextCursor(null);
-    setSearched(false);
-    if (q.length < MIN_QUERY_CHARS) {
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    const reqId = ++reqIdRef.current;
-    const timer = setTimeout(() => {
-      search(q)
-        .then((resp) => {
-          if (reqIdRef.current !== reqId) return;
-          setHits(resp.hits);
-          setNextCursor(resp.next_cursor ?? null);
-          setSearched(true);
-        })
-        .catch((err: unknown) => {
-          if (reqIdRef.current !== reqId) return;
-          captureException(err);
-          setSearched(true);
-        })
-        .finally(() => {
-          if (reqIdRef.current === reqId) setSearching(false);
-        });
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [query, search]);
-
-  const loadMore = () => {
-    const q = query.trim();
-    if (nextCursor === null || q.length < MIN_QUERY_CHARS || loadingMore) return;
-    setLoadingMore(true);
-    const reqId = reqIdRef.current;
-    search(q, { cursor: nextCursor })
-      .then((resp) => {
-        if (reqIdRef.current !== reqId) return;
-        setHits((prev) => [...prev, ...resp.hits]);
-        setNextCursor(resp.next_cursor ?? null);
-      })
-      .catch((err: unknown) => captureException(err))
-      .finally(() => setLoadingMore(false));
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -140,26 +84,31 @@ export function MessageSearchDialog({
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            value={s.query}
+            onChange={(e) => s.setQuery(e.target.value)}
             placeholder={t('workspace.msg_search_placeholder')}
             className="pl-8"
           />
         </div>
 
         <div className="max-h-80 overflow-y-auto">
-          {searching && (
+          {s.searching && (
             <div className="flex items-center justify-center py-6 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
             </div>
           )}
-          {!searching && searched && hits.length === 0 && (
+          {s.error && (
+            <p className="py-6 text-center text-sm text-destructive">
+              {t('workspace.msg_search_error')}
+            </p>
+          )}
+          {!s.searching && s.searched && !s.error && s.hits.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">
               {t('workspace.msg_search_empty')}
             </p>
           )}
           <ul className="divide-y">
-            {hits.map((hit) => (
+            {s.hits.map((hit) => (
               <li key={`${hit.channel_id}:${hit.message_id}`}>
                 <button
                   type="button"
@@ -181,10 +130,10 @@ export function MessageSearchDialog({
               </li>
             ))}
           </ul>
-          {nextCursor !== null && hits.length > 0 && (
+          {s.nextCursor !== null && s.hits.length > 0 && (
             <div className="py-2 text-center">
-              <Button size="sm" variant="ghost" onClick={loadMore} disabled={loadingMore}>
-                {loadingMore ? (
+              <Button size="sm" variant="ghost" onClick={s.loadMore} disabled={s.loadingMore}>
+                {s.loadingMore ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   t('workspace.msg_search_load_more')

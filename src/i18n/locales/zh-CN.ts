@@ -166,6 +166,7 @@ export const zhCN: LocaleSchema = {
     msg_search_load_more: '加载更多',
     msg_search_open: '搜索聊天记录',
     msg_search_jump_failed: '该消息已失效',
+    msg_search_error: '搜索失败，请重试',
     logout: '退出登录',
     conversations: '会话',
     refresh: '刷新',

@@ -170,6 +170,7 @@ export const en: LocaleSchema = {
     msg_search_load_more: 'Load more',
     msg_search_open: 'Search messages',
     msg_search_jump_failed: 'Message unavailable',
+    msg_search_error: 'Search failed, please retry',
     logout: 'Logout',
     conversations: 'Conversations',
     refresh: 'Refresh',
@@ -797,6 +798,7 @@ export interface LocaleSchema {
     msg_search_load_more: string;
     msg_search_open: string;
     msg_search_jump_failed: string;
+    msg_search_error: string;
     logout: string;
     conversations: string;
     refresh: string;
