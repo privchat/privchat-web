@@ -427,6 +427,12 @@ export const zhCN: LocaleSchema = {
     mute_duration_30d: '30 天',
     mute_duration_forever: '永久',
     pinned_bar_title: '置顶消息',
+    approvals_title: '入群申请',
+    approvals_load_failed: '无法加载申请',
+    approvals_approve: '同意',
+    approvals_reject: '拒绝',
+    approvals_action_failed: '操作失败',
+    approvals_retry: '重试',
   },
   connection: {
     connected: '已连接',

@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import { Avatar } from './avatar';
 import { errorText } from './error-text';
 import { QrcodeDisplayDialog } from './qrcode-display-dialog';
+import { GroupApprovalDialog } from './group-approval-dialog';
 
 export interface GroupInfoDialogProps {
   open: boolean;
@@ -79,6 +80,9 @@ export function GroupInfoDialog({
   const [busyUid, setBusyUid] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
+  // Owner/admin-only join-request approvals (P6-3-4). Lazy — the child
+  // dialog only fetches while it's open.
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
   // R2 — group settings. Lazy-loaded once on dialog open alongside the
   // member roster. Editable subset here is `description` + `announcement`
   // (these go through `group/settings/update` on privchat-server,
@@ -564,14 +568,24 @@ export function GroupInfoDialog({
               {t('groups.members', { count: members.length })}
             </div>
             {canManage && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setAddOpen(true)}
-              >
-                <UserPlus className="h-3.5 w-3.5 mr-1" />
-                {t('groups.add_member')}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setApprovalsOpen(true)}
+                  data-testid="group-info-approvals-button"
+                >
+                  {t('groups.approvals_title')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAddOpen(true)}
+                >
+                  <UserPlus className="h-3.5 w-3.5 mr-1" />
+                  {t('groups.add_member')}
+                </Button>
+              </div>
             )}
           </div>
           <div className="max-h-[50vh] overflow-y-auto">
@@ -758,6 +772,11 @@ export function GroupInfoDialog({
         open={qrOpen}
         onOpenChange={setQrOpen}
         mode={{ kind: 'group', groupId, groupName: title }}
+      />
+      <GroupApprovalDialog
+        open={approvalsOpen}
+        onOpenChange={setApprovalsOpen}
+        groupId={groupId}
       />
     </>
   );

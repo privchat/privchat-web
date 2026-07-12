@@ -831,6 +831,33 @@ export function createTestAdapter(): PrivchatClientAdapter {
         joined_at: Date.now(),
       };
     },
+    // Group join-request approvals (P6-3). The test harness has no
+    // pending-request fixtures today, so list returns empty and handle
+    // reports success — enough to satisfy the adapter contract and let
+    // the approvals UI render its empty state.
+    async groupApprovalList(groupId: string) {
+      return {
+        group_id: groupId,
+        requests: [],
+        total: 0,
+      };
+    },
+    async groupApprovalHandle(
+      requestId: string,
+      approve: boolean,
+      reason?: string,
+    ) {
+      return {
+        success: true,
+        request_id: requestId,
+        action: approve ? 'approve' : 'reject',
+        group_id: 0,
+        user_id: 0,
+        reject_reason: reason ?? null,
+        message: 'ok',
+        handled_at: Date.now(),
+      };
+    },
   };
 }
 

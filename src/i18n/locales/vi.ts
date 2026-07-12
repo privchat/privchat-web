@@ -441,6 +441,12 @@ export const vi: LocaleSchema = {
     mute_duration_30d: '30 ngày',
     mute_duration_forever: 'Vĩnh viễn',
     pinned_bar_title: 'Tin nhắn đã ghim',
+    approvals_title: 'Yêu cầu tham gia',
+    approvals_load_failed: 'Không thể tải yêu cầu',
+    approvals_approve: 'Chấp nhận',
+    approvals_reject: 'Từ chối',
+    approvals_action_failed: 'Thao tác thất bại',
+    approvals_retry: 'Thử lại',
   },
   connection: {
     connected: 'Đã kết nối',

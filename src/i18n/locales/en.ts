@@ -437,6 +437,12 @@ export const en: LocaleSchema = {
     mute_duration_30d: '30 days',
     mute_duration_forever: 'Forever',
     pinned_bar_title: 'Pinned message',
+    approvals_title: 'Join requests',
+    approvals_load_failed: 'Could not load requests',
+    approvals_approve: 'Approve',
+    approvals_reject: 'Reject',
+    approvals_action_failed: 'Action failed',
+    approvals_retry: 'Retry',
   },
   connection: {
     connected: 'Connected',
@@ -1004,6 +1010,12 @@ export interface LocaleSchema {
     mute_duration_30d: string;
     mute_duration_forever: string;
     pinned_bar_title: string;
+    approvals_title: string;
+    approvals_load_failed: string;
+    approvals_approve: string;
+    approvals_reject: string;
+    approvals_action_failed: string;
+    approvals_retry: string;
   };
   connection: {
     connected: string;
