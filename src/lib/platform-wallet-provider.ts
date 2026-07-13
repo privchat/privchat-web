@@ -82,6 +82,19 @@ export interface RedPacketOrder {
   greeting?: string;
   expireAt: number;
   createdAt: number;
+  /** #85-A2 delivery: 'DELIVERED' (card injected) | 'PROCESSING' (worker backfilling). Derived from outbox. */
+  deliveryStatus?: string;
+  messageId?: string;
+}
+
+/**
+ * #85-A2 money send result. code=0 means the funds request was reliably accepted,
+ * NOT that the chat card is delivered — check deliveryStatus.
+ */
+export interface MoneySendResult {
+  orderId: number;
+  deliveryStatus: string;
+  messageId?: string;
 }
 
 export interface RedPacketClaim {
@@ -103,6 +116,9 @@ export interface MoneyTransferOrder {
   /** 0=SUCCESS 1=REFUNDED */
   status: number;
   createdAt: number;
+  /** #85-A2 delivery status (derived from outbox). */
+  deliveryStatus?: string;
+  messageId?: string;
 }
 
 /** Ledger row (cents; price signed, >0 income). bizId = red packet / transfer order id. */
@@ -156,13 +172,12 @@ export async function sendRedPacket(input: {
   totalAmount: number;
   totalCount: number;
   greeting?: string;
-}): Promise<RedPacketOrder> {
+}): Promise<MoneySendResult> {
+  // #85-A2: response is { orderId, deliveryStatus, messageId } (no full order). code=0 = funds accepted.
   const { baseUrl, token } = activePlatform();
-  return normRedPacket(
-    requireData(
-      await postAuthedEnvelope<RedPacketOrder>(`${baseUrl}/red-packet/send`, token, input),
-      'red-packet.send',
-    ),
+  return requireData(
+    await postAuthedEnvelope<MoneySendResult>(`${baseUrl}/red-packet/send`, token, input),
+    'red-packet.send',
   );
 }
 
@@ -202,13 +217,12 @@ export async function sendMoneyTransfer(input: {
   channelId: string;
   amount: number;
   remark?: string;
-}): Promise<MoneyTransferOrder> {
+}): Promise<MoneySendResult> {
+  // #85-A2: response is { orderId, deliveryStatus, messageId }. code=0 = funds accepted, not card delivered.
   const { baseUrl, token } = activePlatform();
-  return normTransfer(
-    requireData(
-      await postAuthedEnvelope<MoneyTransferOrder>(`${baseUrl}/money-transfer/send`, token, input),
-      'money-transfer.send',
-    ),
+  return requireData(
+    await postAuthedEnvelope<MoneySendResult>(`${baseUrl}/money-transfer/send`, token, input),
+    'money-transfer.send',
   );
 }
 
