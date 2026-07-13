@@ -100,6 +100,17 @@ export function ConversationPanel({
     send,
   } = useConversation(channelId, channelType);
 
+  // 群会话打开时拉一次成员列表 —— SDK 的 groupMemberList 会把成员 profile 灌进用户缓存
+  // (ingestUserProfiles 单写路径),使点击非好友/未同步成员的头像时资料能解析出来,
+  // 修 ProfileCard 卡「加载中」。best-effort,失败不影响会话。
+  const hydrationAdapter = usePrivchatClient();
+  useEffect(() => {
+    if (channelType !== 2) return;
+    void hydrationAdapter.listGroupMembers(channelId).catch(() => {
+      /* best-effort profile hydration */
+    });
+  }, [hydrationAdapter, channelId, channelType]);
+
   // spec §5 jump-to-message：搜索命中打开会话后，先经 jumpToMessageContext 回灌
   // 本地缓存（IndexedDB + 内存 buffer，useConversation 的 messages 流随之更新），
   // 再把锚交给 MessageList 定位高亮。锚不可见（撤回/删除/越权 not_found）提示失效。
