@@ -31,7 +31,6 @@ import { stopAll as stopVoicePlayback } from './voice-playback';
 import { projectEntry, removeEntry } from './media-send-store';
 import { useChannelMediaSends, useMediaSender } from './use-media-send';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useConversationTitleI18n } from './use-title-i18n';
 import { ProfileCard } from './profile-card';
@@ -180,7 +179,11 @@ export function ConversationPanel({
   // Reply target — set by clicking "Reply" in a row's menu, cleared
   // by sending or by the X in the composer header.
   const [replyTo, setReplyTo] = useState<MessageItemVM | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // 发送后 draft 清空时,把自增高的输入框高度收回单行。
+  useEffect(() => {
+    if (draft === '' && inputRef.current) inputRef.current.style.height = 'auto';
+  }, [draft]);
   const imagePickerRef = useRef<HTMLInputElement | null>(null);
   const filePickerRef = useRef<HTMLInputElement | null>(null);
 
@@ -748,17 +751,24 @@ export function ConversationPanel({
         >
           <Paperclip className="h-4 w-4" />
         </Button>
-        <Input
+        <textarea
           ref={inputRef}
           autoFocus
+          rows={1}
           value={draft}
+          className="flex max-h-40 min-h-10 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           onChange={(e) => {
-            const v = e.currentTarget.value;
+            const el = e.currentTarget;
+            const v = el.value;
             setDraft(v);
             notifyTyping(v);
+            // 自增高:随内容行数长高,封顶后内部滚动。
+            el.style.height = 'auto';
+            el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // Enter 发送；Shift+Enter 插入换行（多行消息）。输入法组合中(isComposing)不拦截。
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               void onSend();
             }
