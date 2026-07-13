@@ -25,7 +25,7 @@ export function RedPacketSendView({
   const [isLucky, setIsLucky] = useState(isGroup);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
+  const [delivery, setDelivery] = useState<string | null>(null);
 
   const submit = async () => {
     setErr(null);
@@ -50,7 +50,7 @@ export function RedPacketSendView({
     if (submitting) return;
     setSubmitting(true);
     try {
-      await sendRedPacket({
+      const result = await sendRedPacket({
         channelId,
         scene: isGroup ? 1 : 0,
         type: isLucky ? 1 : 0,
@@ -58,7 +58,8 @@ export function RedPacketSendView({
         totalCount: cnt,
         greeting: greeting.trim() || undefined,
       });
-      setOk(true);
+      // #85-A2: DELIVERED=卡片已注入；PROCESSING=已受理正在发送（后台补发）。不显示「对方已收到」。
+      setDelivery(result.deliveryStatus);
       setTimeout(onDone, 700);
     } catch (e) {
       setErr(t(mapWalletErrorKey(e, false)));
@@ -114,7 +115,7 @@ export function RedPacketSendView({
         disabled={submitting}
         onClick={() => void submit()}
       >
-        {ok ? t('money.rp.submit_ok') : t('money.rp.submit')}
+        {delivery ? (delivery === 'DELIVERED' ? t('money.rp.submit_ok') : t('money.rp.submit_processing')) : t('money.rp.submit')}
       </Button>
       <p className="text-center text-xs text-muted-foreground">{t('money.rp.expire_hint')}</p>
     </div>

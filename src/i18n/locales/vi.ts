@@ -518,6 +518,7 @@ export const vi: LocaleSchema = {
       greeting_placeholder: 'Chúc phát tài, đại cát đại lợi',
       submit: 'Bỏ tiền vào lì xì',
       submit_ok: 'Đã gửi lì xì',
+      submit_processing: 'Đã tiếp nhận lì xì, đang gửi…',
       expire_hint: 'Lì xì không được nhận trong 24 giờ sẽ tự động hoàn lại',
       err_amount: 'Vui lòng nhập số tiền hợp lệ',
       err_count: 'Vui lòng nhập số lượng hợp lệ',

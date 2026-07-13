@@ -514,6 +514,7 @@ export const en: LocaleSchema = {
       greeting_placeholder: 'Best wishes and prosperity',
       submit: 'Stuff the red packet',
       submit_ok: 'Red packet sent',
+      submit_processing: 'Red packet accepted, delivering…',
       expire_hint: 'Unclaimed red packets are refunded after 24 hours',
       err_amount: 'Please enter a valid amount',
       err_count: 'Please enter a valid count',
@@ -1134,6 +1135,7 @@ export interface LocaleSchema {
       greeting_placeholder: string;
       submit: string;
       submit_ok: string;
+      submit_processing: string;
       expire_hint: string;
       err_amount: string;
       err_count: string;

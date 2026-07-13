@@ -504,6 +504,7 @@ export const zhCN: LocaleSchema = {
       greeting_placeholder: '恭喜发财，大吉大利',
       submit: '塞钱进红包',
       submit_ok: '红包已发送',
+      submit_processing: '红包已受理，正在发送',
       expire_hint: '红包 24 小时内未领取将自动退回',
       err_amount: '请输入正确的金额',
       err_count: '请输入正确的红包个数',
