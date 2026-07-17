@@ -14,6 +14,7 @@
 // (docs/superpowers/specs/2026-05-26-media-send-failure-bubbles-design.md).
 
 import type { MessageItemVM } from '@privchat/react';
+import { projectMessageContent } from '@privchat/sdk';
 
 export type MediaKind = 'image' | 'file' | 'video';
 export type MediaSendStage = 'uploading' | 'failed';
@@ -169,7 +170,7 @@ export function projectEntry(e: MediaSendEntry): MessageItemVM {
     record_key: `${RECORD_KEY_PREFIX}${e.txnId}`,
     local_message_id: e.txnId,
     from_uid: e.fromUid,
-    content: e.caption ?? '',
+    body: projectMessageContent({ content_type: e.kind, content: e.caption ?? '' }),
     status: 'pending',
     timestamp: e.timestamp,
     is_self: true,

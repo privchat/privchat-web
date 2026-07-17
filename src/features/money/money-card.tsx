@@ -3,38 +3,9 @@
 // (camelCase). The snapshot is presentation-only; authoritative state loads
 // in the detail dialog. Business colors are fixed (not brand-themed).
 import { createContext, useContext } from 'react';
+import type { MessageContent, MoneyMessageSnapshot } from '@privchat/sdk';
 import { useTranslation } from 'react-i18next';
 import { useMoneyUi } from './money-ui';
-
-interface MoneySnapshot {
-  redPacketId?: string;
-  transferId?: string;
-  title?: string;
-  summary?: string;
-  status?: string;
-  amountText?: string;
-  type?: number;
-}
-
-function parseSnapshot(content: string): MoneySnapshot | null {
-  try {
-    const obj = JSON.parse(content) as Record<string, unknown>;
-    if (typeof obj !== 'object' || obj === null) return null;
-    const str = (k: string) =>
-      typeof obj[k] === 'string' ? (obj[k] as string) : typeof obj[k] === 'number' ? String(obj[k]) : undefined;
-    return {
-      redPacketId: str('redPacketId'),
-      transferId: str('transferId'),
-      title: str('title'),
-      summary: str('summary'),
-      status: str('status'),
-      amountText: str('amountText'),
-      type: typeof obj.type === 'number' ? (obj.type as number) : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Red-packet live status derived from conversation system messages
@@ -48,11 +19,11 @@ export const MoneyPeerNameContext = createContext<string | undefined>(undefined)
 const CARD_BASE =
   'w-[232px] cursor-pointer select-none overflow-hidden rounded-xl text-white flex flex-wrap items-center px-3.5 pt-3';
 
-function RedPacketCard({ snap }: { snap: MoneySnapshot }) {
+function RedPacketCard({ snap }: { snap: MoneyMessageSnapshot }) {
   const { t } = useTranslation();
   const money = useMoneyUi();
   const liveMap = useContext(RedPacketLiveStatusContext);
-  const live = snap.redPacketId !== undefined ? liveMap.get(snap.redPacketId) : undefined;
+  const live = snap.ref_id !== undefined ? liveMap.get(snap.ref_id) : undefined;
   const statusText =
     live === 2
       ? t('money.card.rp_finished')
@@ -68,7 +39,7 @@ function RedPacketCard({ snap }: { snap: MoneySnapshot }) {
     <div
       className={`${CARD_BASE} bg-gradient-to-br from-[#f0573f] to-[#e5433d] ${done ? 'opacity-70' : ''}`}
       onClick={() => {
-        if (snap.redPacketId !== undefined) money.open({ type: 'rp-detail', id: snap.redPacketId });
+        if (snap.ref_id !== undefined) money.open({ type: 'rp-detail', id: snap.ref_id });
       }}
     >
       <span className="mr-3 text-3xl leading-none">🧧</span>
@@ -79,13 +50,13 @@ function RedPacketCard({ snap }: { snap: MoneySnapshot }) {
         <div className="text-xs opacity-85">{statusText}</div>
       </div>
       <div className="-mx-3.5 w-[calc(100%+28px)] bg-black/10 px-3.5 py-1 text-[11px] opacity-90">
-        {snap.type === 1 ? t('money.card.rp_type_lucky') : t('money.card.rp_type_normal')}
+        {snap.packet_type === 1 ? t('money.card.rp_type_lucky') : t('money.card.rp_type_normal')}
       </div>
     </div>
   );
 }
 
-function TransferCard({ snap, isSelf }: { snap: MoneySnapshot; isSelf: boolean }) {
+function TransferCard({ snap, isSelf }: { snap: MoneyMessageSnapshot; isSelf: boolean }) {
   const { t } = useTranslation();
   const money = useMoneyUi();
   const peerName = useContext(MoneyPeerNameContext);
@@ -105,13 +76,13 @@ function TransferCard({ snap, isSelf }: { snap: MoneySnapshot; isSelf: boolean }
     <div
       className={`${CARD_BASE} bg-gradient-to-br from-[#f7a03c] to-[#f08a1d] ${refunded ? 'opacity-70' : ''}`}
       onClick={() => {
-        if (snap.transferId !== undefined) money.open({ type: 'tf-detail', id: snap.transferId });
+        if (snap.ref_id !== undefined) money.open({ type: 'tf-detail', id: snap.ref_id });
       }}
     >
       <span className="mr-3 text-3xl leading-none">💸</span>
       <div className="min-w-0 flex-1 pb-3">
-        {snap.amountText !== undefined && snap.amountText !== '' && (
-          <div className="text-xl font-bold">{snap.amountText}</div>
+        {snap.amount_text !== undefined && snap.amount_text !== '' && (
+          <div className="text-xl font-bold">{snap.amount_text}</div>
         )}
         <div className="truncate text-[15px] font-semibold">{title}</div>
         <div className="text-xs opacity-85">{statusText}</div>
@@ -125,24 +96,22 @@ function TransferCard({ snap, isSelf }: { snap: MoneySnapshot; isSelf: boolean }
 
 /** Returns a money card for content types 11/12, else null (row dispatch). */
 export function MoneyCardBubble({
-  contentType,
-  content,
+  body,
   isSelf,
 }: {
-  contentType: string;
-  content: string;
+  body: Extract<MessageContent, { kind: 'red_packet' | 'money_transfer' }>;
   isSelf: boolean;
 }) {
   const { t } = useTranslation();
-  const snap = parseSnapshot(content);
-  if (snap === null) {
+  const snap = body.money;
+  if (snap.ref_id === undefined) {
     return (
       <div className={`${CARD_BASE} bg-gradient-to-br from-[#9ca3af] to-[#6b7280] pb-3`}>
         <span className="text-[15px] font-semibold">{t('money.card.unavailable')}</span>
       </div>
     );
   }
-  return contentType === 'red_packet' ? (
+  return body.kind === 'red_packet' ? (
     <RedPacketCard snap={snap} />
   ) : (
     <TransferCard snap={snap} isSelf={isSelf} />

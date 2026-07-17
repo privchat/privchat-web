@@ -24,6 +24,7 @@ import { getEntry, removeEntry, txnIdFromRecordKey } from './media-send-store';
 import { useMediaSender } from './use-media-send';
 import { Avatar } from './avatar';
 import { ProfileCard } from './profile-card';
+import { MessageText } from './message-text';
 import { errorText } from './error-text';
 import { captureException } from '@/lib/error-reporter';
 import {
@@ -128,7 +129,7 @@ export function MessageRow({
 
   // Structured system gray-bar (content type 5) — centered, no bubble chrome.
   if (vm.content_type === 'system') {
-    return <SystemMessageBar content={vm.content} />;
+    return vm.body.kind === 'system' ? <SystemMessageBar body={vm.body} /> : null;
   }
 
   // Media bubble or text bubble. Media bubbles own their own width
@@ -138,7 +139,9 @@ export function MessageRow({
   // chrome and must not get the text-bubble background.
   const moneyNode =
     vm.content_type === 'red_packet' || vm.content_type === 'money_transfer' ? (
-      <MoneyCardBubble contentType={vm.content_type} content={vm.content} isSelf={vm.is_self} />
+      vm.body.kind === 'red_packet' || vm.body.kind === 'money_transfer'
+        ? <MoneyCardBubble body={vm.body} isSelf={vm.is_self} />
+        : null
     ) : null;
   const mediaNode = moneyNode ?? pickMediaBubble(vm);
   // Synthetic in-flight media row (upload phase) — see media-send-store.
@@ -226,7 +229,7 @@ export function MessageRow({
                 onJump={() => onJumpToReply(vm.reply_to!)}
               />
             )}
-            <span className="break-words whitespace-pre-wrap">{vm.content}</span>
+            <MessageText body={vm.body} isSelf={vm.is_self} />
             <span
               className={cn(
                 'mt-1 self-end text-[10px] font-mono opacity-70 flex items-center gap-1',
@@ -458,8 +461,8 @@ function ReplyQuote({
   const body =
     replyVm === undefined
       ? t('message_actions.reply_unavailable')
-      : replyVm.content !== ''
-        ? replyVm.content
+      : replyVm.body.text !== ''
+        ? replyVm.body.text
         : `[${replyVm.content_type}]`;
   return (
     <button
@@ -510,7 +513,7 @@ function MessageActionsMenu({
   // and have nothing for the server to recall yet).
   const canRevoke = vm.is_self && vm.status === 'sent' && vm.server_message_id !== undefined;
   // Copy is universal; no point on a row with no text content.
-  const canCopy = vm.content !== '';
+  const canCopy = vm.body.text !== '';
   // Reply requires the original to have a server id.
   const canReply = vm.server_message_id !== undefined;
   // Pin is group-only (canPin gates owner/admin) and needs a server id
@@ -551,7 +554,7 @@ function MessageActionsMenu({
   };
 
   const onCopy = () => {
-    void navigator.clipboard.writeText(vm.content).catch(() => {});
+    void navigator.clipboard.writeText(vm.body.text).catch(() => {});
   };
 
   return (

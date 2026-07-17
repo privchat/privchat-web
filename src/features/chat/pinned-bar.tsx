@@ -45,8 +45,8 @@ export function PinnedBar({
         const preview =
           vm === undefined
             ? undefined
-            : vm.content !== ''
-              ? vm.content
+            : vm.body.text !== ''
+              ? vm.body.text
               : `[${vm.content_type}]`;
         return (
           <div

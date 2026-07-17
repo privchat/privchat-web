@@ -5,42 +5,9 @@
 // - non-JSON / missing template renders as plain text (legacy rows); never
 //   throws, never leaks raw JSON structure.
 import type { ReactNode } from 'react';
+import type { MessageContent, SystemMessageRef } from '@privchat/sdk';
 import { useTranslation } from 'react-i18next';
 import { useMoneyUi } from './money-ui';
-
-export interface SystemRef {
-  type: string;
-  target_id?: string;
-  text?: string;
-}
-
-export interface ParsedSystemContent {
-  template?: string;
-  refs: SystemRef[];
-}
-
-export function parseSystemContent(content: string): ParsedSystemContent | null {
-  if (!content.startsWith('{')) return null;
-  try {
-    const obj = JSON.parse(content) as { template?: unknown; refs?: unknown };
-    if (typeof obj.template !== 'string') return null;
-    const refs: SystemRef[] = Array.isArray(obj.refs)
-      ? (obj.refs as Record<string, unknown>[]).map((r) => ({
-          type: typeof r.type === 'string' ? r.type : '',
-          target_id:
-            typeof r.target_id === 'string'
-              ? r.target_id
-              : typeof r.target_id === 'number'
-                ? String(r.target_id)
-                : undefined,
-          text: typeof r.text === 'string' ? r.text : undefined,
-        }))
-      : [];
-    return { template: obj.template, refs };
-  } catch {
-    return null;
-  }
-}
 
 const PLACEHOLDER = /\{(\d+)(\+)?\}/g;
 
@@ -57,7 +24,7 @@ function resolveTemplate(
   });
 }
 
-function RenderedTemplate({ template: rawTemplate, refs }: { template: string; refs: SystemRef[] }) {
+function RenderedTemplate({ template: rawTemplate, refs }: { template: string; refs: readonly SystemMessageRef[] }) {
   const money = useMoneyUi();
   const { t } = useTranslation();
   const template = resolveTemplate(rawTemplate, t as (k: string, o?: { defaultValue?: string }) => string);
@@ -106,15 +73,14 @@ function RenderedTemplate({ template: rawTemplate, refs }: { template: string; r
 }
 
 /** Centered gray pill; structured template when parseable, else raw text. */
-export function SystemMessageBar({ content }: { content: string }) {
-  const parsed = parseSystemContent(content);
+export function SystemMessageBar({ body }: { body: Extract<MessageContent, { kind: 'system' }> }) {
   return (
     <div className="flex justify-center py-1">
       <span className="max-w-[80%] rounded-md bg-muted px-2.5 py-1 text-center text-xs text-muted-foreground">
-        {parsed?.template !== undefined ? (
-          <RenderedTemplate template={parsed.template} refs={parsed.refs} />
+        {body.template !== undefined ? (
+          <RenderedTemplate template={body.template} refs={body.refs} />
         ) : (
-          content
+          body.text
         )}
       </span>
     </div>

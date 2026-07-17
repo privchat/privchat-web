@@ -42,7 +42,6 @@ import { BotMenuButton } from './bot-menu-button';
 import { PinnedBar } from './pinned-bar';
 import { useMoneyUi } from '@/features/money/money-ui';
 import { RedPacketLiveStatusContext, MoneyPeerNameContext } from '@/features/money/money-card';
-import { parseSystemContent } from '@/features/money/system-message';
 import { getConfiguredAccountMode } from '@/lib/account-mode';
 import {
   DropdownMenu,
@@ -449,14 +448,13 @@ export function ConversationPanel({
     const map = new Map<string, number>();
     for (const m of timelineMessages) {
       if (m.content_type !== 'system') continue;
-      const parsed = parseSystemContent(m.content);
-      if (parsed?.template === undefined) continue;
-      const rp = parsed.refs.find((r) => r.type === 'red_packet');
+      if (m.body.kind !== 'system' || m.body.template === undefined) continue;
+      const rp = m.body.refs.find((r) => r.type === 'red_packet');
       if (rp?.target_id === undefined) continue;
-      if (parsed.template.includes('抢完') || parsed.template.includes('过期')) {
+      if (m.body.template.includes('抢完') || m.body.template.includes('过期')) {
         map.set(rp.target_id, 2);
-      } else if (parsed.template.includes('领取')) {
-        const u = parsed.refs.find((r) => r.type === 'user');
+      } else if (m.body.template.includes('领取')) {
+        const u = m.body.refs.find((r) => r.type === 'user');
         if (u?.target_id === selfUid) map.set(rp.target_id, 1);
       }
     }
@@ -660,8 +658,8 @@ export function ConversationPanel({
               {t('message_actions.replying_to')}
             </div>
             <div className="truncate text-muted-foreground">
-              {replyTo.content !== ''
-                ? replyTo.content
+              {replyTo.body.text !== ''
+                ? replyTo.body.text
                 : `[${replyTo.content_type}]`}
             </div>
           </div>

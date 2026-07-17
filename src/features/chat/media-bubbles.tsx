@@ -4,7 +4,7 @@
 // file download chip, etc).
 //
 // `pickMediaBubble` is the single dispatch point and never returns
-// the raw `vm.content` — text is the only case it returns null for.
+// the raw `vm.body.text` — text is the only case it returns null for.
 // All other recognized types render their typed bubble; unrecognized
 // or malformed metadata renders an `UnsupportedBubble` placeholder
 // instead of an empty / cryptic text bubble.
@@ -614,7 +614,7 @@ function UnsupportedBubble({ isSelf }: { isSelf: boolean }) {
  * Decide which bubble renderer applies to a message.
  *
  * - Returns `null` ONLY for `text` (caller renders the default text
- *   bubble using `vm.content`).
+ *   bubble using `vm.body.text`).
  * - All recognized media types return their typed bubble.
  * - Unrecognized `content_type` (forward / contact_card / unknown /
  *   future additions) returns the `UnsupportedBubble` placeholder
