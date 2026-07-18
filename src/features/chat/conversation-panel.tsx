@@ -144,7 +144,10 @@ export function ConversationPanel({
       ),
     [records, channelId, channelType],
   );
-  const peerUid = (record?.channel_type === 1 ? record.title : undefined) ?? peerUidHint;
+  const peerUid =
+    (record?.channel_type === 1
+      ? (record.peer_user_id ?? record.title)
+      : undefined) ?? peerUidHint;
   const userProfile = useUserProfile(peerUid ?? '');
   // BOT_INTERACTION_SPEC §3.1：DM 对端 user_type=2 (Bot) 时显示菜单按钮。
   // System (user_type=1) v1 不显示（系统用户没有 bot service binding）。
@@ -166,7 +169,9 @@ export function ConversationPanel({
       i18n: titleI18n,
     });
   }, [record, userProfile, friendship, groupProfile, peerUid, titleI18n]);
-  const headerTitle = title ?? resolvedTitle?.title ?? channelId;
+  // Once the canonical channel/friendship records are available they own the
+  // display name. `title` is only a first-open hint while entity sync catches up.
+  const headerTitle = resolvedTitle?.title ?? title ?? channelId;
   const isDirect = record?.channel_type === 1;
   // 群标题带人数「名称 (N)」；member_count 是 best-effort 缓存，>0 才显示。
   const groupMemberCount =
