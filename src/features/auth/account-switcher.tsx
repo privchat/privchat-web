@@ -172,7 +172,11 @@ export function AccountSwitcher({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[220px]"
+        className="flex w-[min(20rem,calc(100vw-1rem))] min-w-[220px] flex-col overflow-hidden"
+        style={{
+          maxHeight:
+            'min(32rem, var(--radix-dropdown-menu-content-available-height, calc(100vh - 1rem)))',
+        }}
         data-testid="account-switcher-menu"
       >
         <DropdownMenuLabel>{t('accounts.switcher_title')}</DropdownMenuLabel>
@@ -201,42 +205,47 @@ export function AccountSwitcher({
           </div>
         )}
         <DropdownMenuSeparator />
-        {snapshot.entries.length === 0 ? (
-          <DropdownMenuItem disabled>
-            <span className="text-xs text-muted-foreground">
-              {t('accounts.no_accounts')}
-            </span>
-          </DropdownMenuItem>
-        ) : (
-          snapshot.entries.map(({ key, entry }) => {
-            const isActive = key === activeKey;
-            return (
-              <DropdownMenuItem
-                key={key}
-                data-testid="account-switcher-entry"
-                data-account-key={key}
-                data-account-active={isActive ? '1' : '0'}
-                onSelect={() => {
-                  if (!isActive) onSelectAccount(key);
-                }}
-                className={cn(
-                  'flex items-center justify-between gap-2',
-                  isActive && 'bg-accent/40',
-                )}
-              >
-                <span className="flex flex-col min-w-0">
-                  <span className="truncate text-sm">
-                    {accountDisplayName(entry)}
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]"
+          data-testid="account-switcher-list"
+        >
+          {snapshot.entries.length === 0 ? (
+            <DropdownMenuItem disabled>
+              <span className="text-xs text-muted-foreground">
+                {t('accounts.no_accounts')}
+              </span>
+            </DropdownMenuItem>
+          ) : (
+            snapshot.entries.map(({ key, entry }) => {
+              const isActive = key === activeKey;
+              return (
+                <DropdownMenuItem
+                  key={key}
+                  data-testid="account-switcher-entry"
+                  data-account-key={key}
+                  data-account-active={isActive ? '1' : '0'}
+                  onSelect={() => {
+                    if (!isActive) onSelectAccount(key);
+                  }}
+                  className={cn(
+                    'flex items-center justify-between gap-2',
+                    isActive && 'bg-accent/40',
+                  )}
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm">
+                      {accountDisplayName(entry)}
+                    </span>
+                    <span className="truncate text-[10px] text-muted-foreground">
+                      #{entry.user_id}
+                    </span>
                   </span>
-                  <span className="truncate text-[10px] text-muted-foreground">
-                    #{entry.user_id}
-                  </span>
-                </span>
-                {isActive && <Check className="h-4 w-4 shrink-0" />}
-              </DropdownMenuItem>
-            );
-          })
-        )}
+                  {isActive && <Check className="h-4 w-4 shrink-0" />}
+                </DropdownMenuItem>
+              );
+            })
+          )}
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           data-testid="account-switcher-add"

@@ -136,6 +136,46 @@ test.describe('account switcher (R7.3)', () => {
     await expect(bob).toContainText('Bob');
   });
 
+  test('a long account list scrolls while the menu stays inside the viewport', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 800, height: 600 });
+    const accounts = Array.from({ length: 30 }, (_, index) => ({
+      accountKey: `account-${index.toString().padStart(2, '0')}`,
+      url: `ws://gw-${index}/`,
+      user_id: String(1_000_000_000 + index),
+      device_id: `device-${index}`,
+      alias: `Account ${index + 1}`,
+      added_at: 1_700_000_000_000 + index,
+    }));
+    await stageRegistry(page, accounts, accounts[0].accountKey);
+    await gotoAppFresh(page);
+
+    await page.getByTestId('account-switcher-trigger').click();
+    const menu = page.getByTestId('account-switcher-menu');
+    const list = page.getByTestId('account-switcher-list');
+    const lastEntry = page.getByTestId('account-switcher-entry').last();
+
+    await expect(page.getByTestId('account-switcher-entry')).toHaveCount(30);
+    await expect(menu).toBeVisible();
+    await expect(page.getByTestId('account-switcher-add')).toBeVisible();
+    expect(await menu.evaluate((node) => node.getBoundingClientRect().bottom))
+      .toBeLessThanOrEqual(600);
+    expect(
+      await list.evaluate((node) => node.scrollHeight > node.clientHeight),
+    ).toBe(true);
+
+    await list.evaluate((node) => node.scrollTo({ top: node.scrollHeight }));
+    await expect(lastEntry).toContainText('Account 30');
+    expect(
+      await lastEntry.evaluate((node) => {
+        const item = node.getBoundingClientRect();
+        const viewport = node.parentElement?.getBoundingClientRect();
+        return viewport !== undefined && item.bottom <= viewport.bottom;
+      }),
+    ).toBe(true);
+  });
+
   test('selecting a different account dispatches onSelectAccount', async ({
     page,
   }) => {
