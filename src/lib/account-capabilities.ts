@@ -26,6 +26,8 @@ export interface AccountCapabilities {
   profileEdit: boolean;
   /** Upload + change avatar image. */
   avatarUpload: boolean;
+  /** Claim the member module's daily sign-in reward. */
+  memberSignIn: boolean;
   /** Login via SMS code (mobile + verification code). */
   smsLogin: boolean;
   /** Login via QR scanned by an already-authed mobile App. */
@@ -38,6 +40,7 @@ export interface AccountCapabilities {
 export const BUILTIN_CAPABILITIES: AccountCapabilities = {
   profileEdit: false,
   avatarUpload: false,
+  memberSignIn: false,
   smsLogin: false,
   qrLogin: false,
   passwordLogin: true,
@@ -46,6 +49,7 @@ export const BUILTIN_CAPABILITIES: AccountCapabilities = {
 export const PLATFORM_CAPABILITIES: AccountCapabilities = {
   profileEdit: true,
   avatarUpload: true,
+  memberSignIn: true,
   smsLogin: true,
   qrLogin: true,
   passwordLogin: true,

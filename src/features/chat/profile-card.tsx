@@ -17,7 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Copy, Loader2, Pencil, X } from 'lucide-react';
+import { CalendarCheck, Check, Copy, Loader2, Pencil, X } from 'lucide-react';
 import {
   useFriendship,
   usePrivchatClient,
@@ -41,6 +41,7 @@ import { formatPresenceLine } from './format-last-seen';
 import { useLastSeenI18n } from './use-presence-i18n';
 import { errorText } from './error-text';
 import { ProfileEditDialog } from '@/features/profile/profile-edit-dialog';
+import { SignInDialog } from '@/features/profile/sign-in-dialog';
 
 export interface ProfileCardProps {
   user: UserRecord | undefined;
@@ -75,7 +76,9 @@ export function ProfileCard({
   const showActions = user !== undefined && !isSelf;
   const capabilities = useAccountCapabilities();
   const showSelfEdit = isSelf && capabilities.profileEdit === true;
+  const showSignIn = isSelf && capabilities.memberSignIn === true;
   const [editOpen, setEditOpen] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   return (
     <>
@@ -83,7 +86,14 @@ export function ProfileCard({
         <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-[260px] p-0">
           <div className="flex items-center gap-3 p-4">
-            <Avatar seed={seed} label={display} size="lg" />
+            {/* P4.2 local-first:user 已水合时按 uid 走 useAvatarModel。 */}
+            <Avatar
+              seed={seed}
+              label={display}
+              size="lg"
+              userId={user?.user_id}
+              remoteUrl={user?.avatar_url}
+            />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">{display}</div>
               {username !== undefined && username !== display && (
@@ -130,11 +140,25 @@ export function ProfileCard({
               {t('profile_edit.open_button')}
             </button>
           )}
+          {showSignIn && (
+            <button
+              type="button"
+              onClick={() => setSignInOpen(true)}
+              className="flex w-full items-center justify-center gap-2 border-t px-3 py-2 text-xs hover:bg-accent"
+              data-testid="profile-card-sign-in"
+            >
+              <CalendarCheck className="h-3 w-3" />
+              {t('sign_in.open_button')}
+            </button>
+          )}
           {showActions && <ProfileCardActions user={user} display={display} />}
         </DropdownMenuContent>
       </DropdownMenu>
       {showSelfEdit && (
         <ProfileEditDialog open={editOpen} onOpenChange={setEditOpen} />
+      )}
+      {showSignIn && (
+        <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
       )}
     </>
   );

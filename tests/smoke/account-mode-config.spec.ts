@@ -112,6 +112,7 @@ test.describe('account mode config (R8.1)', () => {
     expect(caps).toEqual({
       profileEdit: false,
       avatarUpload: false,
+      memberSignIn: false,
       smsLogin: false,
       qrLogin: false,
       passwordLogin: true,
@@ -132,6 +133,7 @@ test.describe('account mode config (R8.1)', () => {
     expect(platform).toEqual({
       profileEdit: true,
       avatarUpload: true,
+      memberSignIn: true,
       smsLogin: true,
       qrLogin: true,
       passwordLogin: true,
