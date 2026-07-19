@@ -48,4 +48,31 @@ test.describe('conversation list + send', () => {
     // and clears its draft state).
     await expect(composer).toHaveValue('');
   });
+
+  test('renders a localized placeholder for an image-only preview', async ({
+    page,
+  }) => {
+    await page.evaluate(() => {
+      (window as unknown as {
+        __privchatTest: { seed(input: unknown): void };
+      }).__privchatTest.seed({
+        channels: [
+          {
+            channel_id: '1001',
+            channel_type: 1,
+            title: '101',
+            latest_pts: '6',
+            read_pts: '6',
+            unread_count: 0,
+            last_message_preview: '',
+            last_message_type: 'image',
+            updated_at: Date.now(),
+            sync_version: 2,
+          },
+        ],
+      });
+    });
+
+    await expect(page.getByText(/^\[(图片|Image)\]$/)).toBeVisible();
+  });
 });

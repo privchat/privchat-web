@@ -45,6 +45,26 @@ import { useVoicePlayback } from './use-voice-playback';
 const MAX_IMG_WIDTH = 280;
 const MAX_IMG_HEIGHT = 360;
 
+function imageBubbleSize(meta: ImageMetadataVM): {
+  width: number;
+  height: number;
+  aspectRatio: string | undefined;
+} {
+  const knownDims = meta.width > 0 && meta.height > 0;
+  const naturalWidth = knownDims ? meta.width : MAX_IMG_WIDTH;
+  const naturalHeight = knownDims ? meta.height : MAX_IMG_HEIGHT;
+  const scale = Math.min(
+    1,
+    MAX_IMG_WIDTH / naturalWidth,
+    MAX_IMG_HEIGHT / naturalHeight,
+  );
+  return {
+    width: Math.round(naturalWidth * scale),
+    height: Math.round(naturalHeight * scale),
+    aspectRatio: knownDims ? `${naturalWidth} / ${naturalHeight}` : undefined,
+  };
+}
+
 /**
  * 附件加密 v1：`file_id -> downloadAttachmentBlob（get_url + WebCrypto 解密）-> objectURL`。
  * 服务端存的是密文，不能 `img.src = file_url`。卸载 / file_id 变化时 revoke 防泄漏。
@@ -102,6 +122,10 @@ export function ImageBubble({
       ? meta.url
       : undefined;
   const src = dec.url ?? legacyUrl;
+  // The loading placeholder and decoded image must occupy the same box.
+  // Otherwise opening a conversation scrolls against the small placeholder,
+  // then the real image grows underneath the viewport and hides the tail.
+  const size = imageBubbleSize(meta);
   if (src === undefined) {
     if (dec.failed) {
       return <FallbackBubble label="[图片·解密失败]" isSelf={isSelf} icon={AlertTriangle} />;
@@ -113,7 +137,11 @@ export function ImageBubble({
             'flex items-center justify-center rounded-lg bg-muted',
             isSelf ? 'ml-auto' : 'mr-auto',
           )}
-          style={{ width: 160, height: 200 }}
+          style={{
+            width: size.width,
+            height: size.height,
+            aspectRatio: size.aspectRatio,
+          }}
         >
           <Loader2 className="h-5 w-5 animate-spin opacity-60" />
         </div>
@@ -126,16 +154,6 @@ export function ImageBubble({
   // pick the dimension that hits its cap first; otherwise fall back
   // to the box and rely on `object-cover` to crop tastefully. Don't
   // up-scale tiny images: a 100x100 thumbnail stays at 100x100.
-  const knownDims = meta.width > 0 && meta.height > 0;
-  const naturalW = knownDims ? meta.width : MAX_IMG_WIDTH;
-  const naturalH = knownDims ? meta.height : MAX_IMG_HEIGHT;
-  const scale = Math.min(
-    1,
-    MAX_IMG_WIDTH / naturalW,
-    MAX_IMG_HEIGHT / naturalH,
-  );
-  const w = Math.round(naturalW * scale);
-  const h = Math.round(naturalH * scale);
   return (
     <>
       <button
@@ -146,12 +164,12 @@ export function ImageBubble({
           isSelf ? 'ml-auto' : 'mr-auto',
         )}
         style={{
-          width: w,
-          height: h,
+          width: size.width,
+          height: size.height,
           // CSS aspect-ratio reserves the box BEFORE the image decodes,
           // preventing the timeline below from jumping when lazy-loaded
           // images finish decoding off-screen and then pop in.
-          aspectRatio: knownDims ? `${naturalW} / ${naturalH}` : undefined,
+          aspectRatio: size.aspectRatio,
         }}
       >
         <img
@@ -159,8 +177,8 @@ export function ImageBubble({
           alt=""
           loading="lazy"
           decoding="async"
-          width={w}
-          height={h}
+          width={size.width}
+          height={size.height}
           className="h-full w-full object-cover"
         />
       </button>

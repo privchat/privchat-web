@@ -55,6 +55,8 @@ export function PlainMessageList({
 }: MessageListProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const resizeRafRef = useRef<number | null>(null);
 
   // spec §5 jump-to-message：锚就绪(经 jumpToMessageContext 回灌进 messages)后
   // 定位 + 高亮，一次性消费。rAF 等 DOM 提交；messages 每次变化都重试直到命中。
@@ -91,6 +93,31 @@ export function PlainMessageList({
   // restore OR scroll-to-bottom), the "stick to bottom on new msg"
   // effect should NOT fire — otherwise it races the restore.
   const initialPositionedRef = useRef(false);
+
+  // Images and other rich rows can resolve after the initial bottom jump.
+  // Follow content-height changes only while the user still intends to stay
+  // at the tail; never pull somebody down after they have scrolled upward.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (content === null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (!initialPositionedRef.current || !atBottomRef.current) return;
+      if (resizeRafRef.current !== null) cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = requestAnimationFrame(() => {
+        resizeRafRef.current = null;
+        const el = scrollRef.current;
+        if (el !== null && atBottomRef.current) el.scrollTop = el.scrollHeight;
+      });
+    });
+    observer.observe(content);
+    return () => {
+      observer.disconnect();
+      if (resizeRafRef.current !== null) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = null;
+      }
+    };
+  }, [channelId]);
 
   // On mount + when messages first land, position the timeline:
   //   - If the user has a saved anchor for this channel and it's not
@@ -166,53 +193,56 @@ export function PlainMessageList({
     <div
       ref={scrollRef}
       onScroll={onScroll}
+      data-plain-timeline="1"
       // min-h-0 is mandatory: flex items default to min-height: auto which
       // grows to fit content and defeats overflow-y-auto.
-      className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2"
+      className="flex-1 min-h-0 overflow-y-auto px-4 py-3"
     >
-      <div className="flex justify-center pb-2">
-        {reachedBeginning ? (
-          <span className="text-xs text-muted-foreground">{t('panel.beginning')}</span>
-        ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onLoadOlder}
-            disabled={loadingOlder}
-          >
-            {loadingOlder ? t('panel.loading_older') : t('panel.load_older')}
-          </Button>
-        )}
-      </div>
-
-      {messages.length === 0 && !isOpening && (
-        <div className="text-center text-sm text-muted-foreground py-8">
-          {t('panel.no_messages')}
+      <div ref={contentRef} className="space-y-2">
+        <div className="flex justify-center pb-2">
+          {reachedBeginning ? (
+            <span className="text-xs text-muted-foreground">{t('panel.beginning')}</span>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onLoadOlder}
+              disabled={loadingOlder}
+            >
+              {loadingOlder ? t('panel.loading_older') : t('panel.load_older')}
+            </Button>
+          )}
         </div>
-      )}
 
-      {messages.map((m) => {
-        const replyVm =
-          m.reply_to !== undefined
-            ? messages.find((x) => x.server_message_id === m.reply_to)
-            : undefined;
-        return (
-          <MessageRow
-            key={m.record_key}
-            vm={m}
-            peerReadPts={peerReadPts}
-            channelId={channelId}
-            peerName={peerName}
-            selfUid={selfUid}
-            replyVm={replyVm}
-            onReply={() => onReply(m)}
-            onJumpToReply={(targetId) => jumpToMessage(targetId, scrollRef.current)}
-            canPin={canPin}
-            pinnedIds={pinnedIds}
-            onTogglePin={onTogglePin}
-          />
-        );
-      })}
+        {messages.length === 0 && !isOpening && (
+          <div className="text-center text-sm text-muted-foreground py-8">
+            {t('panel.no_messages')}
+          </div>
+        )}
+
+        {messages.map((m) => {
+          const replyVm =
+            m.reply_to !== undefined
+              ? messages.find((x) => x.server_message_id === m.reply_to)
+              : undefined;
+          return (
+            <MessageRow
+              key={m.record_key}
+              vm={m}
+              peerReadPts={peerReadPts}
+              channelId={channelId}
+              peerName={peerName}
+              selfUid={selfUid}
+              replyVm={replyVm}
+              onReply={() => onReply(m)}
+              onJumpToReply={(targetId) => jumpToMessage(targetId, scrollRef.current)}
+              canPin={canPin}
+              pinnedIds={pinnedIds}
+              onTogglePin={onTogglePin}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
