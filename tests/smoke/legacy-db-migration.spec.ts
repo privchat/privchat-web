@@ -29,6 +29,8 @@ import { gotoAppFresh } from './_helpers';
 const LEGACY_DB_NAME = 'privchat-web-dev';
 const ACCOUNT_KEY = '0123456789abcdef';
 const ACCOUNT_DB_NAME = `privchat-web-${ACCOUNT_KEY}`;
+const SECOND_ACCOUNT_KEY = 'fedcba9876543210';
+const SECOND_ACCOUNT_DB_NAME = `privchat-web-${SECOND_ACCOUNT_KEY}`;
 const MARKER_KEY = `privchat.web.migration.db.${ACCOUNT_KEY}`;
 const MARKER_VALUE_V1 = 'copied-from-legacy-v1';
 
@@ -73,6 +75,9 @@ test.describe('legacy DB migration (R7.2b)', () => {
     }
     if (await call(page, 'dbExists', ACCOUNT_DB_NAME)) {
       await call(page, 'dbDelete', ACCOUNT_DB_NAME);
+    }
+    if (await call(page, 'dbExists', SECOND_ACCOUNT_DB_NAME)) {
+      await call(page, 'dbDelete', SECOND_ACCOUNT_DB_NAME);
     }
   });
 
@@ -155,5 +160,17 @@ test.describe('legacy DB migration (R7.2b)', () => {
     if (await call(page, 'dbExists', ACCOUNT_DB_NAME)) {
       expect(await call(page, 'dbCountChannels', ACCOUNT_DB_NAME)).toBe(0);
     }
+  });
+
+  test('legacy data is imported by at most one account', async ({ page }) => {
+    await call(page, 'seedDbWithChannel', LEGACY_DB_NAME, 'channel-owned-by-first');
+
+    expect(await call(page, 'runLegacyDbMigration', ACCOUNT_KEY)).toBe('copied');
+    expect(await call(page, 'dbCountChannels', ACCOUNT_DB_NAME)).toBe(1);
+
+    expect(await call(page, 'runLegacyDbMigration', SECOND_ACCOUNT_KEY)).toBe(
+      'no-legacy',
+    );
+    expect(await call(page, 'dbCountChannels', SECOND_ACCOUNT_DB_NAME)).toBe(0);
   });
 });

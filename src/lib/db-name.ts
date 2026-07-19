@@ -14,9 +14,7 @@ export function accountDbName(accountKey: AccountKey): string {
   return `privchat-web-${accountKey}`;
 }
 
-/** Legacy single-account DB name. Pre-R7.2b, every account shared
- *  this DB; we keep it as a fallback when DB migration fails so
- *  the user's existing cache stays accessible — R7.2b explicitly
- *  does NOT delete this DB after copy. R7.2c (or later) will clean
- *  it up after a dogfood window proves the account DB is intact. */
+/** Legacy single-account DB name. Pre-R7.2b, every account shared this DB.
+ * It is now copy-only migration input and must never be opened by a live
+ * authenticated client because it has no reliable account ownership. */
 export const LEGACY_DB_NAME = 'privchat-web-dev';

@@ -9,9 +9,8 @@ of multi-account before we start writing the code.
 
 ## Status
 
-Design draft. R7.0 — not yet implemented. R5 (virtual timeline) is
-the prerequisite work; R7 is the next big-ticket round once R5
-dogfood lands.
+Implemented. The cache-owner hardening below was added after the legacy
+shared-database migration exposed a cross-account contamination path.
 
 ## Goal
 
@@ -89,6 +88,12 @@ Why hashed:
 `AccountKey` does NOT change when the access token rotates. The
 identity is stable across reconnects, refresh-token cycles, and
 device reauths.
+
+After authorization, a present server `user_id` must equal the registry /
+request `user_id`. A mismatch means the persisted token belongs to another
+account; the SDK rejects authentication before binding cache ownership or
+exposing an authenticated session. The requested id must never override the
+identity established by the token.
 
 ## Active account vs registry
 
@@ -178,20 +183,34 @@ Each account owns its own Dexie DB. Naming:
 privchat-web-<accountKey>
 ```
 
-The current `privchat-web-dev` literal in
-`src/lib/privchat-client.ts` becomes a fallback only used when
-running the dev shell against an empty registry. Production uses
-the namespaced form.
+The legacy `privchat-web-dev` database is migration input only. A live
+authenticated client must never fall back to it, including when migration
+fails; account isolation fails closed and the server rehydrates a clean
+account database.
 
-Migration: the legacy `privchat-web-dev` DB is renamed (Dexie
-doesn't support rename — implement as "open the legacy DB, move
-its tables into a fresh DB named `privchat-web-<accountKey>`,
-delete the legacy DB"). One-shot, gated on the same migration
-flag as the localStorage migration above.
+Migration: Dexie cannot rename, so the legacy tables are copied into the
+first active account's database. The legacy source is consumed at most once
+per browser and is never used as a template for later accounts.
 
 Two accounts NEVER share an IDB. There is no "shared" cross-
 account table — outbox rows, channel cache, message cache, friend
 list, group list, attachments are all account-local.
+
+Namespacing is necessary but not sufficient. SDK schema v8 persists
+`cache_metadata.owner_user_id`. After remote authentication succeeds and
+before any cache hydration, the SDK atomically verifies this owner:
+
+- matching owner: preserve rows;
+- missing owner (all pre-v8 databases): clear account tables, then bind;
+- mismatched owner: clear account tables, then rebind;
+- verification/reset failure: authentication fails locally; never expose the
+  cache as a degraded fallback.
+
+The one-time reset for unowned databases is deliberate. Rows produced by the
+old shared-database migration cannot be attributed reliably, including
+outbox rows, so preserving them would risk either cross-account disclosure or
+sending a message under the wrong identity. Server state is authoritative and
+is rehydrated after the reset.
 
 ## WebSocket ownership
 

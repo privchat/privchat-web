@@ -140,9 +140,9 @@ async function copyAllTables(src: CacheDB, dst: CacheDB): Promise<void> {
  *      written. Legacy DB is INTENTIONALLY NOT deleted —
  *      see file header.
  *
- *  Throws when the actual `bulkPut` step fails (caller should
- *  fall back to LEGACY_DB_NAME for this boot and retry on the
- *  next one). Anything before the copy step is best-effort and
+ *  Throws when the actual `bulkPut` step fails (caller continues with the
+ *  isolated account DB; SDK ownership verification resets any partial copy).
+ *  Anything before the copy step is best-effort and
  *  swallowed into the relevant outcome. */
 export async function migrateLegacyDbToAccountDb(
   accountKey: AccountKey,
@@ -197,18 +197,18 @@ export async function migrateLegacyDbToAccountDb(
   // 6. Markers written ONLY after a successful copy. The global
   // `legacy_consumed` marker prevents subsequent accounts from
   // re-copying the legacy DB. A throw before this line short-
-  // circuits — the caller's catch falls back to LEGACY_DB_NAME for
-  // this boot, the next boot retries the copy from scratch.
+  // circuits — the next boot retries the copy from scratch.
   markLegacyConsumed();
   writeMarker(accountKey, MARKER_VALUE_V1);
   return 'copied';
 }
 
 /** Resolve the Dexie DB name to use for the active account's
- *  PrivchatClient. Runs the legacy-copy migration as a side
- *  effect; on any failure, falls back to `LEGACY_DB_NAME` so the
- *  app boots with the user's existing cache rather than a fresh
- *  empty one.
+ *  PrivchatClient. Runs the legacy-copy migration as a side effect.
+ *  Migration failure must NEVER fall back to the shared legacy database:
+ *  availability degradation is preferable to cross-account data exposure.
+ *  The SDK's cache-owner guard safely resets a partial account copy after
+ *  authentication.
  *
  *  This is the single function `App.tsx` should call between
  *  session migration and `createPrivchat`. */
@@ -218,9 +218,8 @@ export async function resolveDbNameForActiveAccount(
 ): Promise<string> {
   try {
     await migrateLegacyDbToAccountDb(accountKey);
-    return accountDbName(accountKey);
   } catch (err) {
     onError?.(err);
-    return LEGACY_DB_NAME;
   }
+  return accountDbName(accountKey);
 }
