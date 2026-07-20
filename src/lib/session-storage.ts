@@ -113,13 +113,22 @@ export async function persistSessionForAccount(
   const accountKey = await accountKeyFor(session.url, session.user_id);
   saveAccountSession(accountKey, session);
   const baseReg = loadRegistry() ?? { accounts: {}, active: null };
+  const prevEntry = baseReg.accounts[accountKey];
   const withEntry = upsertEntry(baseReg, accountKey, {
+    // `upsertEntry` REPLACES the whole entry, so start from the previous
+    // one to keep UI metadata the session layer doesn't own —
+    // `display_name` / `alias` / `color`. Dropping them here was the
+    // account-switcher "User #<id>" regression: every token refresh
+    // (auth-refresh-provider → persistSessionForAccount) wiped the
+    // persisted display name, and it only came back after that account
+    // was active AND its profile re-hydrated.
+    ...prevEntry,
     url: session.url,
     user_id: session.user_id,
     device_id: session.device_id,
     // If the entry already exists, preserve its `added_at`;
     // otherwise stamp now.
-    added_at: baseReg.accounts[accountKey]?.added_at ?? Date.now(),
+    added_at: prevEntry?.added_at ?? Date.now(),
     // R8.3b: PLATFORM accounts MUST carry mode + base URL on the
     // registry entry so auto-login can pick the right provider
     // without re-reading env (and so different accounts could in
