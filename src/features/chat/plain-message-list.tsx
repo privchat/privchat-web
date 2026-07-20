@@ -47,6 +47,7 @@ export function PlainMessageList({
   loadingOlder,
   onLoadOlder,
   onReply,
+  onForward,
   canPin,
   pinnedIds,
   onTogglePin,
@@ -235,6 +236,7 @@ export function PlainMessageList({
               selfUid={selfUid}
               replyVm={replyVm}
               onReply={() => onReply(m)}
+              onForward={onForward === undefined ? undefined : () => onForward(m)}
               onJumpToReply={(targetId) => jumpToMessage(targetId, scrollRef.current)}
               canPin={canPin}
               pinnedIds={pinnedIds}

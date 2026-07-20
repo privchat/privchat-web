@@ -106,6 +106,7 @@ export function VirtualMessageList({
   loadingOlder,
   onLoadOlder,
   onReply,
+  onForward,
   canPin,
   pinnedIds,
   onTogglePin,
@@ -794,6 +795,7 @@ export function VirtualMessageList({
                   selfUid={selfUid}
                   replyVm={replyVm}
                   onReply={() => onReply(m)}
+                  onForward={onForward === undefined ? undefined : () => onForward(m)}
                   onJumpToReply={handleReplyJump}
                   canPin={canPin}
                   pinnedIds={pinnedIds}

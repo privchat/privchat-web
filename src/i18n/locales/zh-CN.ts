@@ -314,6 +314,16 @@ export const zhCN: LocaleSchema = {
     reply_out_of_window: '原消息不在当前消息窗口',
     pin: '置顶',
     unpin: '取消置顶',
+    forward: '转发',
+  },
+  forward: {
+    title: '转发给',
+    search_placeholder: '搜索会话',
+    empty: '暂无会话',
+    partial_failed: '部分转发失败：',
+    sending: '发送中…',
+    send: '发送（{{count}}）',
+    cancel: '取消',
   },
   theme: {
     system: '主题：跟随系统',

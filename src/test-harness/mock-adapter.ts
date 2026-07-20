@@ -472,6 +472,21 @@ export function createTestAdapter(): PrivchatClientAdapter {
         response: {} as never,
       };
     },
+    async forwardMessage(input): Promise<SendTextOperationResult> {
+      // Test harness: forward = re-send the cached source content into the
+      // target as a plain text row (mirrors the SDK's copy semantics).
+      const source = (
+        state.messages.get(`${input.source_channel_id}:${input.source_channel_type}`) ?? []
+      ).find((m) => String(m.server_message_id ?? '') === input.source_server_message_id);
+      if (source === undefined) throw new Error('forward source message is not cached');
+      if (source.revoked === true) throw new Error('cannot forward a revoked message');
+      return this.sendTextMessage({
+        channel_id: input.target_channel_id,
+        channel_type: input.target_channel_type,
+        from_uid: input.from_uid,
+        content: source.content,
+      });
+    },
     async channelDirectGetOrCreate(uid) {
       // Map peer uid → channel_id by convention `uid * 10` if no
       // pre-seeded channel exists. Tests can seed explicit ones.

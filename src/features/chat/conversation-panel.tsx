@@ -38,6 +38,7 @@ import { formatPresenceLine } from './format-last-seen';
 import { useLastSeenI18n } from './use-presence-i18n';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { MessageList } from './message-list';
+import { ForwardDialog } from './forward-dialog';
 import { BotMenuButton } from './bot-menu-button';
 import { PinnedBar } from './pinned-bar';
 import { useMoneyUi } from '@/features/money/money-ui';
@@ -194,6 +195,7 @@ export function ConversationPanel({
   // Reply target — set by clicking "Reply" in a row's menu, cleared
   // by sending or by the X in the composer header.
   const [replyTo, setReplyTo] = useState<MessageItemVM | null>(null);
+  const [forwardSource, setForwardSource] = useState<MessageItemVM | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   // 发送后 draft 清空时,把自增高的输入框高度收回单行。
   useEffect(() => {
@@ -628,11 +630,19 @@ export function ConversationPanel({
         loadingOlder={loadingOlder}
         onLoadOlder={onLoadOlder}
         onReply={(m) => setReplyTo(m)}
+        onForward={(m) => setForwardSource(m)}
         canPin={!isDirect && groupId !== undefined ? isManager : undefined}
         pinnedIds={!isDirect && groupId !== undefined ? pinnedIds : undefined}
         onTogglePin={
           !isDirect && groupId !== undefined ? onTogglePin : undefined
         }
+      />
+
+      <ForwardDialog
+        source={forwardSource}
+        sourceChannelId={channelId}
+        sourceChannelType={isDirect ? 1 : 2}
+        onClose={() => setForwardSource(null)}
       />
 
       {error !== null && (

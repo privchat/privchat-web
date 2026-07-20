@@ -322,6 +322,16 @@ export const vi: LocaleSchema = {
     reply_out_of_window: 'Tin nhắn gốc không có trong cửa sổ hiện tại',
     pin: 'Ghim',
     unpin: 'Bỏ ghim',
+    forward: 'Chuyển tiếp',
+  },
+  forward: {
+    title: 'Chuyển tiếp đến',
+    search_placeholder: 'Tìm cuộc trò chuyện',
+    empty: 'Chưa có cuộc trò chuyện',
+    partial_failed: 'Một số mục thất bại:',
+    sending: 'Đang gửi…',
+    send: 'Gửi ({{count}})',
+    cancel: 'Hủy',
   },
   theme: {
     system: 'Giao diện: theo hệ thống',

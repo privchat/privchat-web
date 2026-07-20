@@ -32,6 +32,8 @@ export interface MessageListProps {
   loadingOlder: boolean;
   onLoadOlder: () => void;
   onReply: (vm: MessageItemVM) => void;
+  /** Opens the forward picker for this message; item hidden when absent. */
+  onForward?: (vm: MessageItemVM) => void;
   /** Group-only: whether the current user (owner/admin) may pin messages.
    *  Undefined / false for direct chats and regular members — the pin
    *  menu item stays hidden. */

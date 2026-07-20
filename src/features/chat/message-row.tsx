@@ -43,6 +43,7 @@ export function MessageRow({
   selfUid,
   replyVm,
   onReply,
+  onForward,
   onJumpToReply,
   canPin,
   pinnedIds,
@@ -64,6 +65,8 @@ export function MessageRow({
   replyVm?: MessageItemVM;
   /** Click handler for the Reply menu item. */
   onReply: () => void;
+  /** Opens the forward picker; the menu item is hidden when absent. */
+  onForward?: () => void;
   /** Click handler for the reply-quote (jump to the original). */
   onJumpToReply: (serverMessageId: string) => void;
   /** Group-only: whether the current user (owner/admin) may pin. When
@@ -167,6 +170,7 @@ export function MessageRow({
           channelId={channelId}
           side="left"
           onReply={onReply}
+          onForward={onForward}
           canPin={canPin}
           pinnedIds={pinnedIds}
           onTogglePin={onTogglePin}
@@ -259,6 +263,7 @@ export function MessageRow({
           channelId={channelId}
           side="right"
           onReply={onReply}
+          onForward={onForward}
           canPin={canPin}
           pinnedIds={pinnedIds}
           onTogglePin={onTogglePin}
@@ -493,6 +498,7 @@ function MessageActionsMenu({
   channelId,
   side,
   onReply,
+  onForward,
   canPin,
   pinnedIds,
   onTogglePin,
@@ -501,6 +507,8 @@ function MessageActionsMenu({
   channelId: string;
   side: 'left' | 'right';
   onReply: () => void;
+  /** Opens the forward picker; the menu item is hidden when absent. */
+  onForward?: () => void;
   canPin?: boolean;
   pinnedIds?: Set<string>;
   onTogglePin?: (vm: MessageItemVM) => Promise<void>;
@@ -516,6 +524,15 @@ function MessageActionsMenu({
   const canCopy = vm.body.text !== '';
   // Reply requires the original to have a server id.
   const canReply = vm.server_message_id !== undefined;
+  // Forward requires a server id + handler; money cards are server-injected
+  // (a client copy would show a card with no backing payment) and system
+  // rows carry no forwardable content.
+  const canForward =
+    onForward !== undefined &&
+    vm.server_message_id !== undefined &&
+    vm.body.kind !== 'red_packet' &&
+    vm.body.kind !== 'money_transfer' &&
+    vm.body.kind !== 'system';
   // Pin is group-only (canPin gates owner/admin) and needs a server id
   // plus a toggle handler. Members / direct chats never see it.
   const showPin =
@@ -581,6 +598,11 @@ function MessageActionsMenu({
         {canCopy && (
           <DropdownMenuItem onSelect={onCopy}>
             {t('message_actions.copy')}
+          </DropdownMenuItem>
+        )}
+        {canForward && (
+          <DropdownMenuItem onSelect={() => onForward!()}>
+            {t('message_actions.forward')}
           </DropdownMenuItem>
         )}
         {showPin && (

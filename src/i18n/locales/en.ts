@@ -323,6 +323,16 @@ export const en: LocaleSchema = {
     reply_out_of_window: 'Original message not loaded in this window',
     pin: 'Pin',
     unpin: 'Unpin',
+    forward: 'Forward',
+  },
+  forward: {
+    title: 'Forward to',
+    search_placeholder: 'Search conversations',
+    empty: 'No conversations',
+    partial_failed: 'Some targets failed:',
+    sending: 'Sending…',
+    send: 'Send ({{count}})',
+    cancel: 'Cancel',
   },
   theme: {
     system: 'Theme: follow system',
@@ -907,6 +917,16 @@ export interface LocaleSchema {
     reply_out_of_window: string;
     pin: string;
     unpin: string;
+    forward: string;
+  };
+  forward: {
+    title: string;
+    search_placeholder: string;
+    empty: string;
+    partial_failed: string;
+    sending: string;
+    send: string;
+    cancel: string;
   };
   theme: { system: string; light: string; dark: string };
   tabs: { chats: string; contacts: string; groups: string };
