@@ -365,6 +365,7 @@ export const zhCN: LocaleSchema = {
   },
   groups: {
     empty: '暂无群聊。',
+    add_friend_disabled: '该群不允许成员互相添加好友',
     create_title: '创建群聊',
     create_name: '群名称',
     create_description: '群简介（可选）',

@@ -374,6 +374,7 @@ export const en: LocaleSchema = {
   },
   groups: {
     empty: 'No groups yet.',
+    add_friend_disabled: 'This group does not allow members to add each other as friends',
     create_title: 'Create Group',
     create_name: 'Group name',
     create_description: 'Description (optional)',
@@ -949,6 +950,7 @@ export interface LocaleSchema {
   };
   groups: {
     empty: string;
+    add_friend_disabled: string;
     create_title: string;
     create_name: string;
     create_description: string;

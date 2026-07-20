@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, MoreHorizontal, UserPlus } from 'lucide-react';
+import { RpcError } from '@privchat/sdk';
 import type {
   GroupMember,
   GroupSettingsData,
@@ -184,7 +185,12 @@ export function GroupInfoDialog({
       await applyFriend(m.user_id, undefined, 'group', groupId);
       setAppliedUids((prev) => new Set(prev).add(m.user_id));
     } catch (e) {
-      setError(`${t('contacts.add_friend_failed')}: ${errorText(e)}`);
+      // 20311 GroupAddFriendDisabled：群业务策略禁止成员互加好友 → 明确本地化文案。
+      if (e instanceof RpcError && e.response.code === 20311) {
+        setError(t('groups.add_friend_disabled'));
+      } else {
+        setError(`${t('contacts.add_friend_failed')}: ${errorText(e)}`);
+      }
     } finally {
       setApplyingUid(null);
     }

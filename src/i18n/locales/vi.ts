@@ -374,6 +374,7 @@ export const vi: LocaleSchema = {
   },
   groups: {
     empty: 'Chưa có nhóm nào.',
+    add_friend_disabled: 'Nhóm này không cho phép thành viên kết bạn với nhau',
     create_title: 'Tạo nhóm',
     create_name: 'Tên nhóm',
     create_description: 'Mô tả (tùy chọn)',
