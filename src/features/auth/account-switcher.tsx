@@ -236,9 +236,7 @@ export function AccountSwitcher({
                     <span className="truncate text-sm">
                       {accountDisplayName(entry)}
                     </span>
-                    <span className="truncate text-[10px] text-muted-foreground">
-                      #{entry.user_id}
-                    </span>
+                    {/* 用户 ID 是底层协议标识，不在 UI 展示（产品决策 2026-07-21）。 */}
                   </span>
                   {isActive && <Check className="h-4 w-4 shrink-0" />}
                 </DropdownMenuItem>

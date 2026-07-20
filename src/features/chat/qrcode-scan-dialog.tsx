@@ -404,8 +404,9 @@ function UserCardBody({
         <Avatar seed={`u:${state.user_id}`} label={display} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{display}</div>
+          {/* 用户 ID 是底层协议标识，不在 UI 展示（产品决策 2026-07-21）。 */}
           <div className="truncate text-xs text-muted-foreground">
-            @{state.username} · #{state.user_id}
+            @{state.username}
           </div>
         </div>
       </div>
