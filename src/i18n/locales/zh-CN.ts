@@ -182,6 +182,8 @@ export const zhCN: LocaleSchema = {
     hide_confirm: '确定隐藏该会话？',
     failed: '操作失败',
     revoked_preview: '[已撤回]',
+    pinned_indicator: '已置顶',
+    muted_indicator: '已静音',
   },
   message_preview: {
     image: '[图片]',

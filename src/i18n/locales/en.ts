@@ -186,6 +186,8 @@ export const en: LocaleSchema = {
     hide_confirm: 'Hide this conversation?',
     failed: 'Action failed',
     revoked_preview: '[Recalled]',
+    pinned_indicator: 'Pinned',
+    muted_indicator: 'Muted',
   },
   // Conversation-list preview placeholders for non-text messages. Keys
   // match `MessageItemVM.content_type` (minus `text`, which shows content).
@@ -832,6 +834,8 @@ export interface LocaleSchema {
     hide_confirm: string;
     failed: string;
     revoked_preview: string;
+    pinned_indicator: string;
+    muted_indicator: string;
   };
   message_preview: {
     image: string;

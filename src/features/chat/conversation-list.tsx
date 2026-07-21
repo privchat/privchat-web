@@ -5,7 +5,7 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MoreHorizontal, RefreshCcw, Search } from 'lucide-react';
+import { BellOff, MoreHorizontal, Pin, RefreshCcw, Search } from 'lucide-react';
 import type { ChannelRecord, UserRecord } from '@privchat/sdk';
 import {
   resolveConversationTitle,
@@ -227,6 +227,8 @@ function ConversationRow({
       <div
         className={cn(
           'group relative flex items-stretch transition-colors hover:bg-accent',
+          // 置顶行:未选中时给一层浅色背景,和普通行区分(微信/Telegram 惯例)。
+          vm.pinned && !active && 'bg-muted/60',
           active && 'bg-accent',
         )}
       >
@@ -279,7 +281,19 @@ function ConversationRow({
               )
             )}
           </div>
-          <span className="shrink-0 text-[10px] font-mono text-muted-foreground tabular-nums">
+          <span className="shrink-0 flex items-center gap-1 text-[10px] font-mono text-muted-foreground tabular-nums">
+            {vm.muted && (
+              <BellOff
+                className="h-3 w-3"
+                aria-label={t('channel_actions.muted_indicator')}
+              />
+            )}
+            {vm.pinned && (
+              <Pin
+                className="h-3 w-3"
+                aria-label={t('channel_actions.pinned_indicator')}
+              />
+            )}
             {vm.updated_at > 0 ? formatTimeShort(vm.updated_at, i18n.language) : ''}
           </span>
         </button>

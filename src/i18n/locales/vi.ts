@@ -187,6 +187,8 @@ export const vi: LocaleSchema = {
     hide_confirm: 'Ẩn cuộc trò chuyện này?',
     failed: 'Thao tác thất bại',
     revoked_preview: '[Đã thu hồi]',
+    pinned_indicator: 'Đã ghim',
+    muted_indicator: 'Đã tắt thông báo',
   },
   message_preview: {
     image: '[Hình ảnh]',
