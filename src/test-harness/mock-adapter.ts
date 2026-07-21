@@ -472,6 +472,21 @@ export function createTestAdapter(): PrivchatClientAdapter {
         response: {} as never,
       };
     },
+    async privacyGet(): Promise<Record<string, unknown>> {
+      return {
+        allow_add_by_group: true,
+        allow_add_by_card: true,
+        allow_search_by_username: true,
+        allow_search_by_phone: true,
+        allow_search_by_qrcode: true,
+        allow_receive_message_from_non_friend: true,
+      };
+    },
+
+    async privacyUpdate(): Promise<unknown> {
+      return true;
+    },
+
     async forwardMessage(input): Promise<SendTextOperationResult> {
       // Test harness: forward = re-send the cached source content into the
       // target as a plain text row (mirrors the SDK's copy semantics).

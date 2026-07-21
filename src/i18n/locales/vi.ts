@@ -178,6 +178,18 @@ export const vi: LocaleSchema = {
     no_conversations: 'Chưa có cuộc trò chuyện nào.',
     select_conversation: 'Chọn một cuộc trò chuyện để bắt đầu.',
   },
+  privacy: {
+    title: 'Quyền riêng tư',
+    open_button: 'Cài đặt quyền riêng tư',
+    section_add_me: 'Cách thêm / tìm tôi',
+    allow_add_by_group: 'Cho phép thêm tôi qua nhóm chat',
+    allow_add_by_card: 'Cho phép thêm tôi qua danh thiếp',
+    allow_search_by_username: 'Cho phép tìm tôi bằng tên người dùng',
+    allow_search_by_phone: 'Cho phép tìm tôi bằng số điện thoại',
+    allow_search_by_qrcode: 'Cho phép tìm tôi bằng mã QR',
+    allow_receive_message_from_non_friend: 'Cho phép tin nhắn từ người lạ',
+    hint: 'Khi tắt, kênh đó sẽ không thể tìm hoặc thêm bạn; bạn bè hiện có không bị ảnh hưởng.',
+  },
   channel_actions: {
     pin: 'Ghim',
     unpin: 'Bỏ ghim',

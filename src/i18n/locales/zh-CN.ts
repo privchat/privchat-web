@@ -173,6 +173,18 @@ export const zhCN: LocaleSchema = {
     no_conversations: '暂无会话。',
     select_conversation: '选择一个会话开始聊天。',
   },
+  privacy: {
+    title: '隐私设置',
+    open_button: '隐私设置',
+    section_add_me: '添加我的方式 / 找到我的方式',
+    allow_add_by_group: '允许通过群聊添加我',
+    allow_add_by_card: '允许通过名片添加我',
+    allow_search_by_username: '允许通过用户名搜索到我',
+    allow_search_by_phone: '允许通过手机号搜索到我',
+    allow_search_by_qrcode: '允许通过二维码找到我',
+    allow_receive_message_from_non_friend: '允许接收非好友消息',
+    hint: '关闭后,对应途径将无法找到或添加你;已是好友的不受影响。',
+  },
   channel_actions: {
     pin: '置顶',
     unpin: '取消置顶',

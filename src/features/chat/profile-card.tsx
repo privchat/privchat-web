@@ -41,6 +41,7 @@ import { formatPresenceLine } from './format-last-seen';
 import { useLastSeenI18n } from './use-presence-i18n';
 import { errorText } from './error-text';
 import { ProfileEditDialog } from '@/features/profile/profile-edit-dialog';
+import { PrivacySettingsDialog } from '@/features/profile/privacy-settings-dialog';
 import { SignInDialog } from '@/features/profile/sign-in-dialog';
 
 export interface ProfileCardProps {
@@ -84,6 +85,7 @@ export function ProfileCard({
   const showSignIn = isSelf && capabilities.memberSignIn === true;
   const [editOpen, setEditOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   return (
     <>
@@ -134,6 +136,16 @@ export function ProfileCard({
               {t('app.loading')}
             </div>
           )}
+          {isSelf && (
+            <button
+              type="button"
+              onClick={() => setPrivacyOpen(true)}
+              className="flex w-full items-center justify-center gap-2 border-t px-3 py-2 text-xs hover:bg-accent"
+              data-testid="profile-card-privacy-self"
+            >
+              {t('privacy.open_button')}
+            </button>
+          )}
           {showSelfEdit && (
             <button
               type="button"
@@ -161,6 +173,9 @@ export function ProfileCard({
       </DropdownMenu>
       {showSelfEdit && (
         <ProfileEditDialog open={editOpen} onOpenChange={setEditOpen} />
+      )}
+      {isSelf && (
+        <PrivacySettingsDialog open={privacyOpen} onOpenChange={setPrivacyOpen} />
       )}
       {showSignIn && (
         <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />

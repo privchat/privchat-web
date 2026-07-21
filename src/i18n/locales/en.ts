@@ -177,6 +177,18 @@ export const en: LocaleSchema = {
     no_conversations: 'No conversations yet.',
     select_conversation: 'Select a conversation to start chatting.',
   },
+  privacy: {
+    title: 'Privacy',
+    open_button: 'Privacy settings',
+    section_add_me: 'Ways to add / find me',
+    allow_add_by_group: 'Allow adding me via group chats',
+    allow_add_by_card: 'Allow adding me via contact cards',
+    allow_search_by_username: 'Allow finding me by username',
+    allow_search_by_phone: 'Allow finding me by phone number',
+    allow_search_by_qrcode: 'Allow finding me by QR code',
+    allow_receive_message_from_non_friend: 'Allow messages from non-friends',
+    hint: 'When off, that channel can no longer find or add you; existing friends are unaffected.',
+  },
   channel_actions: {
     pin: 'Pin',
     unpin: 'Unpin',
@@ -824,6 +836,18 @@ export interface LocaleSchema {
     refresh: string;
     no_conversations: string;
     select_conversation: string;
+  };
+  privacy: {
+    title: string;
+    open_button: string;
+    section_add_me: string;
+    allow_add_by_group: string;
+    allow_add_by_card: string;
+    allow_search_by_username: string;
+    allow_search_by_phone: string;
+    allow_search_by_qrcode: string;
+    allow_receive_message_from_non_friend: string;
+    hint: string;
   };
   channel_actions: {
     pin: string;
