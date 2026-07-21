@@ -399,6 +399,8 @@ export const en: LocaleSchema = {
   groups: {
     empty: 'No groups yet.',
     add_friend_disabled: 'This group does not allow members to add each other as friends',
+    add_friend_personal_disabled: 'They do not allow being added via group chats',
+    add_friend_already: 'You are already friends',
     create_title: 'Create Group',
     create_name: 'Group name',
     create_description: 'Description (optional)',
@@ -999,6 +1001,8 @@ export interface LocaleSchema {
   groups: {
     empty: string;
     add_friend_disabled: string;
+    add_friend_personal_disabled: string;
+    add_friend_already: string;
     create_title: string;
     create_name: string;
     create_description: string;

@@ -182,12 +182,35 @@ export function GroupInfoDialog({
     setApplyingUid(m.user_id);
     setError(null);
     try {
-      await applyFriend(m.user_id, undefined, 'group', groupId);
+      // PROFILE_VISIBILITY §2.5.1:先查 detail(来源校验一次+服务端算好的
+      // can_add_friend/deny_reason),拿 view-grant 后凭 grant 申请——判定
+      // 单点在服务端,UI 不自行推断。
+      const detail = await adapter.userDetail({
+        target_user_id: m.user_id,
+        source: 'group',
+        source_id: groupId,
+      });
+      if (!detail.can_add_friend) {
+        setError(
+          detail.deny_reason === 'group_policy'
+            ? t('groups.add_friend_disabled')
+            : detail.deny_reason === 'personal_privacy'
+              ? t('groups.add_friend_personal_disabled')
+              : detail.deny_reason === 'already_friend'
+                ? t('groups.add_friend_already')
+                : t('contacts.add_friend_failed'),
+        );
+        return;
+      }
+      await adapter.friendApply(m.user_id, undefined, 'group', groupId, detail.grant_id);
       setAppliedUids((prev) => new Set(prev).add(m.user_id));
     } catch (e) {
-      // 20311 GroupAddFriendDisabled：群业务策略禁止成员互加好友 → 明确本地化文案。
+      // grant 过期(20313)→ 理论上重拉 detail 即可;这里直接提示重试。
+      // 20311/20312 双闸文案兜底(legacy 路径也可能报)。
       if (e instanceof RpcError && e.response.code === 20311) {
         setError(t('groups.add_friend_disabled'));
+      } else if (e instanceof RpcError && e.response.code === 20312) {
+        setError(t('groups.add_friend_personal_disabled'));
       } else {
         setError(`${t('contacts.add_friend_failed')}: ${errorText(e)}`);
       }

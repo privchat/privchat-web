@@ -472,6 +472,18 @@ export function createTestAdapter(): PrivchatClientAdapter {
         response: {} as never,
       };
     },
+    async userDetail(req: { target_user_id: number; source: string; source_id: string }) {
+      return {
+        user_id: req.target_user_id,
+        username: '',
+        nickname: `User ${req.target_user_id}`,
+        is_friend: false,
+        can_add_friend: true,
+        deny_reason: null,
+        grant_id: 'mock-grant-1',
+      };
+    },
+
     async privacyGet(): Promise<Record<string, unknown>> {
       return {
         allow_add_by_group: true,
