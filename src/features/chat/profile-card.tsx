@@ -62,8 +62,13 @@ export function ProfileCard({
   const adapter = usePrivchatClient();
   const i18n = useLastSeenI18n();
 
-  const display = user?.nickname ?? user?.username ?? fallbackTitle;
-  const username = user?.username;
+  // PROFILE_VISIBILITY:非好友的 username 服务端投影为空串——空值视同缺席,
+  // 展示回退 nickname → uid,@ 行仅在有值时渲染。
+  const display =
+    (user?.nickname !== '' ? user?.nickname : undefined) ??
+    (user?.username !== '' ? user?.username : undefined) ??
+    (user !== undefined ? `#${user.user_id}` : fallbackTitle);
+  const username = user?.username !== '' ? user?.username : undefined;
   const seed = user !== undefined ? `u:${user.user_id}` : `t:${fallbackTitle}`;
   const presenceText = formatPresenceLine(presence, i18n);
   const online = presence?.is_online === true;

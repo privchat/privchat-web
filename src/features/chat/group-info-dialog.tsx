@@ -214,7 +214,7 @@ export function GroupInfoDialog({
 
   const onRemove = async (m: GroupMember) => {
     if (busyUid !== null) return;
-    const display = m.nickname || m.username;
+    const display = m.nickname || m.username || `#${m.user_id}`;
     if (!confirm(t('groups.remove_member_confirm', { name: display }))) return;
     setBusyUid(m.user_id);
     setError(null);
@@ -308,7 +308,7 @@ export function GroupInfoDialog({
 
   const onTransferOwner = async (m: GroupMember) => {
     if (busyUid !== null) return;
-    const display = m.nickname || m.username;
+    const display = m.nickname || m.username || `#${m.user_id}`;
     if (!confirm(t('groups.transfer_owner_confirm', { name: display }))) return;
     setBusyUid(m.user_id);
     setError(null);
@@ -602,7 +602,7 @@ export function GroupInfoDialog({
             )}
             <ul className="divide-y">
               {members.map((m) => {
-                const display = m.nickname || m.username;
+                const display = m.nickname || m.username || `#${m.user_id}`;
                 const roleLabel =
                   m.role === 'owner'
                     ? t('groups.role_owner')
@@ -630,9 +630,11 @@ export function GroupInfoDialog({
                       <div className="truncate text-sm font-medium">
                         {display}
                       </div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        @{m.username}
-                      </div>
+                      {m.username !== '' && (
+                        <div className="truncate text-xs text-muted-foreground">
+                          @{m.username}
+                        </div>
+                      )}
                     </div>
                     {m.is_muted && (
                       <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">
