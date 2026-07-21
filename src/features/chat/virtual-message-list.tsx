@@ -109,6 +109,7 @@ export function VirtualMessageList({
   onForward,
   canPin,
   pinnedIds,
+  isGroup,
   onTogglePin,
   focusMessageId,
   onFocusConsumed,
@@ -761,6 +762,12 @@ export function VirtualMessageList({
           {virtualItems.map((virtualItem) => {
             const m = messages[virtualItem.index];
             if (m === undefined) return null;
+            const prev =
+              virtualItem.index > 0 ? messages[virtualItem.index - 1] : undefined;
+            const showSenderName =
+              isGroup === true &&
+              !m.is_self &&
+              (prev === undefined || prev.is_self || prev.from_uid !== m.from_uid);
             const replyVm =
               m.reply_to !== undefined
                 ? messages.find((x) => x.server_message_id === m.reply_to)
@@ -800,6 +807,7 @@ export function VirtualMessageList({
                   canPin={canPin}
                   pinnedIds={pinnedIds}
                   onTogglePin={onTogglePin}
+                  showSenderName={showSenderName}
                 />
               </div>
             );

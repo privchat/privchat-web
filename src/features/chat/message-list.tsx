@@ -41,6 +41,8 @@ export interface MessageListProps {
   /** Group-only: set of `server_message_id`s currently pinned. Drives the
    *  Pin/Unpin menu-item label toggle. */
   pinnedIds?: Set<string>;
+  /** 群聊标记:对方消息气泡上方显示发送者昵称(微信/Telegram 惯例)。 */
+  isGroup?: boolean;
   /** Group-only: toggle pin state for a row. Resolves after the pinned
    *  list has been refreshed so the menu label + pinned bar stay in sync. */
   onTogglePin?: (vm: MessageItemVM) => Promise<void>;

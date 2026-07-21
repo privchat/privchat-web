@@ -48,6 +48,7 @@ export function MessageRow({
   canPin,
   pinnedIds,
   onTogglePin,
+  showSenderName,
 }: {
   vm: MessageItemVM;
   peerReadPts: string | undefined;
@@ -76,6 +77,9 @@ export function MessageRow({
   pinnedIds?: Set<string>;
   /** Group-only: toggle pin state for this row. */
   onTogglePin?: (vm: MessageItemVM) => Promise<void>;
+  /** Group-only(微信/Telegram 惯例):对方消息气泡上方显示发送者昵称。
+   *  列表侧只在群聊、非本人、且与上一条不同发送者时置 true(连续消息降噪)。 */
+  showSenderName?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const ts = useMemo(
@@ -179,6 +183,9 @@ export function MessageRow({
       {!vm.is_self && <MessageRowAvatar fromUid={vm.from_uid} />}
       {mediaNode !== null ? (
         <div className="flex flex-col items-stretch gap-1">
+          {showSenderName === true && !vm.is_self && (
+            <SenderNameLabel fromUid={vm.from_uid} />
+          )}
           {vm.reply_to !== undefined && (
             <ReplyQuote
               replyVm={replyVm}
@@ -218,6 +225,9 @@ export function MessageRow({
         </div>
       ) : (
         <div className="flex flex-col gap-1 max-w-[75%]">
+          {showSenderName === true && !vm.is_self && (
+            <SenderNameLabel fromUid={vm.from_uid} />
+          )}
           <div
             className={cn(
               'flex flex-col rounded-lg px-3 py-2 text-sm',
@@ -401,6 +411,22 @@ function FailedMessageActions({
  *  that contact rows / the chat header use). For self-rows we don't
  *  render an avatar (you know who you are) — keeps the layout tight
  *  and matches WeChat / Telegram conventions. */
+/** 群聊对方消息的发送者昵称(气泡上方小灰字,微信同款)。展示回退:
+ *  昵称 → username → #uid。群名片(per-group 备注)接入是 backlog——
+ *  消息列表侧暂无 group_member store。 */
+function SenderNameLabel({ fromUid }: { fromUid: string }) {
+  const user = useUserProfile(fromUid);
+  const name =
+    (user?.nickname !== '' ? user?.nickname : undefined) ??
+    (user?.username !== '' ? user?.username : undefined) ??
+    `#${fromUid}`;
+  return (
+    <span className="ml-1 text-[11px] leading-none text-muted-foreground">
+      {name}
+    </span>
+  );
+}
+
 function MessageRowAvatar({ fromUid }: { fromUid: string }) {
   const user = useUserProfile(fromUid);
   const display = user?.nickname ?? user?.username ?? `User #${fromUid}`;

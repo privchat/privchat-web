@@ -631,6 +631,7 @@ export function ConversationPanel({
         onLoadOlder={onLoadOlder}
         onReply={(m) => setReplyTo(m)}
         onForward={(m) => setForwardSource(m)}
+        isGroup={!isDirect}
         canPin={!isDirect && groupId !== undefined ? isManager : undefined}
         pinnedIds={!isDirect && groupId !== undefined ? pinnedIds : undefined}
         onTogglePin={

@@ -50,6 +50,7 @@ export function PlainMessageList({
   onForward,
   canPin,
   pinnedIds,
+  isGroup,
   onTogglePin,
   focusMessageId,
   onFocusConsumed,
@@ -221,7 +222,13 @@ export function PlainMessageList({
           </div>
         )}
 
-        {messages.map((m) => {
+        {messages.map((m, i) => {
+          // 微信/Telegram 惯例:群聊对方消息显示昵称;连续同人消息只显首条。
+          const prev = i > 0 ? messages[i - 1] : undefined;
+          const showSenderName =
+            isGroup === true &&
+            !m.is_self &&
+            (prev === undefined || prev.is_self || prev.from_uid !== m.from_uid);
           const replyVm =
             m.reply_to !== undefined
               ? messages.find((x) => x.server_message_id === m.reply_to)
@@ -241,6 +248,7 @@ export function PlainMessageList({
               canPin={canPin}
               pinnedIds={pinnedIds}
               onTogglePin={onTogglePin}
+              showSenderName={showSenderName}
             />
           );
         })}
