@@ -449,6 +449,7 @@ export const en: LocaleSchema = {
     settings_mute_all: 'Mute everyone',
     settings_allow_member_add_friend: 'Allow members to add each other',
     settings_allow_search: 'Allow this group to be found in search',
+    settings_member_can_invite: 'Allow members to invite',
     settings_join_policy: 'Join policy',
     settings_join_policy_none: 'No new members',
     settings_join_policy_approval: 'Approval required',
@@ -1050,6 +1051,7 @@ export interface LocaleSchema {
     settings_mute_all: string;
     settings_allow_member_add_friend: string;
     settings_allow_search: string;
+    settings_member_can_invite: string;
     settings_join_policy: string;
     settings_join_policy_none: string;
     settings_join_policy_approval: string;

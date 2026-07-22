@@ -103,7 +103,7 @@ export function GroupInfoDialog({
   // (allow_member_add_friend / allow_search). Keyed by the patch field
   // so the two switches gate independently.
   const [togglingFlag, setTogglingFlag] = useState<
-    'allow_member_add_friend' | 'allow_search' | 'join_policy' | null
+    'allow_member_add_friend' | 'allow_search' | 'member_can_invite' | 'join_policy' | null
   >(null);
 
   const fetchMembers = async () => {
@@ -425,7 +425,7 @@ export function GroupInfoDialog({
   // `group/settings/update` RPC as description/announcement; we patch a
   // single field at a time and optimistically reflect the new value.
   const onToggleFlag = async (
-    field: 'allow_member_add_friend' | 'allow_search',
+    field: 'allow_member_add_friend' | 'allow_search' | 'member_can_invite',
   ) => {
     if (settings === null || togglingFlag !== null) return;
     setTogglingFlag(field);
@@ -563,6 +563,16 @@ export function GroupInfoDialog({
                         disabled={togglingFlag !== null}
                         onChange={() => void onToggleFlag('allow_search')}
                         data-testid="group-allow-search"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 pt-1">
+                      <span>{t('groups.settings_member_can_invite')}</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.member_can_invite ?? false}
+                        disabled={togglingFlag !== null}
+                        onChange={() => void onToggleFlag('member_can_invite')}
+                        data-testid="group-member-can-invite"
                       />
                     </label>
                     <label className="flex items-center justify-between gap-2 pt-1">

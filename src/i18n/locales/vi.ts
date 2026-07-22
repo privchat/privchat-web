@@ -453,6 +453,7 @@ export const vi: LocaleSchema = {
     settings_mute_all: 'Chặn nói cả nhóm',
     settings_allow_member_add_friend: 'Cho phép thành viên kết bạn với nhau',
     settings_allow_search: 'Cho phép tìm thấy nhóm qua tìm kiếm',
+    settings_member_can_invite: 'Cho phép thành viên mời người mới',
     settings_join_policy: 'Cách tham gia',
     settings_join_policy_none: 'Không cho thành viên mới',
     settings_join_policy_approval: 'Cần phê duyệt',

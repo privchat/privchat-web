@@ -439,6 +439,7 @@ export const zhCN: LocaleSchema = {
     settings_mute_all: '全员禁言',
     settings_allow_member_add_friend: '允许成员私自加好友',
     settings_allow_search: '允许被搜索',
+    settings_member_can_invite: '允许成员邀请新成员',
     settings_join_policy: '加入方式',
     settings_join_policy_none: '不允许新成员加入',
     settings_join_policy_approval: '需管理员审核',
