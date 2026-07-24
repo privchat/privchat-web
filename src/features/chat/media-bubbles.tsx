@@ -115,22 +115,30 @@ export function ImageBubble({
   isSelf: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const dec = useDecryptedAttachment(meta.file_id);
-  // 优先解密后的 objectURL；无 file_id 的极老消息退回 legacy 明文 url。
-  const legacyUrl =
-    (meta.file_id === undefined || meta.file_id === '') && meta.url !== undefined && meta.url !== ''
-      ? meta.url
+
+  // 气泡只渲染缩略图（发送端 320px 独立 file，与 App/Rust 一致）：小、快、省流量。
+  // 无独立缩略图时退回原图 file_id。极老明文消息退回 legacy url。
+  const thumbFileId =
+    meta.thumbnail_file_id !== undefined && meta.thumbnail_file_id !== ''
+      ? meta.thumbnail_file_id
+      : meta.file_id;
+  const thumbDec = useDecryptedAttachment(thumbFileId);
+  const thumbLegacyUrl =
+    (thumbFileId === undefined || thumbFileId === '')
+      ? (meta.thumbnail_url ?? meta.url)
       : undefined;
-  const src = dec.url ?? legacyUrl;
-  // The loading placeholder and decoded image must occupy the same box.
-  // Otherwise opening a conversation scrolls against the small placeholder,
-  // then the real image grows underneath the viewport and hides the tail.
+  const thumbSrc = thumbDec.url ?? thumbLegacyUrl;
+
+  // 大图（原图）只在点开时按需加载 file_id，避免为时间线里每张图都下全分辨率原图。
+  const fullDec = useDecryptedAttachment(open ? meta.file_id : undefined);
+  const fullSrc = fullDec.url;
+
   const size = imageBubbleSize(meta);
-  if (src === undefined) {
-    if (dec.failed) {
+  if (thumbSrc === undefined) {
+    if (thumbDec.failed) {
       return <FallbackBubble label="[图片·解密失败]" isSelf={isSelf} icon={AlertTriangle} />;
     }
-    if (dec.loading || (meta.file_id !== undefined && meta.file_id !== '')) {
+    if (thumbDec.loading || (thumbFileId !== undefined && thumbFileId !== '')) {
       return (
         <div
           className={cn(
@@ -149,11 +157,6 @@ export function ImageBubble({
     }
     return <FallbackBubble label="[图片]" isSelf={isSelf} icon={ImageIcon} />;
   }
-  // Compute display dims by fitting the image's aspect ratio inside
-  // the (MAX_W, MAX_H) box. If meta.width/height are both known,
-  // pick the dimension that hits its cap first; otherwise fall back
-  // to the box and rely on `object-cover` to crop tastefully. Don't
-  // up-scale tiny images: a 100x100 thumbnail stays at 100x100.
   return (
     <>
       <button
@@ -173,7 +176,7 @@ export function ImageBubble({
         }}
       >
         <img
-          src={src}
+          src={thumbSrc}
           alt=""
           loading="lazy"
           decoding="async"
@@ -187,11 +190,20 @@ export function ImageBubble({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setOpen(false)}
         >
+          {/* 缩略图占位（立即可见），原图加载完成后无缝换成原图；加载中叠一个 loading。 */}
           <img
-            src={src}
+            src={fullSrc ?? thumbSrc}
             alt=""
-            className="max-h-full max-w-full object-contain"
+            className={cn(
+              'max-h-full max-w-full object-contain transition-opacity',
+              fullSrc === undefined && 'opacity-70 blur-[1px]',
+            )}
           />
+          {open && fullSrc === undefined && !fullDec.failed && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-white/90" />
+            </div>
+          )}
         </div>
       )}
     </>
