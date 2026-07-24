@@ -46,9 +46,11 @@ export function MessageRow({
   onForward,
   onJumpToReply,
   canPin,
+  canRevokeOthers,
   pinnedIds,
   onTogglePin,
   showSenderName,
+  roleByUid,
 }: {
   vm: MessageItemVM;
   peerReadPts: string | undefined;
@@ -73,6 +75,9 @@ export function MessageRow({
   /** Group-only: whether the current user (owner/admin) may pin. When
    *  falsy the Pin/Unpin menu item is hidden (direct chats, members). */
   canPin?: boolean;
+  /** Group-only: owner/admin may revoke OTHERS' messages (Telegram
+   *  "delete for everyone" semantics; server enforces the same gate). */
+  canRevokeOthers?: boolean;
   /** Group-only: set of pinned `server_message_id`s — drives label toggle. */
   pinnedIds?: Set<string>;
   /** Group-only: toggle pin state for this row. */
@@ -80,6 +85,9 @@ export function MessageRow({
   /** Group-only(微信/Telegram 惯例):对方消息气泡上方显示发送者昵称。
    *  列表侧只在群聊、非本人、且与上一条不同发送者时置 true(连续消息降噪)。 */
   showSenderName?: boolean;
+  /** Group-only: uid → role ('owner'/'admin'/'member') — drives the
+   *  【群主】/【管理】tag next to the sender name. */
+  roleByUid?: Map<string, string>;
 }) {
   const { t, i18n } = useTranslation();
   const ts = useMemo(
@@ -176,6 +184,7 @@ export function MessageRow({
           onReply={onReply}
           onForward={onForward}
           canPin={canPin}
+          canRevokeOthers={canRevokeOthers}
           pinnedIds={pinnedIds}
           onTogglePin={onTogglePin}
         />
@@ -184,7 +193,7 @@ export function MessageRow({
       {mediaNode !== null ? (
         <div className="flex flex-col items-stretch gap-1">
           {showSenderName === true && !vm.is_self && (
-            <SenderNameLabel fromUid={vm.from_uid} />
+            <SenderNameLabel fromUid={vm.from_uid} role={roleByUid?.get(vm.from_uid)} />
           )}
           {vm.reply_to !== undefined && (
             <ReplyQuote
@@ -226,7 +235,7 @@ export function MessageRow({
       ) : (
         <div className="flex flex-col gap-1 max-w-[75%]">
           {showSenderName === true && !vm.is_self && (
-            <SenderNameLabel fromUid={vm.from_uid} />
+            <SenderNameLabel fromUid={vm.from_uid} role={roleByUid?.get(vm.from_uid)} />
           )}
           <div
             className={cn(
@@ -275,6 +284,7 @@ export function MessageRow({
           onReply={onReply}
           onForward={onForward}
           canPin={canPin}
+          canRevokeOthers={canRevokeOthers}
           pinnedIds={pinnedIds}
           onTogglePin={onTogglePin}
         />
@@ -414,7 +424,8 @@ function FailedMessageActions({
 /** 群聊对方消息的发送者昵称(气泡上方小灰字,微信同款)。展示回退:
  *  昵称 → username → #uid。群名片(per-group 备注)接入是 backlog——
  *  消息列表侧暂无 group_member store。 */
-function SenderNameLabel({ fromUid }: { fromUid: string }) {
+function SenderNameLabel({ fromUid, role }: { fromUid: string; role?: string }) {
+  const { t } = useTranslation();
   const user = useUserProfile(fromUid);
   const name =
     (user?.nickname !== '' ? user?.nickname : undefined) ??
@@ -423,6 +434,12 @@ function SenderNameLabel({ fromUid }: { fromUid: string }) {
   return (
     <span className="ml-1 text-[11px] leading-none text-muted-foreground">
       {name}
+      {role === 'owner' && (
+        <span className="ml-1 text-orange-500">{t('groups.tag_owner')}</span>
+      )}
+      {role === 'admin' && (
+        <span className="ml-1 text-red-500">{t('groups.tag_admin')}</span>
+      )}
     </span>
   );
 }
@@ -526,6 +543,7 @@ function MessageActionsMenu({
   onReply,
   onForward,
   canPin,
+  canRevokeOthers,
   pinnedIds,
   onTogglePin,
 }: {
@@ -536,6 +554,7 @@ function MessageActionsMenu({
   /** Opens the forward picker; the menu item is hidden when absent. */
   onForward?: () => void;
   canPin?: boolean;
+  canRevokeOthers?: boolean;
   pinnedIds?: Set<string>;
   onTogglePin?: (vm: MessageItemVM) => Promise<void>;
 }) {
@@ -545,7 +564,11 @@ function MessageActionsMenu({
 
   // Revoke needs a server_message_id (pending rows haven't been ACKed
   // and have nothing for the server to recall yet).
-  const canRevoke = vm.is_self && vm.status === 'sent' && vm.server_message_id !== undefined;
+  // Self may revoke own sent rows; a group owner/admin may also revoke
+  // others' (server enforces the same permission — UI just surfaces it).
+  const canRevoke =
+    vm.server_message_id !== undefined &&
+    (vm.is_self ? vm.status === 'sent' : canRevokeOthers === true);
   // Copy is universal; no point on a row with no text content.
   const canCopy = vm.body.text !== '';
   // Reply requires the original to have a server id.

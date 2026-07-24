@@ -405,6 +405,8 @@ export const zhCN: LocaleSchema = {
     leave_failed: '退出失败',
     role_owner: '群主',
     role_admin: '管理员',
+    tag_owner: '【群主】',
+    tag_admin: '【管理】',
     add_member: '添加成员',
     add_member_pick: '添加群成员',
     add_member_no_friends: '没有可添加的好友。',

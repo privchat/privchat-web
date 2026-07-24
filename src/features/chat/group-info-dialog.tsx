@@ -675,7 +675,14 @@ export function GroupInfoDialog({
                       </span>
                     )}
                     {roleLabel !== '' && (
-                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      <span
+                        className={cn(
+                          'shrink-0 rounded px-1.5 py-0.5 text-[10px]',
+                          m.role === 'owner'
+                            ? 'bg-orange-50 text-orange-500'
+                            : 'bg-red-50 text-red-500',
+                        )}
+                      >
                         {roleLabel}
                       </span>
                     )}

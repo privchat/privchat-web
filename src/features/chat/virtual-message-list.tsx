@@ -108,6 +108,8 @@ export function VirtualMessageList({
   onReply,
   onForward,
   canPin,
+  canRevokeOthers,
+  roleByUid,
   pinnedIds,
   isGroup,
   onTogglePin,
@@ -805,6 +807,8 @@ export function VirtualMessageList({
                   onForward={onForward === undefined ? undefined : () => onForward(m)}
                   onJumpToReply={handleReplyJump}
                   canPin={canPin}
+                  canRevokeOthers={canRevokeOthers}
+                  roleByUid={roleByUid}
                   pinnedIds={pinnedIds}
                   onTogglePin={onTogglePin}
                   showSenderName={showSenderName}

@@ -49,6 +49,8 @@ export function PlainMessageList({
   onReply,
   onForward,
   canPin,
+  canRevokeOthers,
+  roleByUid,
   pinnedIds,
   isGroup,
   onTogglePin,
@@ -246,6 +248,8 @@ export function PlainMessageList({
               onForward={onForward === undefined ? undefined : () => onForward(m)}
               onJumpToReply={(targetId) => jumpToMessage(targetId, scrollRef.current)}
               canPin={canPin}
+              canRevokeOthers={canRevokeOthers}
+              roleByUid={roleByUid}
               pinnedIds={pinnedIds}
               onTogglePin={onTogglePin}
               showSenderName={showSenderName}

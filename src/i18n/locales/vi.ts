@@ -415,6 +415,8 @@ export const vi: LocaleSchema = {
     leave_failed: 'Rời nhóm thất bại',
     role_owner: 'Chủ nhóm',
     role_admin: 'Quản trị viên',
+    tag_owner: '[Chủ nhóm]',
+    tag_admin: '[Quản trị]',
     add_member: 'Thêm thành viên',
     add_member_pick: 'Thêm thành viên',
     add_member_no_friends: 'Không có bạn nào để thêm.',

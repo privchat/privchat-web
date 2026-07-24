@@ -38,6 +38,10 @@ export interface MessageListProps {
    *  Undefined / false for direct chats and regular members — the pin
    *  menu item stays hidden. */
   canPin?: boolean;
+  /** Group-only: owner/admin may revoke others' messages. */
+  canRevokeOthers?: boolean;
+  /** Group-only: uid → role for sender-name tags. */
+  roleByUid?: Map<string, string>;
   /** Group-only: set of `server_message_id`s currently pinned. Drives the
    *  Pin/Unpin menu-item label toggle. */
   pinnedIds?: Set<string>;

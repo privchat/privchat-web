@@ -218,6 +218,8 @@ export function ConversationPanel({
   const groupOps = useGroupOps();
   const groupId = record?.channel_type === 2 ? record.channel_id : undefined;
   const [isManager, setIsManager] = useState(false);
+  // uid → role ('owner'/'admin'/'member'):驱动气泡昵称旁的【群主】/【管理】标签。
+  const [roleByUid, setRoleByUid] = useState<Map<string, string>>(new Map());
   const [pinnedItems, setPinnedItems] = useState<PinnedMessageItem[]>([]);
 
   // Resolve owner/admin role for the current user. Same algorithm the
@@ -226,6 +228,7 @@ export function ConversationPanel({
   useEffect(() => {
     if (groupId === undefined) {
       setIsManager(false);
+      setRoleByUid(new Map());
       return;
     }
     let cancelled = false;
@@ -237,6 +240,9 @@ export function ConversationPanel({
           (m) => String(m.user_id) === selfUid,
         );
         setIsManager(self?.role === 'owner' || self?.role === 'admin');
+        setRoleByUid(
+          new Map(resp.members.map((m) => [String(m.user_id), m.role])),
+        );
       })
       .catch(() => {
         if (!cancelled) setIsManager(false);
@@ -633,6 +639,8 @@ export function ConversationPanel({
         onForward={(m) => setForwardSource(m)}
         isGroup={!isDirect}
         canPin={!isDirect && groupId !== undefined ? isManager : undefined}
+        canRevokeOthers={!isDirect && groupId !== undefined ? isManager : undefined}
+        roleByUid={!isDirect && groupId !== undefined ? roleByUid : undefined}
         pinnedIds={!isDirect && groupId !== undefined ? pinnedIds : undefined}
         onTogglePin={
           !isDirect && groupId !== undefined ? onTogglePin : undefined

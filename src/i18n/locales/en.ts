@@ -414,6 +414,8 @@ export const en: LocaleSchema = {
     leave_failed: 'Could not leave',
     role_owner: 'Owner',
     role_admin: 'Admin',
+    tag_owner: '[Owner]',
+    tag_admin: '[Admin]',
     add_member: 'Add Member',
     add_member_pick: 'Add member',
     add_member_no_friends: 'No friends available to add.',
@@ -1017,6 +1019,8 @@ export interface LocaleSchema {
     leave_failed: string;
     role_owner: string;
     role_admin: string;
+    tag_owner: string;
+    tag_admin: string;
     add_member: string;
     add_member_pick: string;
     add_member_no_friends: string;

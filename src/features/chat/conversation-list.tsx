@@ -3,7 +3,7 @@
 // is the primary entry point on PC; on H5 it's the default screen and
 // gets replaced by ConversationPanel when a row is tapped.
 
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BellOff, MoreHorizontal, Pin, RefreshCcw, Search } from 'lucide-react';
 import type { ChannelRecord, UserRecord } from '@privchat/sdk';
@@ -92,6 +92,19 @@ export function ConversationList({
     return dup;
   }, [conversations]);
 
+  // Scroll-position stability: a new message re-sorts the list (that
+  // conversation jumps to the top). The user's scroll offset must NOT
+  // jump with it — record user-driven scrolls and restore the offset
+  // after every data-driven re-render that reset it (Telegram behavior).
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const savedScrollTop = useRef(0);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (el !== null && Math.abs(el.scrollTop - savedScrollTop.current) > 1) {
+      el.scrollTop = savedScrollTop.current;
+    }
+  }, [conversations]);
+
   return (
     <div className={cn('flex h-full flex-col bg-card', className)}>
       <header className="flex shrink-0 items-center justify-end border-b px-2 py-2">
@@ -118,7 +131,13 @@ export function ConversationList({
         </Button>
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          savedScrollTop.current = e.currentTarget.scrollTop;
+        }}
+        className="flex-1 min-h-0 overflow-y-auto"
+      >
         {error !== null && (
           <div className="px-4 py-2 text-xs text-destructive">{error.message}</div>
         )}
