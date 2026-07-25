@@ -402,15 +402,16 @@ export function GroupInfoDialog({
   };
 
   // R3 — toggle whole-group mute. Owner-only per spec; UI gates on
-  // `isOwnerSelf`. Goes through the dedicated `group/settings/mute_all`
-  // route (separate notification on the server side).
+  // 全员禁言与其它群设置走同一条 `group/settings/update` 路径（与 App 的
+  // ChatSettingsPage「统一走 groupUpdateSettings」一致，单一业务流程）。该路径在服务端
+  // 会写入 system.group_mute_all_on/off 系统灰条；专用 mute_all 路由没实现通知，故弃用。
   const onToggleMuteAll = async () => {
     if (settings === null || toggleMuteAllBusy) return;
     setToggleMuteAllBusy(true);
     setError(null);
     try {
       const next = !settings.all_muted;
-      await ops.muteAll(groupId, next);
+      await ops.updateSettings(groupId, { all_muted: next });
       setSettings((prev) =>
         prev !== null ? { ...prev, all_muted: next } : prev,
       );
