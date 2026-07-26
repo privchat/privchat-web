@@ -252,10 +252,14 @@ export async function pageWalletTransactions(pageNo = 1, pageSize = 20): Promise
 
 // ─────────────────────────── display helpers ───────────────────────────
 
-/** cents → "¥x.xx" ("-¥x.xx" for negatives). */
-export function fenToYuan(fen: number): string {
-  const neg = fen < 0;
-  const abs = Math.abs(fen);
+/** cents → "¥x.xx" ("-¥x.xx" for negatives). Missing / non-numeric input renders
+ *  as ¥0.00 — a NaN must never reach a money label. The server used to drop
+ *  default-valued fields entirely (kotlinx encodeDefaults=false), so a zero fee
+ *  arrived as `undefined` and the detail page showed "¥NaN.NaN". */
+export function fenToYuan(fen: number | null | undefined): string {
+  const safe = typeof fen === 'number' && Number.isFinite(fen) ? fen : 0;
+  const neg = safe < 0;
+  const abs = Math.abs(safe);
   const yuan = Math.floor(abs / 100);
   const cents = abs % 100;
   return `${neg ? '-' : ''}¥${yuan}.${cents < 10 ? '0' : ''}${cents}`;
@@ -469,6 +473,9 @@ export async function getWithdrawDetail(id: number): Promise<WithdrawOrder> {
 }
 
 /** Withdraw status → i18n key (labels aligned with App/H5). */
-export function withdrawStatusKey(status: number): string {
-  return status >= 0 && status <= 6 ? `money.wd.status_${status}` : 'money.wd.status_unknown';
+export function withdrawStatusKey(status: number | null | undefined): string {
+  // A missing status means PENDING(0): orders are created as PENDING, and 0 is
+  // exactly the value the server is most likely to omit from the response.
+  const safe = typeof status === 'number' && Number.isFinite(status) ? status : 0;
+  return safe >= 0 && safe <= 6 ? `money.wd.status_${safe}` : 'money.wd.status_unknown';
 }
