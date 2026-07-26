@@ -9,7 +9,7 @@ export const en: LocaleSchema = {
     name: '{{brand}}',
     loading: 'Loading…',
     system_notifications: 'System Messages',
-    unknown_user: 'User #{{id}}',
+    unknown_user: 'User',
     unknown_group: 'Group Chat',
   },
   system_template: {
@@ -240,7 +240,6 @@ export const en: LocaleSchema = {
   copy: {
     label: 'Copy',
     copied: 'Copied',
-    user_id: 'User ID',
     username: 'Username',
   },
   logs: {
@@ -1099,7 +1098,6 @@ export interface LocaleSchema {
   copy: {
     label: string;
     copied: string;
-    user_id: string;
     username: string;
   };
   logs: {

@@ -5,7 +5,7 @@ export const zhCN: LocaleSchema = {
     name: '{{brand}}',
     loading: '加载中…',
     system_notifications: '系统消息',
-    unknown_user: '用户 #{{id}}',
+    unknown_user: '用户',
     unknown_group: '群聊',
   },
   system_template: {
@@ -234,7 +234,6 @@ export const zhCN: LocaleSchema = {
   copy: {
     label: '复制',
     copied: '已复制',
-    user_id: '用户 ID',
     username: '用户名',
   },
   logs: {

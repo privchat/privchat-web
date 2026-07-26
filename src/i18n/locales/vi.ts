@@ -10,7 +10,7 @@ export const vi: LocaleSchema = {
     name: '{{brand}}',
     loading: 'Đang tải…',
     system_notifications: 'Tin nhắn hệ thống',
-    unknown_user: 'Người dùng #{{id}}',
+    unknown_user: 'Người dùng',
     unknown_group: 'Nhóm chat',
   },
   system_template: {
@@ -239,7 +239,6 @@ export const vi: LocaleSchema = {
   copy: {
     label: 'Sao chép',
     copied: 'Đã sao chép',
-    user_id: 'ID người dùng',
     username: 'Tên đăng nhập',
   },
   logs: {

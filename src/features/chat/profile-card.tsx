@@ -64,11 +64,12 @@ export function ProfileCard({
   const i18n = useLastSeenI18n();
 
   // PROFILE_VISIBILITY:非好友的 username 服务端投影为空串——空值视同缺席,
-  // 展示回退 nickname → uid,@ 行仅在有值时渲染。
+  // 展示回退 nickname → username → 会话标题,@ 行仅在有值时渲染。
+  // user_id 是底层协议标识，任何情况下都不作为展示名（与 App 一致）。
   const display =
     (user?.nickname !== '' ? user?.nickname : undefined) ??
     (user?.username !== '' ? user?.username : undefined) ??
-    (user !== undefined ? `#${user.user_id}` : fallbackTitle);
+    fallbackTitle;
   const username = user?.username !== '' ? user?.username : undefined;
   const seed = user !== undefined ? `u:${user.user_id}` : `t:${fallbackTitle}`;
   const presenceText = formatPresenceLine(presence, i18n);
@@ -110,12 +111,11 @@ export function ProfileCard({
               )}
             </div>
           </div>
-          {user !== undefined && (
+          {/* 只展示 username（微信式可分享 ID）。数字 user_id 是底层协议标识，
+              不在任何 UI 暴露，也不提供复制入口。 */}
+          {user !== undefined && user.username !== '' && (
             <div className="border-t px-4 py-2 space-y-1">
-              <CopyRow label={t('copy.user_id')} value={user.user_id} />
-              {user.username !== '' && (
-                <CopyRow label={t('copy.username')} value={user.username} />
-              )}
+              <CopyRow label={t('copy.username')} value={user.username} />
             </div>
           )}
           {presenceText !== undefined && (
