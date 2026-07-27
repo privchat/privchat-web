@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import type { GroupMember } from '@privchat/sdk';
-import { useGroupOps } from '@privchat/react';
+import { useConnectionState, useGroupOps } from '@privchat/react';
 import { cn } from '@/lib/utils';
 import { Avatar, avatarBgColor, pickGlyph, type AvatarProps } from './avatar';
 
@@ -64,20 +64,18 @@ function fetchTopMembers(
   return p;
 }
 
-// 排序：role 权重 owner(0) < admin(1) < 其他(2) → joined_at 升序 → user_id 升序。
-function roleWeight(role: string): number {
-  // server 历史序列化过 "Owner"/"Admin" 大写形态,做大小写兼容
-  const r = role.toLowerCase();
-  if (r === 'owner') return 0;
-  if (r === 'admin') return 1;
-  return 2;
+// 排序 = App 的规则（privchat-ui GroupStore：「群九宫格取最早入群的 9 人」，微信规则，
+// 与角色/活跃度无关）：joined_at 升序；joined_at 未知(<=0) 排最后，不让缺时间戳的成员
+// 抢占前排；同刻用 user_id 定序保持稳定。
+function joinedAtKey(m: GroupMember): number {
+  return m.joined_at > 0 ? m.joined_at : Number.MAX_SAFE_INTEGER;
 }
 
 function sortForGrid(members: GroupMember[]): GroupMember[] {
   return [...members].sort((a, b) => {
-    const rw = roleWeight(a.role) - roleWeight(b.role);
-    if (rw !== 0) return rw;
-    if (a.joined_at !== b.joined_at) return a.joined_at - b.joined_at;
+    const ja = joinedAtKey(a);
+    const jb = joinedAtKey(b);
+    if (ja !== jb) return ja - jb;
     return a.user_id - b.user_id;
   });
 }
@@ -102,20 +100,28 @@ export function GroupAvatar({
       ? loaded.members
       : memberCache.get(channelId)?.members;
 
+  // 掉线时 roster 拉取会失败（"cannot send in state closed"），此前失败只是静默回退到
+  // 色块并且**再也不重试** —— 群头像就永久停在色块上。把连接状态纳入依赖：每次会话
+  // 重新认证（server 重启 / 睡眠唤醒 / 弱网恢复）都重拉一次，拉到就升级成九宫格。
+  const connectionState = useConnectionState();
   useEffect(() => {
     if (hasUrl) return;
+    if (connectionState !== 'authenticated' && memberCache.get(channelId) === undefined) {
+      // 未连接且无缓存：拉必失败，等 authenticated 再试（本 effect 会因状态变化重入）。
+      return;
+    }
     let cancelled = false;
     fetchTopMembers(channelId, listMembers)
       .then((m) => {
         if (!cancelled) setLoaded({ id: channelId, members: m });
       })
       .catch(() => {
-        // 拉取失败静默回退到色块 Avatar。
+        // 拉取失败静默回退到色块 Avatar；下次认证成功会重试。
       });
     return () => {
       cancelled = true;
     };
-  }, [channelId, hasUrl, listMembers]);
+  }, [channelId, hasUrl, listMembers, connectionState]);
 
   if (hasUrl) {
     return (
