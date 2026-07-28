@@ -362,10 +362,17 @@ export interface WithdrawOrder {
   fee: number;
   actualAmount: number;
   currency: string;
-  /** 0=pending review 1=approved 2=processing 3=paid 4=rejected 5=failed 6=cancelled */
+  /** 0=pending 1=approved 2=processing 3=paid 4=rejected 5=failed 6=cancelled 7=on hold */
   status: number;
   /** User-visible reject/failure reason. */
   freezeRemarkUserVisible?: string;
+  /**
+   * Hold reason code (spec WALLET_WITHDRAW_SPEC §10). The server sends a code plus
+   * render params, never prose — the user-visible text is localized on the client.
+   */
+  holdReasonCode?: string;
+  /** Render params as JSON text, e.g. {"bank":"ICBC","resume_at":"09:00"}. */
+  holdReasonParams?: string;
   createdAt?: string;
   reviewedAt: number;
   paidAt: number;
@@ -477,5 +484,57 @@ export function withdrawStatusKey(status: number | null | undefined): string {
   // A missing status means PENDING(0): orders are created as PENDING, and 0 is
   // exactly the value the server is most likely to omit from the response.
   const safe = typeof status === 'number' && Number.isFinite(status) ? status : 0;
-  return safe >= 0 && safe <= 6 ? `money.wd.status_${safe}` : 'money.wd.status_unknown';
+  return safe >= 0 && safe <= 7 ? `money.wd.status_${safe}` : 'money.wd.status_unknown';
+}
+
+/** Withdrawal is on hold (spec WALLET_WITHDRAW_SPEC §10). */
+export const WITHDRAW_STATUS_ON_HOLD = 7;
+
+/**
+ * Hold reason code + params → i18n key and interpolation values. Returns null when the
+ * order is not on hold or carries no code.
+ */
+export function withdrawHoldReason(
+  order: Pick<WithdrawOrder, 'holdReasonCode' | 'holdReasonParams' | 'status'>,
+): { key: string; values: Record<string, string> } | null {
+  if (order.status !== WITHDRAW_STATUS_ON_HOLD) return null;
+  const code = order.holdReasonCode?.trim();
+  if (!code) return null;
+  let values: Record<string, string> = {};
+  if (order.holdReasonParams) {
+    try {
+      const parsed: unknown = JSON.parse(order.holdReasonParams);
+      if (parsed && typeof parsed === 'object') {
+        values = Object.fromEntries(
+          Object.entries(parsed as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')]),
+        );
+      }
+    } catch {
+      // Malformed params must not hide the fact that the order is stuck —
+      // fall through to the generic text below.
+    }
+  }
+  switch (code) {
+    case 'BANK_CUTOFF': {
+      // Bank name / resume time are optional: render the shorter variant when absent.
+      const hasBank = Boolean(values.bank);
+      const hasResume = Boolean(values.resume_at);
+      if (hasBank && hasResume) return { key: 'money.wd.hold_bank_cutoff_full', values };
+      if (hasResume) return { key: 'money.wd.hold_bank_cutoff_resume', values };
+      return { key: 'money.wd.hold_bank_cutoff', values };
+    }
+    case 'CARD_UNUSABLE':
+      return { key: 'money.wd.hold_card_unusable', values };
+    case 'NAME_MISMATCH':
+      return { key: 'money.wd.hold_name_mismatch', values };
+    case 'COMPLIANCE_REVIEW':
+      return { key: 'money.wd.hold_compliance', values };
+    // OTHER carries free text that is intentionally not translated.
+    case 'OTHER':
+      return values.text
+        ? { key: 'money.wd.hold_other', values }
+        : { key: 'money.wd.hold_generic', values };
+    default:
+      return { key: 'money.wd.hold_generic', values };
+  }
 }

@@ -16,6 +16,8 @@ import {
   getWallet,
   fenToYuan,
   yuanToFen,
+  withdrawHoldReason,
+  WITHDRAW_STATUS_ON_HOLD,
   withdrawStatusKey,
   mapWalletErrorKey,
   type BankCard,
@@ -288,7 +290,13 @@ export function WithdrawOrdersView() {
           data-testid="withdraw-order-row"
         >
           <div>
-            <div className="text-sm">{t(withdrawStatusKey(o.status))}</div>
+            <div
+              className={
+                o.status === WITHDRAW_STATUS_ON_HOLD ? 'text-sm text-destructive' : 'text-sm'
+              }
+            >
+              {t(withdrawStatusKey(o.status))}
+            </div>
             <div className="text-[11px] text-muted-foreground">{formatTime(o.createdAt)}</div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -324,6 +332,9 @@ export function WithdrawDetailView({ orderId }: { orderId: number }) {
     [t('money.wd.f_time'), formatTime(order.createdAt)],
   ];
 
+  // 挂起原因：服务端只给码 + 参数，文案按当前语言渲染（spec §10.5）。
+  const hold = withdrawHoldReason(order);
+
   return (
     <div className="space-y-2 p-4 text-sm" data-testid="withdraw-detail">
       {rows.map(([label, value]) => (
@@ -332,6 +343,12 @@ export function WithdrawDetailView({ orderId }: { orderId: number }) {
           <span>{value}</span>
         </div>
       ))}
+      {hold !== null && (
+        <div className="flex justify-between gap-4">
+          <span className="text-muted-foreground">{t('money.wd.f_reason')}</span>
+          <span className="text-right text-destructive">{t(hold.key, hold.values)}</span>
+        </div>
+      )}
       {order.freezeRemarkUserVisible !== undefined && order.freezeRemarkUserVisible !== '' && (
         <div className="flex justify-between">
           <span className="text-muted-foreground">{t('money.wd.f_reason')}</span>
