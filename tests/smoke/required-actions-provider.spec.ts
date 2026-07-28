@@ -139,7 +139,13 @@ test.describe('RequiredActionsProvider + PlatformProfileProvider (R8.4b)', () =>
     expect(out).toEqual({ ok: true, data: [] });
   });
 
-  test('PlatformRequiredActionsProvider: 401 → PlatformHttpError(401)', async ({
+  // 4xx 带业务 envelope → PlatformApiError（68684a0 起的契约）。
+  //
+  // 这条从前断言 PlatformHttpError(401)。改判是有意的：401 的 body 里带着
+  // 服务端业务码，丢掉它 UI 就只剩一个 HTTP 状态码，无法映射 i18n 文案（正是
+  // 「用户错误提示 i18n 规范」要根治的）。状态码本身没有信息量——同一个 401
+  // 可能是 token 过期、也可能是凭证错误，两者的文案和后续动作完全不同。
+  test('PlatformRequiredActionsProvider: 401 with envelope → PlatformApiError(code)', async ({
     page,
   }) => {
     const baseUrl = fakeBaseUrl(await originOf(page));
@@ -169,8 +175,45 @@ test.describe('RequiredActionsProvider + PlatformProfileProvider (R8.4b)', () =>
 
     expect(out).toMatchObject({
       ok: false,
+      errorName: 'PlatformApiError',
+    });
+  });
+
+  // 另一半分支：非 2xx 且 body 不是 envelope（网关 502 HTML、反代错误页）。
+  // 这时没有业务码可透传，只能退回传输错误——少了这条，上面那条改动等于
+  // 把「所有 4xx/5xx 都当业务错误」也一起放行了。
+  test('PlatformRequiredActionsProvider: 502 non-envelope body → PlatformHttpError(502)', async ({
+    page,
+  }) => {
+    const baseUrl = fakeBaseUrl(await originOf(page));
+    await page.route(
+      '**/__fake-platform/app/account/required-actions',
+      async (route: Route) => {
+        await route.fulfill({
+          status: 502,
+          contentType: 'text/html',
+          body: '<html><body>502 Bad Gateway</body></html>',
+        });
+      },
+    );
+
+    const out = await page.evaluate(async (args) =>
+      (
+        window as unknown as {
+          __privchatTest: {
+            platformListRequiredActions(args: unknown): Promise<unknown>;
+          };
+        }
+      ).__privchatTest.platformListRequiredActions(args),
+    {
+      baseUrl,
+      accessToken: 'access-jwt-test',
+    });
+
+    expect(out).toMatchObject({
+      ok: false,
       errorName: 'PlatformHttpError',
-      errorStatus: 401,
+      errorStatus: 502,
     });
   });
 
