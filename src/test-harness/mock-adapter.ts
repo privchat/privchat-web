@@ -194,6 +194,8 @@ function defaultState(): MockState {
   };
   const directMessages: MessageRecord[] = [
     {
+      // 稳定行身份（SDK stable-id 契约）：mock 里由 server id 派生，保持断言直观。
+      id: 'r-sm-1',
       channel_id: '1001',
       channel_type: 1,
       server_message_id: 'sm-1',
@@ -206,6 +208,7 @@ function defaultState(): MockState {
       status: 'received',
     },
     {
+      id: 'r-sm-2',
       channel_id: '1001',
       channel_type: 1,
       server_message_id: 'sm-2',
@@ -444,6 +447,7 @@ export function createTestAdapter(): PrivchatClientAdapter {
       const channel = state.channels.find((c) => c.channel_id === input.channel_id);
       const nextPts = String(BigInt(channel?.latest_pts ?? '0') + 1n);
       const record: MessageRecord = {
+        id: `r-${local_message_id}`,
         channel_id: input.channel_id,
         channel_type: input.channel_type,
         server_message_id: `sm-${Date.now()}`,
@@ -1430,6 +1434,7 @@ export function installTestControls(): TestHarnessControls {
       const channelType = args.channelType ?? channel?.channel_type ?? 1;
       const fromUid = args.fromUid ?? state.selfUid;
       const record: MessageRecord = {
+        id: `r-${localId}`,
         channel_id: args.channelId,
         channel_type: channelType,
         local_message_id: localId,
@@ -1445,7 +1450,8 @@ export function installTestControls(): TestHarnessControls {
       state.messages.set(args.channelId, arr);
       const entry: OutboxEntry = {
         outbox_id: localId,
-        record_key: `l:${localId}`,
+        // 出站命令按消息的稳定 id 关联（原字段 record_key 已随 stable-id 重构移除）。
+        message_id: `r-${localId}`,
         channel_id: args.channelId,
         channel_type: channelType,
         local_message_id: localId,
