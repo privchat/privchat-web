@@ -630,15 +630,7 @@ export const zhCN: LocaleSchema = {
       status_6: '已取消',
       status_7: '已挂起',
       // 挂起原因（spec WALLET_WITHDRAW_SPEC §10.5）。服务端只发原因码，文案在此按语言渲染。
-      hold_bank_cutoff_full: '{{bank}} 结算期暂停转账，预计 {{resume_at}} 恢复',
-      hold_bank_cutoff_resume: '银行结算期暂停转账，预计 {{resume_at}} 恢复',
-      hold_bank_cutoff: '银行结算期暂停转账',
-      hold_card_unusable: '收款卡号不可用，请联系客服更换银行卡',
-      hold_name_mismatch: '银行卡户名与实名信息不一致，请联系客服',
       // 措辞刻意中性：多数司法辖区禁止向被调查人披露细节。
-      hold_compliance: '正在进行合规审核，请耐心等待',
-      hold_other: '{{text}}',
-      hold_generic: '提现暂时受阻，请联系客服',
       status_unknown: '未知',
     },
     biz: {

@@ -332,7 +332,7 @@ export function WithdrawDetailView({ orderId }: { orderId: number }) {
     [t('money.wd.f_time'), formatTime(order.createdAt)],
   ];
 
-  // 挂起原因：服务端只给码 + 参数，文案按当前语言渲染（spec §10.5）。
+  // 挂起原因：运营手填的整段文案，原样展示（spec §10.5）。
   const hold = withdrawHoldReason(order);
 
   return (
@@ -346,7 +346,7 @@ export function WithdrawDetailView({ orderId }: { orderId: number }) {
       {hold !== null && (
         <div className="flex justify-between gap-4">
           <span className="text-muted-foreground">{t('money.wd.f_reason')}</span>
-          <span className="text-right text-destructive">{t(hold.key, hold.values)}</span>
+          <span className="text-right text-destructive">{hold}</span>
         </div>
       )}
       {order.freezeRemarkUserVisible !== undefined && order.freezeRemarkUserVisible !== '' && (

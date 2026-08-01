@@ -639,14 +639,6 @@ export const en: LocaleSchema = {
       status_5: 'Failed',
       status_6: 'Cancelled',
       status_7: 'On hold',
-      hold_bank_cutoff_full: '{{bank}} has paused transfers during settlement; expected to resume {{resume_at}}',
-      hold_bank_cutoff_resume: 'The bank has paused transfers during settlement; expected to resume {{resume_at}}',
-      hold_bank_cutoff: 'The bank has paused transfers during settlement',
-      hold_card_unusable: 'This bank card cannot be paid to. Please contact support to change cards.',
-      hold_name_mismatch: 'The card holder name does not match your verified identity. Please contact support.',
-      hold_compliance: 'A compliance review is in progress. Please wait.',
-      hold_other: '{{text}}',
-      hold_generic: 'This withdrawal is temporarily blocked. Please contact support.',
       status_unknown: 'Unknown',
     },
     biz: {
@@ -1298,14 +1290,6 @@ export interface LocaleSchema {
       status_5: string;
       status_6: string;
       status_7: string;
-      hold_bank_cutoff_full: string;
-      hold_bank_cutoff_resume: string;
-      hold_bank_cutoff: string;
-      hold_card_unusable: string;
-      hold_name_mismatch: string;
-      hold_compliance: string;
-      hold_other: string;
-      hold_generic: string;
       status_unknown: string;
     };
     biz: {
