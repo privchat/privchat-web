@@ -110,6 +110,7 @@ export function VirtualMessageList({
   canPin,
   canRevokeOthers,
   roleByUid,
+  memberNameByUid,
   pinnedIds,
   isGroup,
   onTogglePin,
@@ -306,8 +307,7 @@ export function VirtualMessageList({
           restored = true;
         }
       }
-    }
-
+}
     if (restored) {
       // Restored mid-list — explicitly NOT at bottom so stick-to-bottom
       // doesn't yank the user down on the next inbound row.
@@ -809,6 +809,7 @@ export function VirtualMessageList({
                   canPin={canPin}
                   canRevokeOthers={canRevokeOthers}
                   roleByUid={roleByUid}
+                  memberNameByUid={memberNameByUid}
                   pinnedIds={pinnedIds}
                   onTogglePin={onTogglePin}
                   showSenderName={showSenderName}
@@ -821,4 +822,3 @@ export function VirtualMessageList({
     </div>
   );
 }
-

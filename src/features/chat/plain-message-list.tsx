@@ -51,6 +51,7 @@ export function PlainMessageList({
   canPin,
   canRevokeOthers,
   roleByUid,
+  memberNameByUid,
   pinnedIds,
   isGroup,
   onTogglePin,
@@ -250,6 +251,7 @@ export function PlainMessageList({
               canPin={canPin}
               canRevokeOthers={canRevokeOthers}
               roleByUid={roleByUid}
+              memberNameByUid={memberNameByUid}
               pinnedIds={pinnedIds}
               onTogglePin={onTogglePin}
               showSenderName={showSenderName}

@@ -51,6 +51,7 @@ export function MessageRow({
   onTogglePin,
   showSenderName,
   roleByUid,
+  memberNameByUid,
 }: {
   vm: MessageItemVM;
   peerReadPts: string | undefined;
@@ -88,6 +89,8 @@ export function MessageRow({
   /** Group-only: uid → role ('owner'/'admin'/'member') — drives the
    *  【群主】/【管理】tag next to the sender name. */
   roleByUid?: Map<string, string>;
+  /** Group-only canonical display names from groupMemberList. */
+  memberNameByUid?: Map<string, string>;
 }) {
   const { t, i18n } = useTranslation();
   const ts = useMemo(
@@ -137,7 +140,10 @@ export function MessageRow({
     }
     return (
       <div className="flex justify-center py-1">
-        <RevokedSenderName fromUid={vm.from_uid} />
+        <RevokedSenderName
+          fromUid={vm.from_uid}
+          memberDisplayName={memberNameByUid?.get(vm.from_uid)}
+        />
       </div>
     );
   }
@@ -193,7 +199,11 @@ export function MessageRow({
       {mediaNode !== null ? (
         <div className="flex flex-col items-stretch gap-1">
           {showSenderName === true && !vm.is_self && (
-            <SenderNameLabel fromUid={vm.from_uid} role={roleByUid?.get(vm.from_uid)} />
+            <SenderNameLabel
+              fromUid={vm.from_uid}
+              role={roleByUid?.get(vm.from_uid)}
+              memberDisplayName={memberNameByUid?.get(vm.from_uid)}
+            />
           )}
           {vm.reply_to !== undefined && (
             <ReplyQuote
@@ -235,7 +245,11 @@ export function MessageRow({
       ) : (
         <div className="flex flex-col gap-1 max-w-[75%]">
           {showSenderName === true && !vm.is_self && (
-            <SenderNameLabel fromUid={vm.from_uid} role={roleByUid?.get(vm.from_uid)} />
+            <SenderNameLabel
+              fromUid={vm.from_uid}
+              role={roleByUid?.get(vm.from_uid)}
+              memberDisplayName={memberNameByUid?.get(vm.from_uid)}
+            />
           )}
           <div
             className={cn(
@@ -421,13 +435,21 @@ function FailedMessageActions({
  *  that contact rows / the chat header use). For self-rows we don't
  *  render an avatar (you know who you are) — keeps the layout tight
  *  and matches WeChat / Telegram conventions. */
-/** 群聊对方消息的发送者昵称(气泡上方小灰字,微信同款)。展示回退:
- *  昵称 → username → #uid。群名片(per-group 备注)接入是 backlog——
- *  消息列表侧暂无 group_member store。 */
-function SenderNameLabel({ fromUid, role }: { fromUid: string; role?: string }) {
+/** 群聊对方消息的发送者昵称。正常路径直接消费群成员 canonical display name；
+ *  user profile 仅用于旧服务或成员列表尚未到达时的兼容回退。 */
+function SenderNameLabel({
+  fromUid,
+  role,
+  memberDisplayName,
+}: {
+  fromUid: string;
+  role?: string;
+  memberDisplayName?: string;
+}) {
   const { t } = useTranslation();
   const user = useUserProfile(fromUid);
   const name =
+    memberDisplayName ??
     (user?.nickname !== '' ? user?.nickname : undefined) ??
     (user?.username !== '' ? user?.username : undefined) ??
     `#${fromUid}`;
@@ -471,14 +493,21 @@ function MessageRowAvatar({ fromUid }: { fromUid: string }) {
  *  placeholder. Same precedence as the title resolver: alias >
  *  nickname > username > generic fallback. No DEV-mode raw-uid leak —
  *  if nothing's loaded yet, we say "对方撤回了一条消息" instead. */
-function RevokedSenderName({ fromUid }: { fromUid: string }) {
+function RevokedSenderName({
+  fromUid,
+  memberDisplayName,
+}: {
+  fromUid: string;
+  memberDisplayName?: string;
+}) {
   const { t } = useTranslation();
   const user = useUserProfile(fromUid);
   const friendship = useFriendship(fromUid);
   const name =
-    friendship?.alias?.trim() !== undefined && friendship?.alias?.trim() !== ''
+    memberDisplayName ??
+    (friendship?.alias?.trim() !== undefined && friendship?.alias?.trim() !== ''
       ? friendship.alias.trim()
-      : user?.nickname ?? user?.username;
+      : user?.nickname ?? user?.username);
   return (
     <span className="text-xs text-muted-foreground">
       {name !== undefined && name !== ''

@@ -209,7 +209,7 @@ function MemberCell({ member, cell }: { member: GroupMember; cell: number }) {
     );
   }
   // 无头像成员：hash 色块 + 白色首字（seed 用 u:{user_id}，与单人头像一致）。
-  const displayName = member.nickname !== '' ? member.nickname : member.username;
+  const displayName = member.display_name;
   return (
     <span
       className="flex shrink-0 items-center justify-center font-semibold text-white"

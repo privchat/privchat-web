@@ -237,7 +237,7 @@ export function GroupInfoDialog({
 
   const onRemove = async (m: GroupMember) => {
     if (busyUid !== null) return;
-    const display = m.nickname || m.username || `#${m.user_id}`;
+    const display = m.display_name;
     if (!confirm(t('groups.remove_member_confirm', { name: display }))) return;
     setBusyUid(m.user_id);
     setError(null);
@@ -331,7 +331,7 @@ export function GroupInfoDialog({
 
   const onTransferOwner = async (m: GroupMember) => {
     if (busyUid !== null) return;
-    const display = m.nickname || m.username || `#${m.user_id}`;
+    const display = m.display_name;
     if (!confirm(t('groups.transfer_owner_confirm', { name: display }))) return;
     setBusyUid(m.user_id);
     setError(null);
@@ -636,7 +636,7 @@ export function GroupInfoDialog({
             )}
             <ul className="divide-y">
               {members.map((m) => {
-                const display = m.nickname || m.username || `#${m.user_id}`;
+                const display = m.display_name;
                 const roleLabel =
                   m.role === 'owner'
                     ? t('groups.role_owner')
@@ -810,9 +810,7 @@ export function GroupInfoDialog({
           if (!o) setMutingMember(null);
         }}
         memberDisplay={
-          mutingMember
-            ? mutingMember.nickname || mutingMember.username
-            : ''
+          mutingMember ? mutingMember.display_name : ''
         }
         busy={busyUid !== null}
         onConfirm={onMuteConfirm}
