@@ -220,34 +220,33 @@ export function ConversationPanel({
   const [isManager, setIsManager] = useState(false);
   // uid → role ('owner'/'admin'/'member'):驱动气泡昵称旁的【群主】/【管理】标签。
   const [roleByUid, setRoleByUid] = useState<Map<string, string>>(new Map());
-  const [memberNameByUid, setMemberNameByUid] = useState<Map<string, string>>(new Map());
   const [pinnedItems, setPinnedItems] = useState<PinnedMessageItem[]>([]);
 
-  // Resolve owner/admin role for the current user. Same algorithm the
-  // group-info dialog uses: find self in the roster, treat owner/admin
-  // as "can manage". Failures degrade to read-only (isManager=false).
+  // 权限与角色标签都走 group/info 的**有界**字段：`my_role` 判断我能不能管理，
+  // `owner_id` + `admin_user_ids` 给气泡打【群主】/【管理】标签。
+  //
+  // 这里原本拉整份花名册（listMembers）再在里面找自己——一个 750 人的群 126 KB、
+  // 服务端约 1s，只为回答「我是不是管理员」和几个发言人的名字。发言人昵称由
+  // 本地 user store 提供（SenderNameLabel 已有该回落），群名片 alias 目前
+  // 全站为空且无任何端可设置。见 CHANNEL_SPEC §9.2.2。失败时降级为只读。
   useEffect(() => {
     if (groupId === undefined) {
       setIsManager(false);
       setRoleByUid(new Map());
-      setMemberNameByUid(new Map());
       return;
     }
     let cancelled = false;
     void groupOps
-      .listMembers(groupId)
+      .groupInfo(groupId)
       .then((resp) => {
         if (cancelled) return;
-        const self = resp.members.find(
-          (m) => String(m.user_id) === selfUid,
-        );
-        setIsManager(self?.role === 'owner' || self?.role === 'admin');
-        setRoleByUid(
-          new Map(resp.members.map((m) => [String(m.user_id), m.role])),
-        );
-        setMemberNameByUid(
-          new Map(resp.members.map((m) => [String(m.user_id), m.display_name])),
-        );
+        const info = resp.group_info;
+        const myRole = info.my_role ?? '';
+        setIsManager(myRole === 'owner' || myRole === 'admin');
+        const roles = new Map<string, string>();
+        if (info.owner_id !== undefined) roles.set(String(info.owner_id), 'owner');
+        for (const uid of info.admin_user_ids ?? []) roles.set(String(uid), 'admin');
+        setRoleByUid(roles);
       })
       .catch(() => {
         if (!cancelled) setIsManager(false);
@@ -255,7 +254,7 @@ export function ConversationPanel({
     return () => {
       cancelled = true;
     };
-  }, [groupId, groupOps, selfUid]);
+  }, [groupId, groupOps]);
 
   // Refreshable pinned-message list. Wrapped so both the initial load
   // effect and the pin/unpin toggle can re-pull and keep the bar + the
@@ -646,7 +645,6 @@ export function ConversationPanel({
         canPin={!isDirect && groupId !== undefined ? isManager : undefined}
         canRevokeOthers={!isDirect && groupId !== undefined ? isManager : undefined}
         roleByUid={!isDirect && groupId !== undefined ? roleByUid : undefined}
-        memberNameByUid={!isDirect && groupId !== undefined ? memberNameByUid : undefined}
         pinnedIds={!isDirect && groupId !== undefined ? pinnedIds : undefined}
         onTogglePin={
           !isDirect && groupId !== undefined ? onTogglePin : undefined

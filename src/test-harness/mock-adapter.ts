@@ -721,6 +721,25 @@ export function createTestAdapter(): PrivchatClientAdapter {
     },
 
     // ---- Group ops ----
+    // 默认让 harness 里的当前用户是群主：smoke 用例要能看见管理入口。
+    async groupInfo(groupId: string) {
+      return {
+        status: 'success',
+        group_info: {
+          group_id: Number(groupId),
+          name: '',
+          owner_id: 0,
+          created_at: 0,
+          updated_at: 0,
+          member_count: 0,
+          message_count: 0,
+          is_archived: false,
+          my_role: 'owner',
+          admin_user_ids: [],
+        },
+        timestamp: 0,
+      };
+    },
     async listGroupMembers() {
       return { members: [], total: 0 };
     },
