@@ -740,6 +740,10 @@ export function createTestAdapter(): PrivchatClientAdapter {
         timestamp: 0,
       };
     },
+    // harness 没有本地投影：返回空数组即"未缓存过"，UI 退化成等网络。
+    async cachedGroupMembers() {
+      return [];
+    },
     async listGroupMembers() {
       return { members: [], total: 0 };
     },

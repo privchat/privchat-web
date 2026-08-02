@@ -152,6 +152,15 @@ export function GroupInfoDialog({
     let cancelled = false;
     setLoading(true);
     setError(null);
+    // 先用本地投影渲染（与 App 的两段式一致：读本地 → 刷新 → 再读本地）。
+    // 首次打开或缓存被清过时它是空的，此时行为退化成"等网络"，与从前一致。
+    void ops.cachedMembers(groupId, { limit: MEMBER_PAGE_SIZE }).then((local) => {
+      if (!cancelled && local.length > 0) {
+        setMembers((prev) => (prev.length === 0 ? local : prev));
+        setLoading(false);
+      }
+    });
+
     // Run roster + settings fetches in parallel — independent calls
     // and both feed the dialog body, no point serializing.
     Promise.allSettled([
