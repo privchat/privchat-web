@@ -152,14 +152,21 @@ export function GroupInfoDialog({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    // 先用本地投影渲染（与 App 的两段式一致：读本地 → 刷新 → 再读本地）。
-    // 首次打开或缓存被清过时它是空的，此时行为退化成"等网络"，与从前一致。
-    void ops.cachedMembers(groupId, { limit: MEMBER_PAGE_SIZE }).then((local) => {
-      if (!cancelled && local.length > 0) {
+    // App 的三段式：读本地 → 增量同步 → 再读本地。
+    // 首次打开或缓存被清过时本地是空的，此时退化成"等网络"，与从前一致。
+    void (async () => {
+      const local = await ops.cachedMembers(groupId, { limit: MEMBER_PAGE_SIZE });
+      if (cancelled) return;
+      if (local.length > 0) {
         setMembers((prev) => (prev.length === 0 ? local : prev));
         setLoading(false);
       }
-    });
+      // 增量：只取变更（含退群 tombstone），不是再拉一遍全量。
+      const applied = await ops.syncMembers(groupId).catch(() => 0);
+      if (cancelled || applied === 0) return;
+      const fresh = await ops.cachedMembers(groupId, { limit: MEMBER_PAGE_SIZE });
+      if (!cancelled && fresh.length > 0) setMembers(fresh);
+    })();
 
     // Run roster + settings fetches in parallel — independent calls
     // and both feed the dialog body, no point serializing.
