@@ -61,6 +61,9 @@ export interface GroupInfoDialogProps {
   onLeft?: () => void;
 }
 
+/** 成员列表每页条数。九宫格用 12，这里是真正的列表页。 */
+const MEMBER_PAGE_SIZE = 50;
+
 export function GroupInfoDialog({
   open,
   onOpenChange,
@@ -74,6 +77,9 @@ export function GroupInfoDialog({
   const selfUid = adapter.sessionSnapshot().user_id;
 
   const [members, setMembers] = useState<GroupMember[]>([]);
+  // total 是**群总人数**，不是已加载条数——分页后二者不同。
+  const [memberTotal, setMemberTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -106,16 +112,38 @@ export function GroupInfoDialog({
     'allow_member_add_friend' | 'allow_search' | 'member_can_invite' | 'join_policy' | null
   >(null);
 
+  // 成员列表按页取（CHANNEL_SPEC §9.2.2：这里才是全量，且必须分页）。
+  // 一次拉 752 人是 126 KB；分页后首屏只有一页，其余按需。
   const fetchMembers = async () => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await ops.listMembers(groupId);
+      const resp = await ops.listMembers(groupId, { limit: MEMBER_PAGE_SIZE });
       setMembers(resp.members);
+      setMemberTotal(resp.total);
     } catch (e) {
       setError(`${t('groups.members_failed')}: ${errorText(e)}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 「加载更多」：按已加载条数做 offset。服务端按入群时间升序，顺序稳定，
+  // 所以翻页既不会重复也不会漏人。
+  const loadMoreMembers = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const resp = await ops.listMembers(groupId, {
+        limit: MEMBER_PAGE_SIZE,
+        offset: members.length,
+      });
+      setMembers((prev) => [...prev, ...resp.members]);
+      setMemberTotal(resp.total);
+    } catch (e) {
+      setError(`${t('groups.members_failed')}: ${errorText(e)}`);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -126,11 +154,15 @@ export function GroupInfoDialog({
     setError(null);
     // Run roster + settings fetches in parallel — independent calls
     // and both feed the dialog body, no point serializing.
-    Promise.allSettled([ops.listMembers(groupId), ops.getSettings(groupId)])
+    Promise.allSettled([
+      ops.listMembers(groupId, { limit: MEMBER_PAGE_SIZE }),
+      ops.getSettings(groupId),
+    ])
       .then(([rosterRes, settingsRes]) => {
         if (cancelled) return;
         if (rosterRes.status === 'fulfilled') {
           setMembers(rosterRes.value.members);
+          setMemberTotal(rosterRes.value.total);
         } else {
           setError(
             `${t('groups.members_failed')}: ${errorText(rosterRes.reason)}`,
@@ -605,7 +637,7 @@ export function GroupInfoDialog({
 
           <div className="flex items-center justify-between">
             <div className="text-xs text-muted-foreground">
-              {t('groups.members', { count: members.length })}
+              {t('groups.members', { count: memberTotal })}
             </div>
             {canManage && (
               <div className="flex items-center gap-2">
@@ -769,6 +801,25 @@ export function GroupInfoDialog({
                 );
               })}
             </ul>
+            {members.length < memberTotal && (
+              <div className="flex justify-center py-3">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={loadingMore}
+                  onClick={() => void loadMoreMembers()}
+                >
+                  {loadingMore ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    t('groups.load_more_members', {
+                      loaded: members.length,
+                      total: memberTotal,
+                    })
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
           <div className="flex justify-end pt-2">
             <Button
@@ -789,7 +840,6 @@ export function GroupInfoDialog({
         open={addOpen}
         onOpenChange={setAddOpen}
         groupId={groupId}
-        existingUids={new Set(members.map((m) => String(m.user_id)))}
         onAdded={onAdded}
       />
       {settings !== null && (
@@ -950,13 +1000,11 @@ function AddMemberDialog({
   open,
   onOpenChange,
   groupId,
-  existingUids,
   onAdded,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   groupId: string;
-  existingUids: Set<string>;
   onAdded: (uid: string) => void;
 }) {
   const { t } = useTranslation();
@@ -977,6 +1025,26 @@ function AddMemberDialog({
   const [addedUids, setAddedUids] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const reqIdRef = useRef(0);
+
+  // 排除已在群里的好友：这是**真正需要整份花名册**的场景之一，但只在用户
+  // 打开邀请页时取一次，不挂在群设置页的首屏上（CHANNEL_SPEC §9.2.2）。
+  // 取不到时不假装"都不在群里"——宁可少排除，也不要把邀请按钮藏错。
+  const [existingUids, setExistingUids] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void ops
+      .listMembers(groupId)
+      .then((resp) => {
+        if (!cancelled) {
+          setExistingUids(new Set(resp.members.map((m) => String(m.user_id))));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, ops, groupId]);
 
   const candidates = useMemo(
     () => friends.filter((f) => !existingUids.has(f.user_id)),

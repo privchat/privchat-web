@@ -407,6 +407,7 @@ export const vi: LocaleSchema = {
     info_title: 'Thông tin nhóm',
     members: 'Thành viên ({{count}})',
     members_loading: 'Đang tải thành viên…',
+    load_more_members: 'Tải thêm ({{loaded}}/{{total}})',
     members_failed: 'Không thể tải thành viên',
     leave: 'Rời nhóm',
     leave_confirm:

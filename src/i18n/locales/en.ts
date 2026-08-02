@@ -407,6 +407,7 @@ export const en: LocaleSchema = {
     info_title: 'Group Info',
     members: 'Members ({{count}})',
     members_loading: 'Loading members…',
+    load_more_members: 'Load more ({{loaded}}/{{total}})',
     members_failed: 'Could not load members',
     leave: 'Leave Group',
     leave_confirm: 'Leave this group? You will no longer receive its messages.',
@@ -1013,6 +1014,7 @@ export interface LocaleSchema {
     info_title: string;
     members: string;
     members_loading: string;
+    load_more_members: string;
     members_failed: string;
     leave: string;
     leave_confirm: string;

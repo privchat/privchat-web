@@ -398,6 +398,7 @@ export const zhCN: LocaleSchema = {
     info_title: '群信息',
     members: '群成员（{{count}}）',
     members_loading: '正在加载成员…',
+    load_more_members: '加载更多（{{loaded}}/{{total}}）',
     members_failed: '加载成员失败',
     leave: '退出群聊',
     leave_confirm: '确认退出该群？退出后将无法继续收到群消息。',
