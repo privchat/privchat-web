@@ -33,12 +33,19 @@ const SIZE_PX: Record<NonNullable<AvatarProps['size']>, number> = {
 
 // ---- 成员缓存：模块级 Map，TTL 10 分钟，in-flight 去重 ----
 
+// 九宫格只画 9 格，所以只拉前 9 个（服务端按入群时间升序，正是九宫格要的顺序）。
+// 多要几个是给系统账号过滤留的余量——过滤后不足 9 个就会缺格。
+// 不带 limit 会拉走整份花名册：一个 750 人的群 126 KB，而会话列表里
+// 每个群头像都要拉一次。见 CHANNEL_SPEC §9.2.2。
+const GRID_FETCH_LIMIT = 12;
+
 const MEMBER_TTL_MS = 10 * 60 * 1000;
 const memberCache = new Map<string, { members: GroupMember[]; at: number }>();
 const inflight = new Map<string, Promise<GroupMember[]>>();
 
 type ListMembersFn = (
   groupId: string,
+  page?: { limit?: number; offset?: number },
 ) => Promise<{ members: GroupMember[]; total: number }>;
 
 function fetchTopMembers(
@@ -51,7 +58,7 @@ function fetchTopMembers(
   }
   const pending = inflight.get(channelId);
   if (pending !== undefined) return pending;
-  const p = listMembers(channelId)
+  const p = listMembers(channelId, { limit: GRID_FETCH_LIMIT })
     .then((resp) => {
       const members = sortForGrid(resp.members).slice(0, 9);
       memberCache.set(channelId, { members, at: Date.now() });
