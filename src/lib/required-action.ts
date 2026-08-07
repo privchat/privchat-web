@@ -34,8 +34,16 @@ export interface RequiredAction {
   [extra: string]: unknown;
 }
 
-/** v1 known action types this client knows how to handle. R8.5+ extends. */
-const HANDLABLE_ACTIONS = new Set<string>(['complete_profile', 'bind_invite_code']);
+/** Action types this build can dispatch to a concrete handler.
+ *
+ *  Adding a handler component is not enough — an action missing from this set
+ *  is filtered out of the gate as "unknown", so the page never renders no
+ *  matter how well the component is wired. */
+const HANDLABLE_ACTIONS = new Set<string>([
+  'complete_profile',
+  'bind_invite_code',
+  'bind_mobile',
+]);
 
 /** True iff this build can dispatch to a concrete handler component. */
 export function isHandlableAction(action: string): boolean {
