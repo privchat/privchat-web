@@ -492,6 +492,19 @@ export const en: LocaleSchema = {
     days_ago: 'last seen {{count}}d ago',
     long_ago: 'last seen {{date}}',
   },
+  bind_mobile: {
+    title: 'Add your phone',
+    subtitle: 'Used to secure and recover your account',
+    input_label: 'Phone number',
+    input_ph: 'Phone number',
+    submit: 'Continue',
+    binding: 'Saving…',
+    err_taken: 'That number is already linked to another account',
+    err_bound: 'This account already has a phone number',
+    err_invalid: 'Enter a phone number',
+    skip: 'Not now',
+    err_failed: 'Could not save, please try again',
+  },
   invite: {
     required_subtitle: 'An invite code is required to continue',
     binding: 'Binding…',
@@ -1143,6 +1156,19 @@ export interface LocaleSchema {
     scan_group_open: string;
     scan_group_pending: string;
     scan_group_unknown_status: string;
+  };
+  bind_mobile: {
+    title: string;
+    subtitle: string;
+    input_label: string;
+    input_ph: string;
+    submit: string;
+    binding: string;
+    err_taken: string;
+    err_bound: string;
+    err_invalid: string;
+    skip: string;
+    err_failed: string;
   };
   invite: {
     required_subtitle: string;

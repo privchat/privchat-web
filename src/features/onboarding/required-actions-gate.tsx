@@ -42,6 +42,7 @@ import {
 import { captureException } from '@/lib/error-reporter';
 import { CompleteProfileAction } from './complete-profile-action';
 import { BindInviteCodeAction } from './bind-invite-code-action';
+import { BindMobileAction } from './bind-mobile-action';
 import { UnsupportedRequiredActionPage } from './unsupported-required-action-page';
 
 export interface RequiredActionsGateProps {
@@ -185,6 +186,25 @@ export function RequiredActionsGate({
     // Dispatch by `action` machine name (head-of-queue first; completing
     // one re-lists, so the queue drains in server order).
     const head = state.actions[0]!;
+    if (head.action === 'bind_mobile') {
+      return (
+        <BindMobileAction
+          onCompleted={handleActionCompleted}
+          // Skip is session-scoped: nothing is persisted, so the server will
+          // offer it again next login. A recommendation should keep asking
+          // gently, not vanish after one dismissal.
+          onSkip={() => setState((s) =>
+            s.kind === 'pending'
+              ? ((rest) => (rest.length === 0
+                  ? { kind: 'clear' as const }
+                  : { kind: 'pending' as const, actions: rest }))(
+                  s.actions.filter((a) => a.action !== 'bind_mobile'),
+                )
+              : s,
+          )}
+        />
+      );
+    }
     if (head.action === 'bind_invite_code') {
       return (
         <BindInviteCodeAction

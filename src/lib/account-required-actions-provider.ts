@@ -24,7 +24,7 @@ import {
   getPlatformBaseUrl,
 } from './account-mode';
 import { normalizePlatformBaseUrl } from './platform-base-url';
-import { getEnvelope } from './platform-envelope';
+import { getEnvelope, postAuthedEnvelope } from './platform-envelope';
 import { PlatformConfigError } from './platform-errors';
 import type { RequiredAction } from './required-action';
 
@@ -34,6 +34,13 @@ export interface RequiredActionsProvider {
    *  means the user may enter the workspace; non-empty means the
    *  RequiredActionFlow must run (R8.4c). */
   list(): Promise<RequiredAction[]>;
+
+  /** Submit the phone number for `bind_mobile`.
+   *
+   *  First-time binding inside the registration flow: the server neither sends
+   *  nor checks an SMS code, it only rejects duplicates. Changing an already
+   *  bound number is a different endpoint that still requires a code. */
+  bindMobile(mobile: string): Promise<void>;
 }
 
 /** Token resolver callback. Provider calls this on every `list()` so token
@@ -51,6 +58,11 @@ export class BuiltinRequiredActionsProvider implements RequiredActionsProvider {
    *  so callers don't branch on sync vs async per mode. */
   async list(): Promise<RequiredAction[]> {
     return [];
+  }
+
+  /** BUILTIN never gates, so nothing should ever reach this. */
+  async bindMobile(): Promise<void> {
+    throw new PlatformConfigError('bind_mobile is not available in builtin mode');
   }
 }
 
@@ -78,6 +90,20 @@ export class PlatformRequiredActionsProvider implements RequiredActionsProvider 
     );
     // Wire-defense: missing field → []. Server may omit on empty arrays.
     return data?.requiredActions ?? [];
+  }
+
+  async bindMobile(mobile: string): Promise<void> {
+    const token = this.getAccessToken();
+    if (typeof token !== 'string' || token === '') {
+      throw new PlatformConfigError(
+        'PlatformRequiredActionsProvider.bindMobile requires an access token',
+      );
+    }
+    await postAuthedEnvelope<RequiredActionsResponseData>(
+      `${this.baseUrl}/account/bind-mobile`,
+      token,
+      { mobile },
+    );
   }
 }
 
