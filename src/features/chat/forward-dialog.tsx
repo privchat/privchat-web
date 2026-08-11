@@ -1,7 +1,13 @@
 // Forward picker: multi-select conversations (DMs + groups) and forward a
 // source message into each — app-parity with ForwardPickerPage (multi-target,
-// per-target failure collection). Delivery uses the SDK's forwardMessage
-// (Rust forward_message parity: a fresh copy per target, not a reference).
+// per-target failure collection).
+//
+// 🔴 转发不是一种消息，也没有 forward RPC：它就是**用户以自己的身份把同一份内容
+// 再发一次**，走的是普通发送。附件之所以不重传字节，是上传预检按内容摘要命中的
+// （sha256 → already_exists → claim），跟这里的发送路径无关。
+//
+// 因此媒体转发要先把明文取回来（downloadAttachmentBlob = get_url + 解密），再走
+// 和用户手选文件完全相同的 sendImage / sendVideo / sendFile。
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChannelList, usePrivchatClient } from '@privchat/react';
@@ -65,19 +71,11 @@ export function ForwardDialog({
   const onSend = async () => {
     if (source?.server_message_id === undefined || selected.size === 0 || sending) return;
     setSending(true);
-    const selfUid = client.sessionSnapshot().user_id ?? '';
     const failed: string[] = [];
     for (const c of targets) {
       if (!selected.has(key(c))) continue;
       try {
-        await client.forwardMessage({
-          source_channel_id: sourceChannelId,
-          source_channel_type: sourceChannelType,
-          source_server_message_id: source.server_message_id,
-          target_channel_id: c.channel_id,
-          target_channel_type: c.channel_type,
-          from_uid: selfUid,
-        });
+        await resend(client, source, c.channel_id, c.channel_type);
       } catch (e) {
         failed.push(`${c.title ?? c.channel_id}: ${errorText(e)}`);
       }
@@ -183,4 +181,89 @@ export function ForwardDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * 把一条消息按类型重新发一次。
+ *
+ * 文本原样重发；媒体取回明文后走普通发送——秒传由上传预检负责，这里不需要知道。
+ * 红包/转账/系统消息重发一次没有意义，直接拒绝，而不是发出一条别人点不动的卡片。
+ */
+async function resend(
+  client: ReturnType<typeof usePrivchatClient>,
+  source: MessageItemVM,
+  channelId: string,
+  channelType: number,
+): Promise<void> {
+  const body = source.body;
+  if (body.kind === 'text') {
+    const text = body.text.trim();
+    if (text === '') throw new Error('empty message');
+    await client.sendTextMessage({
+      channel_id: channelId,
+      channel_type: channelType,
+      from_uid: source.from_uid,
+      content: text,
+    });
+    return;
+  }
+
+  const meta = 'metadata' in body ? body.metadata : undefined;
+  if (meta === undefined || !('file_id' in meta) || meta.file_id === undefined) {
+    throw new Error(`cannot resend a ${body.kind} message`);
+  }
+
+  // 取回明文：服务端存的是密文，直接把 file_url 转手给发送接口是发不出去的。
+  const blob = await client.downloadAttachmentBlob(meta.file_id);
+  const filename = ('file_name' in meta && meta.file_name) || fallbackName(meta.type);
+  const mime = blob.type !== '' ? blob.type : guessMime(filename);
+  const caption = body.text === '' ? undefined : body.text;
+  const common = {
+    channel_id: channelId,
+    channel_type: channelType,
+    file: blob,
+    filename,
+    mime_type: mime,
+    caption,
+  };
+
+  if (meta.type === 'image') {
+    await client.sendImage({ ...common, width: meta.width ?? 0, height: meta.height ?? 0 });
+    return;
+  }
+  if (meta.type === 'video') {
+    await client.sendVideo({
+      ...common,
+      width: meta.width ?? 0,
+      height: meta.height ?? 0,
+      duration: meta.duration ?? 0,
+    });
+    return;
+  }
+  // voice / file 都按普通文件发：Web 没有语音录制入口，转发一条语音等价于转发它的文件。
+  await client.sendFile(common);
+}
+
+function fallbackName(type: string): string {
+  if (type === 'image') return 'image.jpg';
+  if (type === 'video') return 'video.mp4';
+  if (type === 'voice') return 'voice.m4a';
+  return 'file.bin';
+}
+
+function guessMime(filename: string): string {
+  const ext = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
+  const table: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    m4a: 'audio/mp4',
+    mp3: 'audio/mpeg',
+    pdf: 'application/pdf',
+  };
+  return table[ext] ?? 'application/octet-stream';
 }
