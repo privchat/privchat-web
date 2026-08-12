@@ -1,4 +1,5 @@
 import { PrivchatClient } from '@privchat/sdk';
+import { CacheDB } from '@privchat/sdk/cache-idb';
 import { DirectClientAdapter } from '@privchat/react';
 
 export interface CreatePrivchatOptions {
@@ -24,7 +25,7 @@ export interface PrivchatHandle {
 export function createPrivchat(opts: CreatePrivchatOptions): PrivchatHandle {
   const client = new PrivchatClient({
     url: opts.url,
-    cache: { enabled: true, dbName: opts.dbName ?? 'privchat-web-dev' },
+    cache: { enabled: true, db: new CacheDB(opts.dbName ?? 'privchat-web-dev') },
   });
   const adapter = new DirectClientAdapter(client);
   return { client, adapter };

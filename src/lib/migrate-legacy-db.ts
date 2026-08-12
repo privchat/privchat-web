@@ -22,7 +22,7 @@
 // later, this migrator picks it up via the re-export without a
 // code change.
 
-import { CacheDB } from '@privchat/sdk';
+import { CacheDB } from '@privchat/sdk/cache-idb';
 import type { AccountKey } from './account-key';
 import { accountDbName, LEGACY_DB_NAME } from './db-name';
 

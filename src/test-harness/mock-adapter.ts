@@ -19,7 +19,7 @@
 // a *fully behavioural* mock for end-to-end UI smoke. They serve
 // different roles and intentionally don't share code.
 
-import { CacheDB } from '@privchat/sdk';
+import { CacheDB } from '@privchat/sdk/cache-idb';
 import { migrateLegacySessionToRegistryOfOne } from '@/lib/migrate-single-account-session';
 import {
   migrateLegacyDbToAccountDb,
