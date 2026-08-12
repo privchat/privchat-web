@@ -830,10 +830,15 @@ export function createTestAdapter(): PrivchatClientAdapter {
       };
     },
 
-    async downloadAttachmentBlob(_fileId) {
+    async downloadAttachmentDetailed(_fileId) {
       // Smoke contract: deterministic empty blob so media bubbles can mount
-      // without a real media server / decryption.
-      return new Blob([], { type: 'application/octet-stream' });
+      // without a real media server / decryption. No `sealed`: the harness
+      // never talks to a server, so there is no stored ciphertext to reuse.
+      return { blob: new Blob([], { type: 'application/octet-stream' }) };
+    },
+
+    async downloadAttachmentBlob(fileId) {
+      return (await this.downloadAttachmentDetailed(fileId)).blob;
     },
 
     // QR Code v1.3 — minimal deterministic stubs so smoke tests can mount

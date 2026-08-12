@@ -213,10 +213,19 @@ async function resend(
     throw new Error(`cannot resend a ${body.kind} message`);
   }
 
-  // 取回明文：服务端存的是密文，直接把 file_url 转手给发送接口是发不出去的。
-  const blob = await client.downloadAttachmentBlob(meta.file_id);
-  const filename = ('file_name' in meta && meta.file_name) || fallbackName(meta.type);
-  const mime = blob.type !== '' ? blob.type : guessMime(filename);
+  // 取回这份附件：明文用来发送，**服务端存的那串密文**一并带回来。
+  //
+  // 🔴 带上密文不是「转发的特殊做法」——普通上传路径拿它去预检就能秒传。
+  // 只取明文的话，发送侧会重新封装（新的随机 CEK/nonce），字节一变摘要就变，
+  // 秒传永远不可能命中，同一份内容每转发一次服务端就多存一份。
+  const downloaded = await client.downloadAttachmentDetailed(meta.file_id);
+  const blob = downloaded.blob;
+  // 文件名和 MIME 以服务端记录为准：消息 metadata 里可能压根没有（别的端发的）。
+  const filename =
+    downloaded.originalFilename ||
+    ('file_name' in meta && meta.file_name) ||
+    fallbackName(meta.type);
+  const mime = downloaded.mimeType || (blob.type !== '' ? blob.type : guessMime(filename));
   const caption = body.text === '' ? undefined : body.text;
   const common = {
     channel_id: channelId,
@@ -225,6 +234,7 @@ async function resend(
     filename,
     mime_type: mime,
     caption,
+    sealed: downloaded.sealed,
   };
 
   if (meta.type === 'image') {
