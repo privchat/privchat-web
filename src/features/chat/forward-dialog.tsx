@@ -224,7 +224,7 @@ async function resend(
   const filename =
     downloaded.originalFilename ||
     ('file_name' in meta && meta.file_name) ||
-    fallbackName(meta.type);
+    fallbackName(downloaded.fileType ?? meta.type ?? body.kind);
   const mime = downloaded.mimeType || (blob.type !== '' ? blob.type : guessMime(filename));
   const caption = body.text === '' ? undefined : body.text;
   const common = {
@@ -237,16 +237,25 @@ async function resend(
     sealed: downloaded.sealed,
   };
 
-  if (meta.type === 'image') {
-    await client.sendImage({ ...common, width: meta.width ?? 0, height: meta.height ?? 0 });
+  // 🔴 消息类型以**服务端 `file_type`** 为准，其次才是消息 metadata、再次是气泡种类。
+  // metadata 里的 `type` 可能压根没有（别的端发来的消息就没有），只看它就会把
+  // 一张图当成「文件」重发出去——服务端照单全收，收方看到的就是一个文件条。
+  const kind = downloaded.fileType ?? meta.type ?? body.kind;
+  // 尺寸/时长来自**源消息**的 metadata（`file/get_url` 不提供），按需读取：
+  // 消息类型现在由服务端决定，metadata 的具体形状不再与它一一对应。
+  const dimOf = (k: 'width' | 'height' | 'duration'): number =>
+    k in meta ? ((meta as unknown as Record<string, unknown>)[k] as number | undefined) ?? 0 : 0;
+
+  if (kind === 'image') {
+    await client.sendImage({ ...common, width: dimOf('width'), height: dimOf('height') });
     return;
   }
-  if (meta.type === 'video') {
+  if (kind === 'video') {
     await client.sendVideo({
       ...common,
-      width: meta.width ?? 0,
-      height: meta.height ?? 0,
-      duration: meta.duration ?? 0,
+      width: dimOf('width'),
+      height: dimOf('height'),
+      duration: dimOf('duration'),
     });
     return;
   }
