@@ -10,7 +10,7 @@
 // 和用户手选文件完全相同的 sendImage / sendVideo / sendFile。
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useChannelList, usePrivchatClient } from '@privchat/react';
+import { useChannelList, usePrivchatClient, resendMessageTo } from '@privchat/react';
 import type { MessageItemVM } from '@privchat/react';
 import {
   Dialog,
@@ -75,7 +75,7 @@ export function ForwardDialog({
     for (const c of targets) {
       if (!selected.has(key(c))) continue;
       try {
-        await resend(client, source, c.channel_id, c.channel_type);
+        await resendMessageTo(client, source, c.channel_id, c.channel_type);
       } catch (e) {
         failed.push(`${c.title ?? c.channel_id}: ${errorText(e)}`);
       }
@@ -183,106 +183,4 @@ export function ForwardDialog({
   );
 }
 
-/**
- * 把一条消息按类型重新发一次。
- *
- * 文本原样重发；媒体取回明文后走普通发送——秒传由上传预检负责，这里不需要知道。
- * 红包/转账/系统消息重发一次没有意义，直接拒绝，而不是发出一条别人点不动的卡片。
- */
-async function resend(
-  client: ReturnType<typeof usePrivchatClient>,
-  source: MessageItemVM,
-  channelId: string,
-  channelType: number,
-): Promise<void> {
-  const body = source.body;
-  if (body.kind === 'text') {
-    const text = body.text.trim();
-    if (text === '') throw new Error('empty message');
-    await client.sendTextMessage({
-      channel_id: channelId,
-      channel_type: channelType,
-      from_uid: source.from_uid,
-      content: text,
-    });
-    return;
-  }
 
-  const meta = 'metadata' in body ? body.metadata : undefined;
-  if (meta === undefined || !('file_id' in meta) || meta.file_id === undefined) {
-    throw new Error(`cannot resend a ${body.kind} message`);
-  }
-
-  // 取回这份附件：明文用来发送，**服务端存的那串密文**一并带回来。
-  //
-  // 🔴 带上密文不是「转发的特殊做法」——普通上传路径拿它去预检就能秒传。
-  // 只取明文的话，发送侧会重新封装（新的随机 CEK/nonce），字节一变摘要就变，
-  // 秒传永远不可能命中，同一份内容每转发一次服务端就多存一份。
-  const downloaded = await client.downloadAttachmentDetailed(meta.file_id);
-  const blob = downloaded.blob;
-  // 文件名和 MIME 以服务端记录为准：消息 metadata 里可能压根没有（别的端发的）。
-  const filename =
-    downloaded.originalFilename ||
-    ('file_name' in meta && meta.file_name) ||
-    fallbackName(downloaded.fileType ?? meta.type ?? body.kind);
-  const mime = downloaded.mimeType || (blob.type !== '' ? blob.type : guessMime(filename));
-  const caption = body.text === '' ? undefined : body.text;
-  const common = {
-    channel_id: channelId,
-    channel_type: channelType,
-    file: blob,
-    filename,
-    mime_type: mime,
-    caption,
-    sealed: downloaded.sealed,
-  };
-
-  // 🔴 消息类型以**服务端 `file_type`** 为准，其次才是消息 metadata、再次是气泡种类。
-  // metadata 里的 `type` 可能压根没有（别的端发来的消息就没有），只看它就会把
-  // 一张图当成「文件」重发出去——服务端照单全收，收方看到的就是一个文件条。
-  const kind = downloaded.fileType ?? meta.type ?? body.kind;
-  // 尺寸/时长来自**源消息**的 metadata（`file/get_url` 不提供），按需读取：
-  // 消息类型现在由服务端决定，metadata 的具体形状不再与它一一对应。
-  const dimOf = (k: 'width' | 'height' | 'duration'): number =>
-    k in meta ? ((meta as unknown as Record<string, unknown>)[k] as number | undefined) ?? 0 : 0;
-
-  if (kind === 'image') {
-    await client.sendImage({ ...common, width: dimOf('width'), height: dimOf('height') });
-    return;
-  }
-  if (kind === 'video') {
-    await client.sendVideo({
-      ...common,
-      width: dimOf('width'),
-      height: dimOf('height'),
-      duration: dimOf('duration'),
-    });
-    return;
-  }
-  // voice / file 都按普通文件发：Web 没有语音录制入口，转发一条语音等价于转发它的文件。
-  await client.sendFile(common);
-}
-
-function fallbackName(type: string): string {
-  if (type === 'image') return 'image.jpg';
-  if (type === 'video') return 'video.mp4';
-  if (type === 'voice') return 'voice.m4a';
-  return 'file.bin';
-}
-
-function guessMime(filename: string): string {
-  const ext = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase();
-  const table: Record<string, string> = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    gif: 'image/gif',
-    webp: 'image/webp',
-    mp4: 'video/mp4',
-    mov: 'video/quicktime',
-    m4a: 'audio/mp4',
-    mp3: 'audio/mpeg',
-    pdf: 'application/pdf',
-  };
-  return table[ext] ?? 'application/octet-stream';
-}
