@@ -49,8 +49,8 @@
     "@msgtrans/client": "file:../msgtrans-typescript"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18",
+    "pnpm": ">=10"
   },
-  "license": "Apache-2.0",
-  "packageManager": "pnpm@11.21.0"
+  "license": "Apache-2.0"
 }
