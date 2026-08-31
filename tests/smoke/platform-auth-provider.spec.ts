@@ -68,6 +68,23 @@ test.describe('PlatformAuthProvider HTTP envelope client (R8.3a)', () => {
       result: 'https://app.example.com/app',
     });
 
+    const insecurePublic = await page.evaluate(async () =>
+      (
+        window as unknown as {
+          __privchatTest: {
+            platformNormalizeBaseUrl(input: string): Promise<unknown>;
+          };
+        }
+      ).__privchatTest.platformNormalizeBaseUrl(
+        'http://106.55.63.153:8080/app',
+      ),
+    );
+    expect(insecurePublic).toMatchObject({
+      ok: false,
+      errorName: 'PlatformConfigError',
+      errorMessage: 'platformBaseUrl must use HTTPS outside local development',
+    });
+
     // Strict — reject when /app is missing (no silent auto-append):
     const missingApp = await page.evaluate(async () =>
       (

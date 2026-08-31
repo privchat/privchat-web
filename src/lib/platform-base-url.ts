@@ -29,6 +29,16 @@ export function normalizePlatformBaseUrl(input: string): string {
     throw new PlatformConfigError('platformBaseUrl is empty');
   }
   const stripped = trimmed.replace(/\/+$/, '');
+  let parsed: URL;
+  try {
+    parsed = new URL(stripped);
+  } catch {
+    throw new PlatformConfigError(`platformBaseUrl is not a valid URL (got "${input}")`);
+  }
+  const local = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+  if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local)) {
+    throw new PlatformConfigError('platformBaseUrl must use HTTPS outside local development');
+  }
   if (!/\/app$/.test(stripped)) {
     throw new PlatformConfigError(
       `platformBaseUrl must end with "/app" (got "${input}"); ` +
