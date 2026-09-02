@@ -45,7 +45,7 @@ test('search finds a message and jumps to it anchored + highlighted', async ({
             server_message_id: '9002',
             from_uid: '101',
             message_type: '0',
-            content: '红包口令 福寿万家 请查收',
+            content: '红包口令 恭喜发财 请查收',
             payload: new Uint8Array(),
             timestamp: 1_700_000_001_000,
             pts: '2',
@@ -75,10 +75,10 @@ test('search finds a message and jumps to it anchored + highlighted', async ({
 
   // 2) type the query; hit appears after the 400ms debounce with the
   //    matched fragment tinted (text-primary span)
-  await dialog.getByRole('textbox').fill('福寿万家');
-  const hitRow = dialog.getByRole('button').filter({ hasText: '福寿万家' });
+  await dialog.getByRole('textbox').fill('恭喜发财');
+  const hitRow = dialog.getByRole('button').filter({ hasText: '恭喜发财' });
   await expect(hitRow).toBeVisible({ timeout: 5_000 });
-  await expect(dialog.locator('span.text-primary', { hasText: '福寿万家' })).toBeVisible();
+  await expect(dialog.locator('span.text-primary', { hasText: '恭喜发财' })).toBeVisible();
 
   // 3) pick the hit → dialog closes, channel opens, anchored row flashes
   await hitRow.click();

@@ -134,9 +134,9 @@ Brand single source of truth is the app repo's `privchat/config/profiles/<brand>
 
 ```bash
 # profile JSON → .env.<brand> (never hand-maintain env files)
-node scripts/gen-web-env.mjs fushou
+node scripts/gen-web-env.mjs weey
 # brand production build; the postbuild hook emits dist/version.json
-npm run build -- --mode fushou
+npm run build -- --mode weey
 ```
 
 Note: keep version.json generation in the npm `postbuild` hook — chaining it with
