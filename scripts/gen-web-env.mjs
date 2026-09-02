@@ -17,7 +17,12 @@ const theme = p.theme?.light ?? {};
 const platformBaseUrl = baseOverride ?? p.platformBaseUrl ?? '';
 const isPlatform = (p.accountMode ?? 'BUILTIN').toUpperCase() === 'PLATFORM';
 // 浏览器只支持 ws/wss；BUILTIN 用 profile.gateways 的 ws 条目，PLATFORM 网关走 bootstrap 下发不内置。
-const wsGateway = isPlatform ? '' : (p.gateways ?? []).find((g) => g.startsWith('ws')) ?? '';
+// 🔴 `gateways` 与 `serverUrl` 两种写法都要认。
+// profile 里单端点写 `serverUrl`（local 就是这么写的），多端点才用 `gateways`；
+// app 侧的 effectiveGateways 一直是两者合并，这里原来只读 gateways，于是 local
+// 生成出来的网关是空串——web 起来能渲染、一连就失败，而 env 文件看着很正常。
+const candidates = [...(p.gateways ?? []), ...(p.serverUrl ? [p.serverUrl] : [])];
+const wsGateway = isPlatform ? '' : candidates.find((g) => g.startsWith('ws')) ?? '';
 if (!isPlatform && wsGateway === '') console.warn(`WARN: profile '${brandId}' 无 ws/wss 网关，BUILTIN Web 无法连接`);
 
 const lines = [
