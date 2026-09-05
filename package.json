@@ -1,6 +1,6 @@
 {
   "name": "privchat-web",
-  "version": "0.0.0",
+  "version": "1.0.0-beta.1",
   "description": "Official PrivChat React Web App. First consumer of @privchat/react.",
   "private": true,
   "type": "module",
