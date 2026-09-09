@@ -488,6 +488,22 @@ export function createTestAdapter(): PrivchatClientAdapter {
       };
     },
 
+    async refreshUserProfile(req: { target_user_id: number }) {
+      // 校准在 mock 下是无操作:返回一行稳定的缓存形态即可,页面不该因此变化。
+      return {
+        user_id: String(req.target_user_id),
+        username: '',
+        nickname: `User ${req.target_user_id}`,
+        user_type: 0,
+        is_friend: false,
+        sync_version: 0,
+      };
+    },
+
+    isConversationDisplayable() {
+      return true;
+    },
+
     async privacyGet(): Promise<Record<string, unknown>> {
       return {
         allow_add_by_group: true,

@@ -25,8 +25,13 @@ import {
   useRemoveFriend,
   useBlockUser,
   useSetFriendAlias,
+  useProfileRefresh,
 } from '@privchat/react';
-import type { PresenceStatusItem, UserRecord } from '@privchat/sdk';
+import type {
+  PresenceStatusItem,
+  UserDetailSource,
+  UserRecord,
+} from '@privchat/sdk';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +54,13 @@ export interface ProfileCardProps {
   /** Display fallback when `user` hasn't been hydrated yet. */
   fallbackTitle: string;
   presence?: PresenceStatusItem;
+  /**
+   * Where the viewer encountered this user, for the forced profile calibration
+   * (AVATAR_CACHE_SPEC §2). This is a server-side visibility gate, not
+   * decoration — omit it rather than inventing one, and the card simply renders
+   * the cached row without calibrating.
+   */
+  refreshSource?: { source: UserDetailSource; sourceId: string };
   /** The element that opens the card (avatar, name button, etc). */
   children: React.ReactNode;
 }
@@ -57,11 +69,15 @@ export function ProfileCard({
   user,
   fallbackTitle,
   presence,
+  refreshSource,
   children,
 }: ProfileCardProps) {
   const { t } = useTranslation();
   const adapter = usePrivchatClient();
   const i18n = useLastSeenI18n();
+  // 打开资料就跟服务端校准一次：对方改了昵称或删了头像,这里要当场对,而不是等下
+  // 一次实体同步。结果落库,所以会话标题和联系人行跟着一起更新。
+  useProfileRefresh(user?.user_id, refreshSource?.source, refreshSource?.sourceId);
 
   // PROFILE_VISIBILITY:非好友的 username 服务端投影为空串——空值视同缺席,
   // 展示回退 nickname → username → 会话标题,@ 行仅在有值时渲染。

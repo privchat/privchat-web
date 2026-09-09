@@ -558,6 +558,10 @@ export function ConversationPanel({
               user={userProfile}
               fallbackTitle={headerTitle}
               presence={presence}
+              refreshSource={{
+                source: 'conversation',
+                sourceId: String(channelId),
+              }}
             >
               <button
                 type="button"

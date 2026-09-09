@@ -215,7 +215,15 @@ function ContactRow({
   return (
     <li>
       <div className="group flex items-stretch hover:bg-accent">
-        <ProfileCard user={user} fallbackTitle={title}>
+        <ProfileCard
+          user={user}
+          fallbackTitle={title}
+          refreshSource={
+            user === undefined
+              ? undefined
+              : { source: 'friend', sourceId: user.user_id }
+          }
+        >
           <button
             type="button"
             className="shrink-0 px-3 py-3"
