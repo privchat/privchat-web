@@ -72,11 +72,20 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
   const [url, setUrl] = useState(
     initialUrl ?? getBootstrapGateway() ?? (brandConfig.gatewayUrl || 'ws://127.0.0.1:9080/'),
   );
+  // 用户有没有手工改过网关。只有 DEV 才渲染那个输入框，所以生产里它恒为 false，
+  // 下面的行为与之前完全一致；DEV 下它保住你刚敲进去的地址。
+  const gatewayTouched = useRef(false);
   useEffect(() => {
     // PLATFORM：启动即拉 bootstrap；成功且用户没手工改过网关时刷新为下发值。
+    //
+    // 「没手工改过」原来只判了 initialUrl === undefined —— 那是调用方有没有显式传值，
+    // 跟用户改没改没关系。结果 DEV 下手填一个本机网关，bootstrap 一回来就被冲掉，
+    // 注释描述的行为从来没实现过。
     void ensureBootstrap().then(() => {
       const g = getBootstrapGateway();
-      if (g !== null && initialUrl === undefined) setUrl((prev) => (prev === g ? prev : g));
+      if (g !== null && initialUrl === undefined && !gatewayTouched.current) {
+        setUrl((prev) => (prev === g ? prev : g));
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -122,7 +131,10 @@ export function LoginPage({ onLoggedIn, initialUrl, onCancel }: LoginPageProps) 
               <Input
                 id="gateway"
                 value={url}
-                onChange={(e) => setUrl(e.currentTarget.value)}
+                onChange={(e) => {
+                  gatewayTouched.current = true;
+                  setUrl(e.currentTarget.value);
+                }}
                 placeholder="ws://host:port/"
                 disabled={busy}
               />
