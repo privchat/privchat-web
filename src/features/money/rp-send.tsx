@@ -1,6 +1,7 @@
 // Send red packet (App RedPacketSendPage parity): groups pick normal/lucky +
 // count; direct chats are fixed normal×1. RP-12: only the platform API is
 // called — the chat card is injected server-side.
+import { ChannelType } from '@privchat/sdk';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,7 @@ export function RedPacketSendView({
   onDone: () => void;
 }) {
   const { t } = useTranslation();
-  const isGroup = channelType === 2;
+  const isGroup = channelType ===ChannelType.Group;
   const [amount, setAmount] = useState('');
   const [count, setCount] = useState('1');
   const [greeting, setGreeting] = useState('');

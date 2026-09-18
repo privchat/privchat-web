@@ -8,6 +8,7 @@
 //
 // 因此媒体转发要先把明文取回来（downloadAttachmentBlob = get_url + 解密），再走
 // 和用户手选文件完全相同的 sendImage / sendVideo / sendFile。
+import { ChannelType } from '@privchat/sdk';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChannelList, usePrivchatClient, resendMessageTo } from '@privchat/react';
@@ -45,7 +46,7 @@ export function ForwardDialog({
   const targets = useMemo(() => {
     const q = query.trim().toLowerCase();
     return records
-      .filter((c) => c.channel_type === 1 || c.channel_type === 2)
+      .filter((c) => c.channel_type ===ChannelType.Direct || c.channel_type ===ChannelType.Group)
       .filter((c) => q === '' || (c.title ?? c.channel_id).toLowerCase().includes(q));
   }, [records, query]);
 
@@ -127,7 +128,7 @@ export function ForwardDialog({
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
               >
                 <input type="checkbox" readOnly checked={checked} className="accent-primary" />
-                {c.channel_type === 2 ? (
+                {c.channel_type ===ChannelType.Group ? (
                   <GroupAvatar
                     channelId={c.channel_id}
                     name={c.title ?? c.channel_id}

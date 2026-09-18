@@ -19,6 +19,7 @@
 // a *fully behavioural* mock for end-to-end UI smoke. They serve
 // different roles and intentionally don't share code.
 
+import { ChannelType } from '@privchat/sdk';
 import { CacheDB } from '@privchat/sdk/cache-idb';
 import { migrateLegacySessionToRegistryOfOne } from '@/lib/migrate-single-account-session';
 import {
@@ -172,7 +173,7 @@ function defaultState(): MockState {
   };
   const directChannel: ChannelRecord = {
     channel_id: '1001',
-    channel_type: 1,
+    channel_type: ChannelType.Direct,
     title: '101', // server emits peer uid as title for direct
     latest_pts: '5',
     read_pts: '5',
@@ -183,7 +184,7 @@ function defaultState(): MockState {
   };
   const groupChannel: ChannelRecord = {
     channel_id: '900',
-    channel_type: 2,
+    channel_type: ChannelType.Group,
     title: 'Engineering',
     latest_pts: '3',
     read_pts: '3',
@@ -197,7 +198,7 @@ function defaultState(): MockState {
       // 稳定行身份（SDK stable-id 契约）：mock 里由 server id 派生，保持断言直观。
       id: 'r-sm-1',
       channel_id: '1001',
-      channel_type: 1,
+      channel_type: ChannelType.Direct,
       server_message_id: 'sm-1',
       from_uid: '101',
       message_type: '0',
@@ -210,7 +211,7 @@ function defaultState(): MockState {
     {
       id: 'r-sm-2',
       channel_id: '1001',
-      channel_type: 1,
+      channel_type: ChannelType.Direct,
       server_message_id: 'sm-2',
       from_uid: 'self',
       message_type: '0',
@@ -523,7 +524,7 @@ export function createTestAdapter(): PrivchatClientAdapter {
       // Map peer uid → channel_id by convention `uid * 10` if no
       // pre-seeded channel exists. Tests can seed explicit ones.
       const existing = state.channels.find(
-        (c) => c.channel_type === 1 && c.title === String(uid),
+        (c) => c.channel_type ===ChannelType.Direct && c.title === String(uid),
       );
       if (existing) {
         return { channel_id: Number(existing.channel_id), created: false };
@@ -1407,7 +1408,7 @@ export function installTestControls(): TestHarnessControls {
         await db.open();
         await db.channels.put({
           channel_id: channelId,
-          channel_type: 1,
+          channel_type: ChannelType.Direct,
           latest_pts: '1',
           read_pts: '1',
           unread_count: 0,

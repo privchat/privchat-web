@@ -9,6 +9,7 @@
 // Visual concerns (timeline rendering, virtualization, theming) live here in
 // the web app — `@privchat/react` only ships hooks/VMs.
 
+import { ChannelType } from '@privchat/sdk';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Gift, ImageIcon, Info, Paperclip, X as XIcon } from 'lucide-react';
@@ -105,7 +106,7 @@ export function ConversationPanel({
   // 修 ProfileCard 卡「加载中」。best-effort,失败不影响会话。
   const hydrationAdapter = usePrivchatClient();
   useEffect(() => {
-    if (channelType !== 2) return;
+    if (channelType !==ChannelType.Group) return;
     void hydrationAdapter.listGroupMembers(channelId).catch(() => {
       /* best-effort profile hydration */
     });
@@ -146,16 +147,16 @@ export function ConversationPanel({
     [records, channelId, channelType],
   );
   const peerUid =
-    (record?.channel_type === 1
+    (record?.channel_type ===ChannelType.Direct
       ? (record.peer_user_id ?? record.title)
       : undefined) ?? peerUidHint;
   const userProfile = useUserProfile(peerUid ?? '');
   // BOT_INTERACTION_SPEC §3.1：DM 对端 user_type=2 (Bot) 时显示菜单按钮。
   // System (user_type=1) v1 不显示（系统用户没有 bot service binding）。
-  const isBot = record?.channel_type === 1 && userProfile?.user_type === 2;
+  const isBot = record?.channel_type ===ChannelType.Direct && userProfile?.user_type === 2;
   const friendship = useFriendship(peerUid ?? '');
   const groupProfile = useGroupProfile(
-    record?.channel_type === 2 ? record.channel_id : '',
+    record?.channel_type ===ChannelType.Group ? record.channel_id : '',
   );
   const resolvedTitle = useMemo(() => {
     if (record === undefined) return undefined;
@@ -166,17 +167,17 @@ export function ConversationPanel({
       peerUid,
       friendship:
         peerUid !== undefined && peerUid !== '' ? friendship : undefined,
-      group: record.channel_type === 2 ? groupProfile : undefined,
+      group: record.channel_type ===ChannelType.Group ? groupProfile : undefined,
       i18n: titleI18n,
     });
   }, [record, userProfile, friendship, groupProfile, peerUid, titleI18n]);
   // Once the canonical channel/friendship records are available they own the
   // display name. `title` is only a first-open hint while entity sync catches up.
   const headerTitle = resolvedTitle?.title ?? title ?? channelId;
-  const isDirect = record?.channel_type === 1;
+  const isDirect = record?.channel_type ===ChannelType.Direct;
   // 群标题带人数「名称 (N)」；member_count 是 best-effort 缓存，>0 才显示。
   const groupMemberCount =
-    record?.channel_type === 2 ? (groupProfile?.member_count ?? 0) : 0;
+    record?.channel_type ===ChannelType.Group ? (groupProfile?.member_count ?? 0) : 0;
   // Pull presence for direct chats; the header subtitle and the
   // profile-card popover share this single fetch.
   const presence = usePresence(isDirect ? peerUid : undefined);
@@ -216,7 +217,7 @@ export function ConversationPanel({
   // out when `record` isn't a group, and the props stay undefined so the
   // timeline / menu never show pin affordances.
   const groupOps = useGroupOps();
-  const groupId = record?.channel_type === 2 ? record.channel_id : undefined;
+  const groupId = record?.channel_type ===ChannelType.Group ? record.channel_id : undefined;
   const [isManager, setIsManager] = useState(false);
   // uid → role ('owner'/'admin'/'member'):驱动气泡昵称旁的【群主】/【管理】标签。
   const [roleByUid, setRoleByUid] = useState<Map<string, string>>(new Map());

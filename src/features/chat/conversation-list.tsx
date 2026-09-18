@@ -3,6 +3,7 @@
 // is the primary entry point on PC; on H5 it's the default screen and
 // gets replaced by ConversationPanel when a row is tapped.
 
+import { ChannelType } from '@privchat/sdk';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BellOff, MoreHorizontal, Pin, RefreshCcw, Search } from 'lucide-react';
@@ -192,7 +193,7 @@ function ConversationRow({
   // pull the GroupRecord by `channel_id` (group_id == channel_id by
   // protocol convention). Direct channels also pick up the friendship
   // row so `alias` (caller's remark name) overrides nickname.
-  const isDirect = record.channel_type === 1;
+  const isDirect = record.channel_type ===ChannelType.Direct;
   // Prefer the real peer uid (channel entity sync carries it) so the peer
   // avatar seeds off the uid — matching the group-collage member cells and
   // App/H5 — and system detection can key off the uid. Fall back to the
@@ -200,13 +201,13 @@ function ConversationRow({
   const peerUid = isDirect ? (record.peer_user_id ?? record.title) : undefined;
   const user = useUserProfile(peerUid ?? '');
   const friendship = useFriendship(peerUid ?? '');
-  const group = useGroupProfile(record.channel_type === 2 ? record.channel_id : '');
+  const group = useGroupProfile(record.channel_type ===ChannelType.Group ? record.channel_id : '');
   const titleVm = resolveConversationTitle({
     channel: record,
     user: peerUid !== undefined && peerUid !== '' ? user : undefined,
     peerUid,
     friendship: peerUid !== undefined && peerUid !== '' ? friendship : undefined,
-    group: record.channel_type === 2 ? group : undefined,
+    group: record.channel_type ===ChannelType.Group ? group : undefined,
     i18n: titleI18n,
   });
 
@@ -262,8 +263,8 @@ function ConversationRow({
           // 行保持固定 S 色块(seed='system'),不接 uid。
           peerUid={isDirect && titleVm.kind !== 'system' ? peerUid : undefined}
           isDirect={isDirect}
-          groupChannelId={record.channel_type === 2 ? record.channel_id : undefined}
-          groupAvatarUrl={record.channel_type === 2 ? group?.avatar_url : undefined}
+          groupChannelId={record.channel_type ===ChannelType.Group ? record.channel_id : undefined}
+          groupAvatarUrl={record.channel_type ===ChannelType.Group ? group?.avatar_url : undefined}
           onSelect={onClick}
         />
 
