@@ -325,9 +325,12 @@ test.describe('LoginPage QR tab (R8.5c)', () => {
     });
     // No canvas in the error state.
     await expect(page.getByTestId('qr-canvas')).toHaveCount(0);
-    // qr-status carries the inline message (mapped through
-    // getLoginErrorMessage; the raw error text is contained).
+    // qr-status carries the QR fallback copy (getLoginErrorMessage
+    // 'qr-login'); the raw error text only goes to the console.
     await expect(page.getByTestId('qr-status')).toContainText(
+      /二维码生成失败|Couldn't generate the QR code|Không thể tạo mã QR/,
+    );
+    await expect(page.getByTestId('qr-status')).not.toContainText(
       /mock server failure/,
     );
   });

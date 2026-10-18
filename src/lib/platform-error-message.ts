@@ -93,6 +93,11 @@ const K = {
   fileTooLarge: 'server_error.file_too_large',
   fileTypeNotAllowed: 'server_error.file_type_not_allowed',
   fileEmpty: 'server_error.file_empty',
+  qrExpired: 'server_error.qr_expired',
+  qrStateInvalid: 'server_error.qr_state_invalid',
+  qrInvalid: 'server_error.qr_invalid',
+  qrScannerMismatch: 'server_error.qr_scanner_mismatch',
+  qrLoginUnavailable: 'server_error.qr_login_unavailable',
 } as const;
 
 function group(key: string, codes: string[]): Array<[string, string]> {
@@ -109,6 +114,8 @@ const MACHINE_CODES: ReadonlyMap<string, string> = new Map<string, string>([
     'REFRESH_TOKEN_REVOKED',
     'LOGIN_REQUIRED',
     'REFRESH_TOKEN_INVALID',
+    // Refresh sent without the issuing deviceId: only a fresh sign-in recovers.
+    'DEVICE_ID_REQUIRED',
   ]),
   ...group(K.permissionDenied, [
     'PERMISSION_DENIED',
@@ -212,6 +219,12 @@ const MACHINE_CODES: ReadonlyMap<string, string> = new Map<string, string>([
   ['FILE_TOO_LARGE', K.fileTooLarge],
   ['INVALID_MIME_TYPE', K.fileTypeNotAllowed],
   ['EMPTY_FILE', K.fileEmpty],
+  // Web QR login (`/platform/qr-login/*`, privchat module).
+  ['QR_SCENE_NOT_FOUND', K.qrExpired],
+  ['QR_SCENE_STATE_INVALID', K.qrStateInvalid],
+  ...group(K.qrInvalid, ['QR_TOKEN_MISMATCH', 'QR_CONFIRM_TOKEN_INVALID']),
+  ['QR_SCANNER_MISMATCH', K.qrScannerMismatch],
+  ['QR_LOGIN_UNAVAILABLE', K.qrLoginUnavailable],
 ]);
 
 function machineCodeCopy(code: string): PlatformErrorCopy | null {
@@ -318,6 +331,18 @@ export function describePlatformError(
   const copy = resolvePlatformError(err);
   if (copy === null) return null;
   return copy.params === undefined ? t(copy.key) : t(copy.key, copy.params);
+}
+
+/** QR scene codes after which the only recovery is a fresh QR code. */
+const QR_REFRESH_CODES: ReadonlySet<string> = new Set([
+  'QR_SCENE_NOT_FOUND',
+  'QR_SCENE_STATE_INVALID',
+]);
+
+/** True when a QR-login error means "this code is dead — show a new one". */
+export function isQrSceneGone(err: unknown): boolean {
+  const mc = platformMachineCode(err);
+  return mc !== null && QR_REFRESH_CODES.has(mc);
 }
 
 /** Machine code of a platform error, or null. */

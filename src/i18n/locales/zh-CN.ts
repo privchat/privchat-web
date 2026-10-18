@@ -89,6 +89,7 @@ export const zhCN: LocaleSchema = {
     qr_regenerate: '生成新二维码',
     qr_error_title: '无法启动扫码登录',
     qr_canvas_alt: '扫码登录二维码',
+    qr_create_failed: '二维码生成失败，请稍后重试',
   },
   onboarding: {
     splash_loading: '正在检查待办事项…',
@@ -734,5 +735,10 @@ export const zhCN: LocaleSchema = {
     file_too_large: '文件太大',
     file_type_not_allowed: '不支持该文件类型',
     file_empty: '文件为空',
+    qr_expired: '二维码已过期，请刷新后重新扫码',
+    qr_state_invalid: '二维码状态已变化，请刷新后重试',
+    qr_invalid: '二维码无效，请重新扫码',
+    qr_scanner_mismatch: '请在扫码的设备上完成确认',
+    qr_login_unavailable: '扫码登录暂不可用，请稍后再试',
   },
 };

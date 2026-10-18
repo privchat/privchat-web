@@ -94,6 +94,7 @@ export const vi: LocaleSchema = {
     qr_regenerate: 'Tạo mã mới',
     qr_error_title: 'Không thể bắt đầu đăng nhập QR',
     qr_canvas_alt: 'Mã QR đăng nhập',
+    qr_create_failed: 'Không thể tạo mã QR, vui lòng thử lại',
   },
   onboarding: {
     splash_loading: 'Đang kiểm tra tài khoản…',
@@ -746,5 +747,10 @@ export const vi: LocaleSchema = {
     file_too_large: 'Tệp quá lớn',
     file_type_not_allowed: 'Loại tệp này không được hỗ trợ',
     file_empty: 'Tệp trống',
+    qr_expired: 'Mã QR đã hết hạn, vui lòng làm mới và quét lại',
+    qr_state_invalid: 'Mã QR đã được sử dụng, vui lòng làm mới và thử lại',
+    qr_invalid: 'Mã QR không hợp lệ, vui lòng quét lại',
+    qr_scanner_mismatch: 'Vui lòng xác nhận trên thiết bị đã quét mã',
+    qr_login_unavailable: 'Đăng nhập bằng mã QR tạm thời không khả dụng, vui lòng thử lại sau',
   },
 };

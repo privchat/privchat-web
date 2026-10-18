@@ -12,7 +12,7 @@
 
 import { describePlatformError } from './platform-error-message';
 
-export type LoginErrorContext = 'send-sms' | 'sms-login' | 'login';
+export type LoginErrorContext = 'send-sms' | 'sms-login' | 'login' | 'qr-login';
 
 export interface LoginErrorTranslator {
   (key: string, opts?: Record<string, unknown>): string;
@@ -22,6 +22,7 @@ const API_FALLBACK_KEY: Record<LoginErrorContext, string> = {
   'send-sms': 'login.error_send_sms_failed',
   'sms-login': 'login.error_sms_login_failed',
   login: 'login.error_login_failed',
+  'qr-login': 'login.qr_create_failed',
 };
 
 export function getLoginErrorMessage(
@@ -47,6 +48,14 @@ export function getLoginErrorMessage(
       // the same i18n key the page used pre-R8.3b (login.error_login
       // / login.error_register / login.error_sms_login etc), so the
       // BUILTIN flow's existing error display stays byte-identical.
+      // QR login runs over the unauth IM WebSocket (RpcError / transport
+      // errors): their text is diagnostic only, so it goes to the console
+      // and the user gets the QR-specific copy.
+      if (ctx === 'qr-login') {
+        // eslint-disable-next-line no-console
+        console.warn('[qr-login] start failed', err);
+        return t(API_FALLBACK_KEY[ctx]);
+      }
       return ctx === 'send-sms'
         ? t('login.error_send_sms', { message })
         : ctx === 'sms-login'

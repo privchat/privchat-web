@@ -93,6 +93,7 @@ export const en: LocaleSchema = {
     qr_regenerate: 'Generate new code',
     qr_error_title: 'Could not start QR login',
     qr_canvas_alt: 'QR login code',
+    qr_create_failed: 'Couldn\'t generate the QR code. Please try again.',
   },
   onboarding: {
     splash_loading: 'Checking your account…',
@@ -742,6 +743,11 @@ export const en: LocaleSchema = {
     file_too_large: 'The file is too large.',
     file_type_not_allowed: 'This file type isn\'t supported.',
     file_empty: 'The file is empty.',
+    qr_expired: 'The QR code has expired. Refresh it and scan again.',
+    qr_state_invalid: 'This QR code has already been used. Refresh it and try again.',
+    qr_invalid: 'This QR code is invalid. Please scan again.',
+    qr_scanner_mismatch: 'Please confirm on the device that scanned the code.',
+    qr_login_unavailable: 'QR login is temporarily unavailable. Please try again later.',
   },
 };
 
@@ -833,6 +839,7 @@ export interface LocaleSchema {
     qr_regenerate: string;
     qr_error_title: string;
     qr_canvas_alt: string;
+    qr_create_failed: string;
   };
   onboarding: {
     splash_loading: string;
@@ -1466,5 +1473,10 @@ export interface LocaleSchema {
     file_too_large: string;
     file_type_not_allowed: string;
     file_empty: string;
+    qr_expired: string;
+    qr_state_invalid: string;
+    qr_invalid: string;
+    qr_scanner_mismatch: string;
+    qr_login_unavailable: string;
   };
 }

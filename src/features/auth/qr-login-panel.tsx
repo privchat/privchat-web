@@ -27,6 +27,7 @@ import { getAuthProvider } from '@/lib/account-auth-provider';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { getOrCreateDeviceId } from '@/lib/device-id';
 import { getLoginErrorMessage } from '@/lib/login-error-message';
+import { isQrSceneGone, platformMachineCode } from '@/lib/platform-error-message';
 import type { LoginResult } from '@/lib/account-auth-provider';
 import type {
   QrLoginEvent,
@@ -54,6 +55,7 @@ type QrUiAction =
   | { type: 'event'; event: QrLoginEvent }
   | { type: 'tick'; secondsLeft: number }
   | { type: 'error'; message: string }
+  | { type: 'sceneGone' }
   | { type: 'reset' };
 
 function reduce(state: QrUiState, action: QrUiAction): QrUiState {
@@ -109,6 +111,8 @@ function reduce(state: QrUiState, action: QrUiAction): QrUiState {
     }
     case 'error':
       return { kind: 'error', message: action.message };
+    case 'sceneGone':
+      return { kind: 'expired', scene: null };
     case 'reset':
       return { kind: 'idle' };
   }
@@ -190,9 +194,19 @@ export function QrLoginPanel({
         });
       } catch (e) {
         if (cancelled) return;
+        if (isQrSceneGone(e)) {
+          // QR_SCENE_NOT_FOUND / QR_SCENE_STATE_INVALID: the code is dead;
+          // show the expired state so the user can generate a new one.
+          // eslint-disable-next-line no-console
+          console.warn('[qr-login] scene gone', platformMachineCode(e));
+          dispatch({ type: 'sceneGone' });
+          return;
+        }
+        // QR_LOGIN_UNAVAILABLE and every other Neton code resolve through
+        // the shared catalog; IM/transport errors get the QR fallback copy.
         dispatch({
           type: 'error',
-          message: getLoginErrorMessage(e, 'sms-login', t),
+          message: getLoginErrorMessage(e, 'qr-login', t),
         });
       }
     })();
