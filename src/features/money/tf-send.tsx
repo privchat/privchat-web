@@ -6,7 +6,7 @@ import { useUserProfile } from '@privchat/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { sendMoneyTransfer, yuanToFen, fenToYuan, mapWalletErrorKey } from '@/lib/platform-wallet-provider';
+import { sendMoneyTransfer, yuanToFen, fenToYuan, describeWalletError } from '@/lib/platform-wallet-provider';
 
 export function TransferSendView({
   channelId,
@@ -53,7 +53,7 @@ export function TransferSendView({
       });
       setTimeout(onDone, 400);
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, false)));
+      setErr(describeWalletError(e, false, t));
       setConfirming(false);
     } finally {
       setSubmitting(false);

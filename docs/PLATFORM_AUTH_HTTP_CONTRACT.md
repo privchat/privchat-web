@@ -267,13 +267,13 @@ PLATFORM mapping（R8.3 实现时严格按此映射）：
 
 ### 6.1 Envelope 内业务错误
 
-| 来源 | `code` | `message`（示例文案）| Web 处理 |
+| 来源 | `code` | `message`（机器码，仅日志，不展示）| Web 处理 |
 |------|--------|------------------|---------|
-| `MemberAuthLogic.login` 凭证错 | 非 0（具体码 server 决定，目前抛 `BadRequestException`，HTTP 400 + envelope）| `"Invalid mobile or password"` | i18n key `login.error_login` 透传 |
-| `verifySmsCode` 码过期 | 非 0 | `"SMS code expired or not sent"` | 同上 |
-| `verifySmsCode` 码错 | 非 0 | `"Invalid SMS code"` | 同上 |
+| `MemberAuthLogic.login` 凭证错 | `10011` | `INVALID_CREDENTIALS` | `describePlatformError` → `login.error_invalid_credentials` |
+| `verifySmsCode` 码过期 | 非 0 | `SMS_CODE_EXPIRED` | `describePlatformError` → `server_error.sms_code_expired` |
+| `verifySmsCode` 码错 | 非 0 | `SMS_CODE_INVALID` | `describePlatformError` → `server_error.sms_code_invalid` |
 | `requireE164` 格式错 | 非 0 | `"E.164 format required (+ followed by 8–15 digits)"` | UI 应在提交前本地校验 |
-| `MemberAuthLogic.smsLogin` 账号 disabled | 非 0 | `"Account is disabled"` | 同上 |
+| `MemberAuthLogic.smsLogin` 账号 disabled | `10007` | `ACCOUNT_DISABLED` | `describePlatformError` → `login.error_account_disabled` |
 | `refreshToken` device 不匹配 | 非 0 | `"device_id is required for refresh"` 等 | 失败即视为 refresh 不可用 → 踢回 LoginPage |
 
 ### 6.2 HTTP 层错误

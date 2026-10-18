@@ -13,8 +13,10 @@
 //                           required-field invariants broke. Treat as
 //                           server bug or version skew.
 //   PlatformApiError      — envelope `code !== 0`. Carries the
-//                           server-provided code + message; UI
-//                           transparently surfaces `message`.
+//                           numeric code, the machine code and any
+//                           per-field errors. `message` is for logs
+//                           only — never show it to the user; map it
+//                           with `describePlatformError()` instead.
 
 export class PlatformConfigError extends Error {
   override readonly name = 'PlatformConfigError';
@@ -31,9 +33,32 @@ export class PlatformProtocolError extends Error {
   override readonly name = 'PlatformProtocolError';
 }
 
+/** One entry of the envelope's `errors[]` (field-level validation). */
+export interface PlatformFieldError {
+  field: string;
+  /** Machine code, e.g. `REQUIRED`, `TOO_SHORT`, `INVALID_MOBILE`. */
+  code: string;
+  params?: { min?: number; max?: number };
+}
+
+const MACHINE_CODE_RE = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
+
+/** Returns `message` when it is a Neton machine code, else null (old
+ *  server sentence or local error text). */
+export function toMachineCode(message: string | null | undefined): string | null {
+  return typeof message === 'string' && MACHINE_CODE_RE.test(message) ? message : null;
+}
+
 export class PlatformApiError extends Error {
   override readonly name = 'PlatformApiError';
-  constructor(public readonly code: number, message: string) {
+  /** Envelope `message` when it is a machine code, else null. */
+  readonly machineCode: string | null;
+  constructor(
+    public readonly code: number,
+    message: string,
+    public readonly fieldErrors: readonly PlatformFieldError[] = [],
+  ) {
     super(message);
+    this.machineCode = toMachineCode(message);
   }
 }

@@ -20,6 +20,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import type { AccountKey } from '@/lib/account-key';
 import { loadRegistry } from '@/lib/account-registry-store';
 import { bindInviteCode } from '@/lib/platform-invite-provider';
+import { describePlatformError } from '@/lib/platform-error-message';
 
 export interface BindInviteCodeActionProps {
   /** Active account — used to resolve the platform userId for the bind call. */
@@ -52,14 +53,7 @@ export function BindInviteCodeAction({
       await bindInviteCode(userId, trimmed);
       await onCompleted();
     } catch (e) {
-      const raw = e instanceof Error ? e.message : '';
-      setError(
-        raw.includes('INVITE_ALREADY_BOUND')
-          ? t('invite.err_already')
-          : raw.includes('INVITE_CODE')
-            ? t('invite.err_invalid')
-            : t('invite.err_failed'),
-      );
+      setError(describePlatformError(e, t) ?? t('invite.err_failed'));
       setBusy(false);
     }
   };

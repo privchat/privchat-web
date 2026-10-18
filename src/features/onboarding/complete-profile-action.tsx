@@ -26,6 +26,7 @@ import { LangSwitcher } from '@/components/lang-switcher';
 import { getProfileProvider } from '@/lib/account-profile-provider';
 import { getActiveAccessToken } from '@/lib/active-access-token';
 import { captureException } from '@/lib/error-reporter';
+import { describePlatformError } from '@/lib/platform-error-message';
 import type { RequiredAction } from '@/lib/required-action';
 
 export interface CompleteProfileActionProps {
@@ -82,9 +83,7 @@ export function CompleteProfileAction({
       // control back to the gate which re-fetches list().
       await onCompleted();
     } catch (e) {
-      const errName = e instanceof Error ? e.name : 'Error';
-      const errMessage = e instanceof Error ? e.message : String(e);
-      setError(translateError(errName, errMessage, t));
+      setError(translateError(e, t));
       captureException(e, { source: 'onboarding.complete_profile.submit' });
     } finally {
       setBusy(false);
@@ -153,16 +152,19 @@ export function CompleteProfileAction({
 }
 
 /** Map provider error class names to a user-facing string. Reuses the
- *  R8.3a error taxonomy (`PlatformError`s) for consistency with LoginPage. */
+ *  R8.3a error taxonomy (`PlatformError`s) for consistency with LoginPage;
+ *  API errors go through the shared Neton machine-code catalog. */
 function translateError(
-  name: string,
-  message: string,
-  t: (k: string) => string,
+  err: unknown,
+  t: (k: string, opts?: Record<string, unknown>) => string,
 ): string {
+  const name = err instanceof Error ? err.name : 'Error';
   switch (name) {
     case 'PlatformApiError':
-      // Server message is already user-facing per envelope convention.
-      return message;
+      return (
+        describePlatformError(err, t) ??
+        t('onboarding.complete_profile.error_failed')
+      );
     case 'PlatformHttpError':
       return t('onboarding.complete_profile.error_network');
     case 'PlatformProtocolError':
@@ -170,6 +172,6 @@ function translateError(
     case 'PlatformConfigError':
       return t('onboarding.complete_profile.error_config');
     default:
-      return message;
+      return t('onboarding.complete_profile.error_failed');
   }
 }

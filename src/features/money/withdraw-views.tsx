@@ -19,7 +19,7 @@ import {
   withdrawHoldReason,
   WITHDRAW_STATUS_ON_HOLD,
   withdrawStatusKey,
-  mapWalletErrorKey,
+  describeWalletError,
   type BankCard,
   type WithdrawOrder,
 } from '@/lib/platform-wallet-provider';
@@ -47,7 +47,7 @@ export function BankCardsView() {
     try {
       setCards(await listBankCards());
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, true)));
+      setErr(describeWalletError(e, true, t));
     } finally {
       setLoaded(true);
     }
@@ -65,7 +65,7 @@ export function BankCardsView() {
       await deleteBankCard(card.id);
       await load();
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, false)));
+      setErr(describeWalletError(e, false, t));
     } finally {
       setBusyId(null);
     }
@@ -122,7 +122,7 @@ export function BindCardView() {
       await bindBankCard({ holderName, bankName, bankCode: bankCode || undefined, cardNo });
       money.open({ type: 'bank-cards' });
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, false)));
+      setErr(describeWalletError(e, false, t));
     } finally {
       setBusy(false);
     }
@@ -184,7 +184,7 @@ export function WithdrawView() {
         setCards(cs);
         setSelectedId((prev) => prev ?? cs[0]?.id ?? null);
       } catch (e) {
-        setErr(t(mapWalletErrorKey(e, true)));
+        setErr(describeWalletError(e, true, t));
       } finally {
         setLoaded(true);
       }
@@ -203,7 +203,7 @@ export function WithdrawView() {
       await createWithdraw({ bankCardId: selectedId, amount: fen });
       money.open({ type: 'withdraw-orders' });
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, false)));
+      setErr(describeWalletError(e, false, t));
     } finally {
       setBusy(false);
     }
@@ -268,7 +268,7 @@ export function WithdrawOrdersView() {
       try {
         setOrders((await listWithdrawOrders(1, 50)).list);
       } catch (e) {
-        setErr(t(mapWalletErrorKey(e, true)));
+        setErr(describeWalletError(e, true, t));
       } finally {
         setLoaded(true);
       }
@@ -317,7 +317,7 @@ export function WithdrawDetailView({ orderId }: { orderId: number }) {
   useEffect(() => {
     void getWithdrawDetail(orderId)
       .then(setOrder)
-      .catch((e: unknown) => setErr(t(mapWalletErrorKey(e, true))));
+      .catch((e: unknown) => setErr(describeWalletError(e, true, t)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 

@@ -26,7 +26,10 @@ import {
 } from '@/lib/member-sign-in-provider';
 import { getActiveAccessToken } from '@/lib/active-access-token';
 import { captureException } from '@/lib/error-reporter';
-import { errorText } from '@/features/chat/error-text';
+import {
+  describePlatformError,
+  platformMachineCode,
+} from '@/lib/platform-error-message';
 import { fenToYuan } from '@/lib/platform-wallet-provider';
 
 export interface SignInDialogProps {
@@ -79,7 +82,10 @@ export function SignInDialog({ open, onOpenChange }: SignInDialogProps) {
         if (summaryRes.status === 'fulfilled') {
           setSummary(summaryRes.value);
         } else {
-          setError(errorText(summaryRes.reason));
+          setError(
+            describePlatformError(summaryRes.reason, t) ??
+              t('sign_in.load_failed'),
+          );
         }
         if (configsRes.status === 'fulfilled') {
           setConfigs(
@@ -101,10 +107,8 @@ export function SignInDialog({ open, onOpenChange }: SignInDialogProps) {
     if (signing || selfUid === undefined) return;
     setSigning(true);
     setError(null);
-    try {
-      const record = await provider.signIn(selfUid);
-      setJustEarned(record);
-      // Re-pull the canonical summary so streak / today flag are exact.
+    // Re-pull the canonical summary so streak / today flag are exact.
+    const refreshSummary = async () => {
       try {
         setSummary(await provider.getSummary(selfUid));
       } catch {
@@ -114,9 +118,20 @@ export function SignInDialog({ open, onOpenChange }: SignInDialogProps) {
           prev !== null ? { ...prev, todaySigned: true } : prev,
         );
       }
+    };
+    try {
+      const record = await provider.signIn(selfUid);
+      setJustEarned(record);
+      await refreshSummary();
     } catch (e) {
-      captureException(e, { source: 'sign-in.create' });
-      setError(`${t('sign_in.sign_failed')}: ${errorText(e)}`);
+      if (platformMachineCode(e) === 'ALREADY_SIGNED_IN_TODAY') {
+        // Signed elsewhere (other device / stale view): not a failure —
+        // show the already-signed state.
+        await refreshSummary();
+      } else {
+        captureException(e, { source: 'sign-in.create' });
+        setError(describePlatformError(e, t) ?? t('sign_in.sign_failed'));
+      }
     } finally {
       setSigning(false);
     }

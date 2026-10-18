@@ -34,6 +34,7 @@ import {
 import { prepareAvatarImage } from '@/lib/prepare-avatar-image';
 import { getActiveAccessToken } from '@/lib/active-access-token';
 import { captureException } from '@/lib/error-reporter';
+import { describePlatformError } from '@/lib/platform-error-message';
 import { cn } from '@/lib/utils';
 
 export interface ProfileEditDialogProps {
@@ -443,18 +444,18 @@ const GENDER_OPTIONS: Array<{ value: number; labelKey: string }> = [
   { value: 9, labelKey: 'profile_edit.gender_other' },
 ];
 
-/** Map provider error class names to a user-facing string. */
+/** Map provider error class names to a user-facing string. API errors go
+ *  through the shared Neton machine-code catalog; never the raw message. */
 function translateError(
   err: unknown,
-  t: (k: string) => string,
+  t: (k: string, opts?: Record<string, unknown>) => string,
   ctx: 'load' | 'save',
 ): string {
   const name = err instanceof Error ? err.name : 'Error';
-  const message = err instanceof Error ? err.message : String(err);
+  const fallback = ctx === 'load' ? t('profile_edit.error_load') : t('profile_edit.error_save');
   switch (name) {
     case 'PlatformApiError':
-      // Server message is already user-facing per envelope convention.
-      return message;
+      return describePlatformError(err, t) ?? fallback;
     case 'PlatformHttpError':
       return ctx === 'load'
         ? t('profile_edit.error_load')
@@ -464,6 +465,6 @@ function translateError(
     case 'PlatformConfigError':
       return t('profile_edit.error_config');
     default:
-      return ctx === 'load' ? t('profile_edit.error_load') : message;
+      return fallback;
   }
 }

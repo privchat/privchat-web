@@ -261,7 +261,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     expect(updateHits).toBe(0);
   });
 
-  test('7. server-side validation error → display server message, stay on page', async ({
+  test('7. server-side validation error → localized machine-code copy, stay on page', async ({
     page,
   }) => {
     await routeRequiredActions(page, {
@@ -272,8 +272,9 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
       '**/__fake-platform/app/member/user/update-nickname',
       async (route: Route) => {
         await fulfillJson(route, 200, {
-          code: 4001,
+          code: 10100,
           message: 'INVALID_NICKNAME_LENGTH',
+          data: null,
         });
       },
     );
@@ -283,7 +284,11 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     await page.getByTestId('onboarding-nickname-input').fill('Alice');
     await page.getByTestId('onboarding-nickname-submit').click();
 
+    // Machine code maps to localized copy; the raw code is never shown.
     await expect(page.getByTestId('onboarding-error')).toContainText(
+      'Nickname must be 2–32 characters.',
+    );
+    await expect(page.getByTestId('onboarding-error')).not.toContainText(
       'INVALID_NICKNAME_LENGTH',
     );
     // Still on action page

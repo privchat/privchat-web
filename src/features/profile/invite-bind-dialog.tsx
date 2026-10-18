@@ -16,6 +16,7 @@ import {
   myInviteBinding,
   type MyInviteBinding,
 } from '@/lib/platform-invite-provider';
+import { describePlatformError } from '@/lib/platform-error-message';
 
 export function InviteBindDialog({
   open,
@@ -61,16 +62,9 @@ export function InviteBindDialog({
             : t('invite.success'),
       });
     } catch (e) {
-      const raw = e instanceof Error ? e.message : '';
       setMsg({
         ok: false,
-        text: raw.includes('INVITE_ALREADY_BOUND')
-          ? t('invite.err_already')
-          : raw.includes('INVITE_CODE_SELF')
-            ? t('invite.err_self')
-            : raw.includes('INVITE_CODE')
-              ? t('invite.err_invalid')
-              : t('invite.err_failed'),
+        text: describePlatformError(e, t) ?? t('invite.err_failed'),
       });
     } finally {
       setBusy(false);

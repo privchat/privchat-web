@@ -13,12 +13,16 @@ import {
   PlatformApiError,
   PlatformHttpError,
   PlatformProtocolError,
+  type PlatformFieldError,
 } from './platform-errors';
 
 interface PlatformEnvelope<T> {
   code: number;
+  /** Machine code (e.g. `INVALID_CREDENTIALS`) on failure; logs only. */
   message?: string;
   data?: T;
+  /** Field-level validation errors (`VALIDATION_FAILED` etc). */
+  errors?: unknown;
 }
 
 const JSON_HEADERS: Record<string, string> = {
@@ -49,48 +53,7 @@ export async function postEnvelope<T>(
       err instanceof Error ? err.message : String(err),
     );
   }
-  if (!response.ok) {
-    // Business errors (4xx) still carry the JSON envelope (code/message):
-    // surface the business code so the UI can map localized copy; only
-    // non-envelope bodies (e.g. gateway 502 HTML) become transport errors.
-    try {
-      const env = (await response.json()) as PlatformEnvelope<unknown>;
-      if (env && typeof env.code === 'number' && env.code !== 0) {
-        throw new PlatformApiError(env.code, env.message ?? `code=${env.code}`);
-      }
-    } catch (err) {
-      if (err instanceof PlatformApiError) throw err;
-    }
-    throw new PlatformHttpError(
-      response.status,
-      `HTTP ${response.status} from ${url}`,
-    );
-  }
-  let envelope: PlatformEnvelope<T>;
-  try {
-    envelope = (await response.json()) as PlatformEnvelope<T>;
-  } catch (err) {
-    throw new PlatformProtocolError(
-      `failed to parse JSON envelope: ` +
-        (err instanceof Error ? err.message : String(err)),
-    );
-  }
-  if (
-    typeof envelope !== 'object' ||
-    envelope === null ||
-    typeof envelope.code !== 'number'
-  ) {
-    throw new PlatformProtocolError(
-      'envelope missing required `code` field',
-    );
-  }
-  if (envelope.code !== 0) {
-    throw new PlatformApiError(
-      envelope.code,
-      envelope.message ?? `code=${envelope.code}`,
-    );
-  }
-  return envelope.data;
+  return readEnvelope<T>(response, url);
 }
 
 /** Convenience for endpoints that MUST return a payload (login,
@@ -168,48 +131,7 @@ export async function postMultipartEnvelope<T>(
       err instanceof Error ? err.message : String(err),
     );
   }
-  if (!response.ok) {
-    // Business errors (4xx) still carry the JSON envelope (code/message):
-    // surface the business code so the UI can map localized copy; only
-    // non-envelope bodies (e.g. gateway 502 HTML) become transport errors.
-    try {
-      const env = (await response.json()) as PlatformEnvelope<unknown>;
-      if (env && typeof env.code === 'number' && env.code !== 0) {
-        throw new PlatformApiError(env.code, env.message ?? `code=${env.code}`);
-      }
-    } catch (err) {
-      if (err instanceof PlatformApiError) throw err;
-    }
-    throw new PlatformHttpError(
-      response.status,
-      `HTTP ${response.status} from ${url}`,
-    );
-  }
-  let envelope: PlatformEnvelope<T>;
-  try {
-    envelope = (await response.json()) as PlatformEnvelope<T>;
-  } catch (err) {
-    throw new PlatformProtocolError(
-      `failed to parse JSON envelope: ` +
-        (err instanceof Error ? err.message : String(err)),
-    );
-  }
-  if (
-    typeof envelope !== 'object' ||
-    envelope === null ||
-    typeof envelope.code !== 'number'
-  ) {
-    throw new PlatformProtocolError(
-      'envelope missing required `code` field',
-    );
-  }
-  if (envelope.code !== 0) {
-    throw new PlatformApiError(
-      envelope.code,
-      envelope.message ?? `code=${envelope.code}`,
-    );
-  }
-  return envelope.data;
+  return readEnvelope<T>(response, url);
 }
 
 async function requestEnvelope<T>(
@@ -238,14 +160,59 @@ async function requestEnvelope<T>(
       err instanceof Error ? err.message : String(err),
     );
   }
+  return readEnvelope<T>(response, url);
+}
+
+/** Decode `errors[]` defensively; drops malformed entries. */
+function decodeFieldErrors(raw: unknown): PlatformFieldError[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PlatformFieldError[] = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== 'object') continue;
+    const e = item as Record<string, unknown>;
+    if (typeof e.code !== 'string' || e.code === '') continue;
+    const fieldError: PlatformFieldError = {
+      field: typeof e.field === 'string' ? e.field : '',
+      code: e.code,
+    };
+    if (e.params !== null && typeof e.params === 'object') {
+      const p = e.params as Record<string, unknown>;
+      const params: { min?: number; max?: number } = {};
+      const min = Number(p.min);
+      const max = Number(p.max);
+      if (p.min !== undefined && p.min !== null && Number.isFinite(min)) params.min = min;
+      if (p.max !== undefined && p.max !== null && Number.isFinite(max)) params.max = max;
+      if (params.min !== undefined || params.max !== undefined) fieldError.params = params;
+    }
+    out.push(fieldError);
+  }
+  return out;
+}
+
+function toApiError(env: PlatformEnvelope<unknown>): PlatformApiError {
+  return new PlatformApiError(
+    env.code,
+    env.message ?? `code=${env.code}`,
+    decodeFieldErrors(env.errors),
+  );
+}
+
+/** Shared response decode for every envelope call: business errors on
+ *  any HTTP status become `PlatformApiError`, non-envelope non-2xx
+ *  bodies become `PlatformHttpError`, broken 2xx bodies become
+ *  `PlatformProtocolError`. */
+async function readEnvelope<T>(
+  response: Response,
+  url: string,
+): Promise<T | undefined> {
   if (!response.ok) {
-    // Business errors (4xx) still carry the JSON envelope (code/message):
-    // surface the business code so the UI can map localized copy; only
-    // non-envelope bodies (e.g. gateway 502 HTML) become transport errors.
+    // Business errors (4xx) still carry the JSON envelope: surface the
+    // business code so the UI can map localized copy; only non-envelope
+    // bodies (e.g. gateway 502 HTML) become transport errors.
     try {
       const env = (await response.json()) as PlatformEnvelope<unknown>;
       if (env && typeof env.code === 'number' && env.code !== 0) {
-        throw new PlatformApiError(env.code, env.message ?? `code=${env.code}`);
+        throw toApiError(env);
       }
     } catch (err) {
       if (err instanceof PlatformApiError) throw err;
@@ -273,11 +240,6 @@ async function requestEnvelope<T>(
       'envelope missing required `code` field',
     );
   }
-  if (envelope.code !== 0) {
-    throw new PlatformApiError(
-      envelope.code,
-      envelope.message ?? `code=${envelope.code}`,
-    );
-  }
+  if (envelope.code !== 0) throw toApiError(envelope);
   return envelope.data;
 }

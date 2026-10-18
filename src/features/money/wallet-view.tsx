@@ -9,7 +9,7 @@ import {
   pageWalletTransactions,
   walletBizTypeKey,
   fenToYuan,
-  mapWalletErrorKey,
+  describeWalletError,
   type WalletInfo,
   type WalletTransaction,
 } from '@/lib/platform-wallet-provider';
@@ -49,7 +49,7 @@ export function WalletView() {
         const [w] = await Promise.all([getWallet(), loadTx(1, false)]);
         setWallet(w);
       } catch (e) {
-        setErr(t(mapWalletErrorKey(e, true)));
+        setErr(describeWalletError(e, true, t));
       } finally {
         setLoaded(true);
       }
@@ -133,7 +133,7 @@ export function WalletView() {
           onClick={() => {
             setLoadingMore(true);
             void loadTx(pageNo + 1, true)
-              .catch((e) => setErr(t(mapWalletErrorKey(e, true))))
+              .catch((e) => setErr(describeWalletError(e, true, t)))
               .finally(() => setLoadingMore(false));
           }}
         >

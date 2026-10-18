@@ -263,7 +263,7 @@ test.describe('platform SMS login UI (Telegram-style two-step)', () => {
     expect(persisted.entry?.user_id).toBe('900002');
   });
 
-  test('sms-login API error surfaces server message verbatim + re-arms OTP', async ({
+  test('sms-login API error shows localized machine-code copy + re-arms OTP', async ({
     page,
   }) => {
     await page.route(
@@ -283,8 +283,9 @@ test.describe('platform SMS login UI (Telegram-style two-step)', () => {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            code: 4002,
-            message: 'invalid sms code',
+            code: 10100,
+            message: 'SMS_CODE_INVALID',
+            data: null,
           }),
         });
       },
@@ -296,9 +297,9 @@ test.describe('platform SMS login UI (Telegram-style two-step)', () => {
 
     await fillOtp(page, '123456');
 
-    // Server message passes through verbatim (PlatformApiError prefix-free).
+    // Machine code maps to localized copy (raw code never shown).
     await expect(page.getByTestId('login-error')).toContainText(
-      'invalid sms code',
+      'Incorrect verification code. Please try again.',
     );
 
     // OtpInput cleared on failure so the user can retype:

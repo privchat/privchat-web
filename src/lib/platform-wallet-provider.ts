@@ -10,6 +10,10 @@ import {
   requireData,
 } from './platform-envelope';
 import { PlatformApiError, PlatformConfigError } from './platform-errors';
+import {
+  describePlatformError,
+  type PlatformErrorTranslator,
+} from './platform-error-message';
 import { activePlatform } from './platform-session';
 
 /** Wallet balance (application PayWallet subset, cents). */
@@ -319,26 +323,23 @@ export function redPacketStatusInfo(
   return { key: 'money.rp.status_claimable' };
 }
 
-/** Business error → i18n key (aligned with App/H5 mapWalletError; never
- *  leaks the raw exception to the user). */
-export function mapWalletErrorKey(err: unknown, isLoad: boolean): string {
-  if (err instanceof PlatformConfigError) return 'money.err.not_platform';
+/** Business error → localized copy (aligned with App/H5 mapWalletError;
+ *  never leaks the raw exception to the user). Machine codes and the
+ *  shared numeric categories go through `describePlatformError`; the
+ *  remaining numeric ranges keep the wallet-specific fallbacks. */
+export function describeWalletError(
+  err: unknown,
+  isLoad: boolean,
+  t: PlatformErrorTranslator,
+): string {
+  if (err instanceof PlatformConfigError) return t('money.err.not_platform');
+  const described = describePlatformError(err, t);
+  if (described !== null) return described;
   if (err instanceof PlatformApiError) {
-    switch (err.code) {
-      case 10004:
-        return 'money.err.permission';
-      case 10201:
-        return 'money.err.not_found';
-      case 10204:
-      case 10205:
-        return 'money.err.conflict_or_balance';
-      default:
-        if (err.code >= 10100 && err.code <= 10199) return 'money.err.bad_params';
-        if (err.code >= 10000 && err.code <= 10099) return 'money.err.auth_expired';
-        return isLoad ? 'money.err.load_failed' : 'money.err.op_failed';
-    }
+    if (err.code >= 10100 && err.code <= 10199) return t('money.err.bad_params');
+    if (err.code >= 10000 && err.code <= 10099) return t('money.err.auth_expired');
   }
-  return isLoad ? 'money.err.load_failed' : 'money.err.op_failed';
+  return t(isLoad ? 'money.err.load_failed' : 'money.err.op_failed');
 }
 
 // ── Bank cards & withdraw (P4 user-side loop, aligned with App/H5) ──────────

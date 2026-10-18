@@ -12,7 +12,7 @@ import {
   redPacketDetail,
   redPacketStatusInfo,
   fenToYuan,
-  mapWalletErrorKey,
+  describeWalletError,
   type RedPacketClaim,
   type RedPacketOrder,
 } from '@/lib/platform-wallet-provider';
@@ -40,7 +40,7 @@ export function RedPacketDetailView({ redPacketId }: { redPacketId: string }) {
       setOrder(o);
       setClaims(c);
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, true)));
+      setErr(describeWalletError(e, true, t));
     }
   }, [redPacketId, t]);
 
@@ -71,7 +71,7 @@ export function RedPacketDetailView({ redPacketId }: { redPacketId: string }) {
     try {
       await claimRedPacket(order.id);
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, false)));
+      setErr(describeWalletError(e, false, t));
     } finally {
       setClaiming(false);
       void reload();

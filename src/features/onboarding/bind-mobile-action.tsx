@@ -31,6 +31,7 @@ import { LangSwitcher } from '@/components/lang-switcher';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { getRequiredActionsProvider } from '@/lib/account-required-actions-provider';
 import { getActiveAccessToken } from '@/lib/active-access-token';
+import { describePlatformError } from '@/lib/platform-error-message';
 
 /** China only for now; switch to a picker when other regions are needed —
  *  the server stores the same single field either way. */
@@ -60,16 +61,7 @@ export function BindMobileAction({ onCompleted, onSkip }: BindMobileActionProps)
       await getRequiredActionsProvider(getActiveAccessToken).bindMobile(trimmed);
       await onCompleted();
     } catch (e) {
-      const raw = e instanceof Error ? e.message : '';
-      setError(
-        raw.includes('MOBILE_ALREADY_TAKEN')
-          ? t('bind_mobile.err_taken')
-          : raw.includes('MOBILE_ALREADY_BOUND')
-            ? t('bind_mobile.err_bound')
-            : raw.includes('INVALID_MOBILE')
-              ? t('bind_mobile.err_invalid')
-              : t('bind_mobile.err_failed'),
-      );
+      setError(describePlatformError(e, t) ?? t('bind_mobile.err_failed'));
       setBusy(false);
     }
   };

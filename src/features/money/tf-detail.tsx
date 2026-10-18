@@ -5,7 +5,7 @@ import { UserName } from './user-name';
 import {
   moneyTransferDetail,
   fenToYuan,
-  mapWalletErrorKey,
+  describeWalletError,
   type MoneyTransferOrder,
 } from '@/lib/platform-wallet-provider';
 
@@ -19,7 +19,7 @@ export function TransferDetailView({ transferId }: { transferId: string }) {
       try {
         setOrder(await moneyTransferDetail(transferId));
       } catch (e) {
-        setErr(t(mapWalletErrorKey(e, true)));
+        setErr(describeWalletError(e, true, t));
       }
     })();
   }, [transferId, t]);

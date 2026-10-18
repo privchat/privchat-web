@@ -5,16 +5,24 @@
 // returned string.
 //
 // The dispatch table mirrors the four R8.3a platform error
-// classes plus a "PlatformApiError pass-through" rule (server's
-// `message` field is already user-facing per the application
-// contract). Anything else falls back to a generic protocol
-// label so we don't show empty toasts on weird failures.
+// classes. `PlatformApiError` goes through the shared Neton machine-code
+// catalog (`describePlatformError`); the server `message` is a machine
+// code and is never shown. Unmapped API errors fall back to the
+// action-specific copy.
+
+import { describePlatformError } from './platform-error-message';
 
 export type LoginErrorContext = 'send-sms' | 'sms-login' | 'login';
 
 export interface LoginErrorTranslator {
   (key: string, opts?: Record<string, unknown>): string;
 }
+
+const API_FALLBACK_KEY: Record<LoginErrorContext, string> = {
+  'send-sms': 'login.error_send_sms_failed',
+  'sms-login': 'login.error_sms_login_failed',
+  login: 'login.error_login_failed',
+};
 
 export function getLoginErrorMessage(
   err: unknown,
@@ -27,19 +35,7 @@ export function getLoginErrorMessage(
 
   switch (name) {
     case 'PlatformApiError':
-      // Machine codes map to localized copy; other server validation
-      // messages are user-facing per application convention.
-      if (message.includes('INVALID_CREDENTIALS') || /username or password/i.test(message)) {
-        return t('login.error_invalid_credentials');
-      }
-      if (message.includes('ACCOUNT_DISABLED') || message.includes('Account is disabled')) {
-        return t('login.error_account_disabled');
-      }
-      if (message.includes('USERNAME_TAKEN')) return t('login.error_username_taken');
-      if (message.includes('USERNAME_RESERVED')) return t('login.error_username_reserved');
-      if (message.includes('INVALID_USERNAME_FORMAT')) return t('login.error_username_format');
-      if (message.includes('PASSWORD_TOO_SHORT')) return t('login.error_password_short');
-      return message;
+      return describePlatformError(err, t) ?? t(API_FALLBACK_KEY[ctx]);
     case 'PlatformHttpError':
       return t('login.error_network');
     case 'PlatformProtocolError':

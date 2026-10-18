@@ -54,11 +54,14 @@ export const en: LocaleSchema = {
     error_invalid_mobile: 'Please enter a valid mobile number, e.g. +8613800138000',
     error_send_sms: 'Send code: {{message}}',
     error_sms_login: 'SMS login: {{message}}',
+    error_login_failed: 'Sign-in failed. Please try again.',
+    error_send_sms_failed: 'Could not send the code. Please try again.',
+    error_sms_login_failed: 'Code sign-in failed. Please try again.',
     error_username_taken: 'This username is unavailable or already taken. Please choose another.',
     error_username_reserved: 'This username is unavailable or already taken. Please choose another.',
     error_username_format: 'Invalid username format (lowercase letter first, 3-32 chars).',
     error_password_short: 'Password must be at least 8 characters.',
-    error_invalid_credentials: 'Incorrect username or password.',
+    error_invalid_credentials: 'The username or password you entered is incorrect. Please check and try again.',
     error_account_disabled: 'This account has been disabled.',
     error_network: 'Network error. Please try again later.',
     error_protocol: 'Unexpected response from server. Please try again later.',
@@ -103,6 +106,7 @@ export const en: LocaleSchema = {
       error_required: 'Please enter a nickname',
       error_too_short: 'Nickname must be at least 2 characters',
       error_too_long: 'Nickname must be at most 32 characters',
+      error_failed: 'Could not save, please try again.',
       error_network: 'Network error. Please try again later.',
       error_protocol: 'Unexpected response from server. Please try again later.',
       error_config: 'Configuration error. Contact your administrator.',
@@ -144,6 +148,7 @@ export const en: LocaleSchema = {
     error_protocol: 'Unexpected response from server. Please try again later.',
     error_config: 'Configuration error. Contact your administrator.',
     error_load: 'Failed to load profile. Please try again.',
+    error_save: 'Failed to save profile. Please try again.',
     avatar_pick: 'Choose image',
     avatar_hint: 'JPEG / PNG / WebP, up to 5 MB',
     avatar_error_mime: 'Avatar must be JPEG, PNG, or WebP',
@@ -161,6 +166,7 @@ export const en: LocaleSchema = {
     sign_now: 'Sign in',
     already_signed: 'Already signed in today',
     sign_failed: 'Sign-in failed',
+    load_failed: 'Failed to load sign-in info. Please try again.',
     no_session: 'No active session.',
   },
   workspace: {
@@ -501,7 +507,6 @@ export const en: LocaleSchema = {
     binding: 'Saving…',
     err_taken: 'That number is already linked to another account',
     err_bound: 'This account already has a phone number',
-    err_invalid: 'Enter a phone number',
     skip: 'Not now',
     err_failed: 'Could not save, please try again',
   },
@@ -519,8 +524,6 @@ export const en: LocaleSchema = {
     bind_hint: 'Bind an inviter-owned code to become friends automatically.',
     success_friend: 'Bound — you are now friends with the inviter',
     success: 'Invite code bound',
-    err_already: 'You have already bound an invite code',
-    err_self: 'You cannot bind your own invite code',
     err_invalid: 'Invite code is invalid or expired',
     err_failed: 'Failed to bind, please retry',
     loading: 'Loading…',
@@ -673,14 +676,72 @@ export const en: LocaleSchema = {
     },
     err: {
       not_platform: 'Not a platform account',
-      permission: 'Permission denied',
-      not_found: 'Record not found',
-      conflict_or_balance: 'Operation not allowed in the current state, or insufficient balance',
       bad_params: 'Invalid request, please check and retry',
       auth_expired: 'Session expired, please sign in again',
       load_failed: 'Failed to load, please retry',
       op_failed: 'Operation failed, please retry',
     },
+  },
+  // Neton application-server errors (machine code -> copy); see
+  // src/lib/platform-error-message.ts.
+  server_error: {
+    session_expired: 'Your session has expired. Please sign in again.',
+    permission_denied: 'You don\'t have permission to do this.',
+    not_found: 'It doesn\'t exist or has been removed.',
+    conflict: 'This can\'t be done right now. Refresh and try again.',
+    duplicate: 'This has already been done.',
+    busy: 'Something else is in progress. Please try again.',
+    rate_limited: 'Too many attempts. Please try again later.',
+    daily_limit: 'You\'ve reached today\'s limit. Please try again tomorrow.',
+    service_unavailable: 'The service is temporarily unavailable. Please try again later.',
+    request_too_large: 'That\'s too large to submit.',
+    field_required: 'Please fill in the required fields.',
+    field_too_short: 'Too short — at least {{min}} characters.',
+    field_too_long: 'Too long — at most {{max}} characters.',
+    field_length_range: 'Must be {{min}}–{{max}} characters.',
+    field_too_small: 'Must be at least {{min}}.',
+    field_too_large: 'Must be at most {{max}}.',
+    field_invalid_format: 'The format is invalid. Please check and try again.',
+    field_invalid_email: 'Please enter a valid email address.',
+    account_deleted: 'This account has been deleted.',
+    mobile_invalid: 'Please enter a valid mobile number.',
+    sms_code_required: 'Please enter the verification code.',
+    sms_code_invalid: 'Incorrect verification code. Please try again.',
+    sms_code_expired: 'The verification code has expired. Please request a new one.',
+    sms_code_attempts_exceeded: 'Too many wrong codes. Please request a new one.',
+    verification_too_frequent: 'Codes are being requested too often. Please wait a moment.',
+    verification_daily_limit: 'You\'ve reached today\'s limit for verification codes.',
+    verification_unavailable: 'Verification codes are temporarily unavailable. Please try again later.',
+    login_locked: 'Too many failed sign-in attempts. Please try again later.',
+    username_rate_limited: 'You\'ve already changed your username in the last 30 days.',
+    password_too_long: 'The password is too long (max 128 characters).',
+    register_mode_disabled: 'This sign-up method isn\'t available.',
+    nickname_length: 'Nickname must be 2–32 characters.',
+    bio_too_long: 'Bio can be at most 200 characters.',
+    profile_field_invalid: 'Some profile details are invalid. Please check and try again.',
+    avatar_invalid: 'That avatar image can\'t be used. Please choose another.',
+    report_description_too_long: 'The report description can be at most 500 characters.',
+    invite_already_bound: 'You\'ve already used an invite code.',
+    sign_in_reward_unavailable: 'Sign-in rewards are temporarily unavailable. Please try again later.',
+    wallet_not_found: 'Wallet not set up.',
+    balance_insufficient: 'Insufficient balance.',
+    transfer_to_self: 'You can\'t transfer money to yourself.',
+    red_packet_count_invalid: 'The number of red packets must be 1–1000.',
+    red_packet_not_found: 'This red packet doesn\'t exist.',
+    red_packet_expired: 'This red packet has expired.',
+    red_packet_drained: 'All red packets have been claimed.',
+    red_packet_already_claimed: 'You\'ve already claimed this red packet.',
+    red_packet_not_claimable: 'This red packet can\'t be claimed right now.',
+    red_packet_claim_forbidden: 'You can\'t claim this red packet.',
+    bank_card_info_required: 'Please fill in the cardholder, bank and card number.',
+    bank_card_number_invalid: 'The card number is invalid.',
+    bank_card_not_found: 'This bank card doesn\'t exist or has been removed.',
+    bank_card_has_pending_withdrawals: 'This card has withdrawals in progress and can\'t be removed yet.',
+    withdraw_status_not_allowed: 'This withdrawal can\'t be changed in its current state.',
+    pay_channel_unavailable: 'This payment channel is unavailable.',
+    file_too_large: 'The file is too large.',
+    file_type_not_allowed: 'This file type isn\'t supported.',
+    file_empty: 'The file is empty.',
   },
 };
 
@@ -733,6 +794,9 @@ export interface LocaleSchema {
     error_invalid_mobile: string;
     error_send_sms: string;
     error_sms_login: string;
+    error_login_failed: string;
+    error_send_sms_failed: string;
+    error_sms_login_failed: string;
     error_network: string;
     error_username_taken: string;
     error_username_reserved: string;
@@ -782,6 +846,7 @@ export interface LocaleSchema {
       error_required: string;
       error_too_short: string;
       error_too_long: string;
+      error_failed: string;
       error_network: string;
       error_protocol: string;
       error_config: string;
@@ -823,6 +888,7 @@ export interface LocaleSchema {
     error_protocol: string;
     error_config: string;
     error_load: string;
+    error_save: string;
     avatar_pick: string;
     avatar_hint: string;
     avatar_error_mime: string;
@@ -840,6 +906,7 @@ export interface LocaleSchema {
     sign_now: string;
     already_signed: string;
     sign_failed: string;
+    load_failed: string;
     no_session: string;
   };
   workspace: {
@@ -1166,7 +1233,6 @@ export interface LocaleSchema {
     binding: string;
     err_taken: string;
     err_bound: string;
-    err_invalid: string;
     skip: string;
     err_failed: string;
   };
@@ -1184,8 +1250,6 @@ export interface LocaleSchema {
     bind_hint: string;
     success_friend: string;
     success: string;
-    err_already: string;
-    err_self: string;
     err_invalid: string;
     err_failed: string;
     loading: string;
@@ -1338,13 +1402,69 @@ export interface LocaleSchema {
     };
     err: {
       not_platform: string;
-      permission: string;
-      not_found: string;
-      conflict_or_balance: string;
       bad_params: string;
       auth_expired: string;
       load_failed: string;
       op_failed: string;
     };
+  };
+  server_error: {
+    session_expired: string;
+    permission_denied: string;
+    not_found: string;
+    conflict: string;
+    duplicate: string;
+    busy: string;
+    rate_limited: string;
+    daily_limit: string;
+    service_unavailable: string;
+    request_too_large: string;
+    field_required: string;
+    field_too_short: string;
+    field_too_long: string;
+    field_length_range: string;
+    field_too_small: string;
+    field_too_large: string;
+    field_invalid_format: string;
+    field_invalid_email: string;
+    account_deleted: string;
+    mobile_invalid: string;
+    sms_code_required: string;
+    sms_code_invalid: string;
+    sms_code_expired: string;
+    sms_code_attempts_exceeded: string;
+    verification_too_frequent: string;
+    verification_daily_limit: string;
+    verification_unavailable: string;
+    login_locked: string;
+    username_rate_limited: string;
+    password_too_long: string;
+    register_mode_disabled: string;
+    nickname_length: string;
+    bio_too_long: string;
+    profile_field_invalid: string;
+    avatar_invalid: string;
+    report_description_too_long: string;
+    invite_already_bound: string;
+    sign_in_reward_unavailable: string;
+    wallet_not_found: string;
+    balance_insufficient: string;
+    transfer_to_self: string;
+    red_packet_count_invalid: string;
+    red_packet_not_found: string;
+    red_packet_expired: string;
+    red_packet_drained: string;
+    red_packet_already_claimed: string;
+    red_packet_not_claimable: string;
+    red_packet_claim_forbidden: string;
+    bank_card_info_required: string;
+    bank_card_number_invalid: string;
+    bank_card_not_found: string;
+    bank_card_has_pending_withdrawals: string;
+    withdraw_status_not_allowed: string;
+    pay_channel_unavailable: string;
+    file_too_large: string;
+    file_type_not_allowed: string;
+    file_empty: string;
   };
 }

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { sendRedPacket, yuanToFen, mapWalletErrorKey } from '@/lib/platform-wallet-provider';
+import { sendRedPacket, yuanToFen, describeWalletError } from '@/lib/platform-wallet-provider';
 
 export function RedPacketSendView({
   channelId,
@@ -63,7 +63,7 @@ export function RedPacketSendView({
       setDelivery(result.deliveryStatus);
       setTimeout(onDone, 700);
     } catch (e) {
-      setErr(t(mapWalletErrorKey(e, false)));
+      setErr(describeWalletError(e, false, t));
     } finally {
       setSubmitting(false);
     }
