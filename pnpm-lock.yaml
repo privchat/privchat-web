@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@privchat/location-web':
+        specifier: file:../privchat-app/location-web
+        version: file:../privchat-app/location-web
       '@privchat/react':
         specifier: file:../privchat-react
         version: file:../privchat-react(@privchat/sdk@file:../privchat-sdk-typescript(@msgtrans/client@file:../msgtrans-typescript))(react@19.2.5)
@@ -379,6 +382,9 @@ packages:
     resolution: {integrity: sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@privchat/location-web@file:../privchat-app/location-web':
+    resolution: {directory: ../privchat-app/location-web, type: directory}
 
   '@privchat/react@file:../privchat-react':
     resolution: {directory: ../privchat-react, type: directory}
@@ -1776,6 +1782,8 @@ snapshots:
   '@playwright/test@1.59.1':
     dependencies:
       playwright: 1.59.1
+
+  '@privchat/location-web@file:../privchat-app/location-web': {}
 
   '@privchat/react@file:../privchat-react(@privchat/sdk@file:../privchat-sdk-typescript(@msgtrans/client@file:../msgtrans-typescript))(react@19.2.5)':
     dependencies:

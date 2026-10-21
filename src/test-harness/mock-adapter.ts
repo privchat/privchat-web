@@ -791,7 +791,8 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async getGroupSettings() {
       throw new Error('getGroupSettings not implemented in smoke harness');
     },
-    async updateGroupSettings() {
+    async updateGroupProfile() { throw new Error('updateGroupProfile not mocked'); },
+  async updateGroupSettings() {
       throw new Error('updateGroupSettings not implemented in smoke harness');
     },
     async muteGroupAll() {

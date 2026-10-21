@@ -1,3 +1,4 @@
+import { useGroupProjectionRefresh } from '@privchat/react';
 // Group Info dialog. Mounts from the conversation header for group
 // chats. Pulls the member roster on open via `useGroupOps().listMembers`
 // (no local cache for group members in the SDK today; one fetch per
@@ -85,13 +86,20 @@ export function GroupInfoDialog({
   const [leaving, setLeaving] = useState(false);
   // Per-row busy state so multiple concurrent admin clicks queue cleanly.
   const [busyUid, setBusyUid] = useState<number | null>(null);
+  const [myRole, setMyRole] = useState('');
+  useEffect(() => {
+    let alive = true;
+    setMyRole('');
+    if (open) void ops.groupInfo(groupId).then(r => { if (alive) setMyRole(r.group_info.my_role ?? ''); }).catch(() => {});
+    return () => { alive = false; };
+  }, [open, groupId, ops]);
   const [addOpen, setAddOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   // Owner/admin-only join-request approvals (P6-3-4). Lazy — the child
   // dialog only fetches while it's open.
   const [approvalsOpen, setApprovalsOpen] = useState(false);
   // R2 — group settings. Lazy-loaded once on dialog open alongside the
-  // member roster. Editable subset here is `description` + `announcement`
+  // member roster. Editable subset here is `description`
   // (these go through `group/settings/update` on privchat-server,
   // owner-only). `all_muted` flips via the dedicated mute-all toggle.
   //
@@ -102,6 +110,10 @@ export function GroupInfoDialog({
   // `groupInfo` returns name/avatar; the dialog displays them but the
   // editor here intentionally does NOT include either field.
   const [settings, setSettings] = useState<GroupSettingsData | null>(null);
+  useGroupProjectionRefresh(open ? groupId : undefined, 'group_profile_changed', async () => {
+    const response = await ops.getSettings(groupId);
+    setSettings(response.settings);
+  });
   const [editOpen, setEditOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [toggleMuteAllBusy, setToggleMuteAllBusy] = useState(false);
@@ -202,15 +214,8 @@ export function GroupInfoDialog({
   // Self's role drives the admin-action gate. Server uses string roles
   // ("owner" | "admin" | "member"); we derive canManage here so UI
   // checks stay symbolic instead of comparing magic strings inline.
-  const selfMember = useMemo(
-    () =>
-      selfUid !== undefined
-        ? members.find((m) => String(m.user_id) === selfUid)
-        : undefined,
-    [members, selfUid],
-  );
   const canManage =
-    selfMember?.role === 'owner' || selfMember?.role === 'admin';
+    myRole === 'owner' || myRole === 'admin';
 
   // Add-friend-from-member affordance. We surface an "Add friend" button
   // on non-self members who aren't already friends. The apply carries
@@ -357,7 +362,7 @@ export function GroupInfoDialog({
   // both owner + admin, but per spec (`group/role/set`) only owner can
   // promote/demote. Server enforces authoritatively; UI gates only to
   // give early feedback (hides the menu items for admin viewers).
-  const isOwnerSelf = selfMember?.role === 'owner';
+  const isOwnerSelf = myRole === 'owner';
 
   const onSetRole = async (m: GroupMember, nextRole: 'admin' | 'member') => {
     if (busyUid !== null) return;
@@ -413,21 +418,15 @@ export function GroupInfoDialog({
     void uid;
   };
 
-  // R2 — save edits from the inline settings form (description +
-  // announcement). Optimistic local patch on success so the
-  // description/announcement chips reflect the change without a
-  // refetch. Server rejects with a permission error if the caller
-  // isn't owner; we bubble that up via the same error chip the
-  // member ops use.
+  // Save only the group introduction; legacy announcements are not a product feature.
   const onSaveSettings = async (patch: {
     description?: string;
-    announcement?: string;
   }) => {
     if (settings === null || savingSettings) return;
     setSavingSettings(true);
     setError(null);
     try {
-      await ops.updateSettings(groupId, patch);
+      await ops.updateProfile(groupId, patch);
       setSettings((prev) =>
         prev !== null
           ? {
@@ -435,9 +434,7 @@ export function GroupInfoDialog({
               ...(patch.description !== undefined
                 ? { description: patch.description }
                 : {}),
-              ...(patch.announcement !== undefined
-                ? { announcement: patch.announcement }
-                : {}),
+
             }
           : prev,
       );
@@ -470,8 +467,8 @@ export function GroupInfoDialog({
     }
   };
 
-  // Owner/admin-editable boolean settings. Both ride the same
-  // `group/settings/update` RPC as description/announcement; we patch a
+  // Owner-only boolean settings. Both ride the same
+  // `group/settings/update` RPC as description; we patch a
   // single field at a time and optimistically reflect the new value.
   const onToggleFlag = async (
     field: 'allow_member_add_friend' | 'allow_search' | 'member_can_invite',
@@ -531,20 +528,14 @@ export function GroupInfoDialog({
               {error}
             </div>
           )}
-          {/* R2 — group settings section (description / announcement).
-              Render whenever settings have loaded. Owner gets an Edit
-              affordance; non-owner sees read-only. Empty values are
-              hidden to keep the dialog compact. */}
-          {settings !== null &&
-            (settings.description !== undefined ||
-              settings.announcement !== undefined ||
-              canManage) && (
+          {/* All members can view; owners/admins edit through the profile API. */}
+          {settings !== null && (
               <div className="space-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-muted-foreground">
                     {t('groups.settings_heading')}
                   </span>
-                  {isOwnerSelf && (
+                  {canManage && (
                     <button
                       type="button"
                       className="text-xs text-primary hover:underline"
@@ -554,28 +545,14 @@ export function GroupInfoDialog({
                     </button>
                   )}
                 </div>
-                {settings.description !== undefined &&
-                  settings.description !== '' && (
                     <div>
                       <div className="text-[10px] uppercase text-muted-foreground">
                         {t('groups.settings_description')}
                       </div>
                       <div className="whitespace-pre-wrap break-words">
-                        {settings.description}
+                        {settings.description || '—'}
                       </div>
                     </div>
-                  )}
-                {settings.announcement !== undefined &&
-                  settings.announcement !== '' && (
-                    <div>
-                      <div className="text-[10px] uppercase text-muted-foreground">
-                        {t('groups.settings_announcement')}
-                      </div>
-                      <div className="whitespace-pre-wrap break-words">
-                        {settings.announcement}
-                      </div>
-                    </div>
-                  )}
                 {isOwnerSelf && (
                   <label className="flex items-center justify-between gap-2 pt-1">
                     <span>{t('groups.settings_mute_all')}</span>
@@ -590,7 +567,7 @@ export function GroupInfoDialog({
                 )}
                 {/* Owner/admin-editable group flags. Gated on canManage
                     so admins can toggle them too (server enforces). */}
-                {canManage && (
+                {isOwnerSelf && (
                   <>
                     <label className="flex items-center justify-between gap-2 pt-1">
                       <span>{t('groups.settings_allow_member_add_friend')}</span>
@@ -864,7 +841,6 @@ export function GroupInfoDialog({
           onOpenChange={setEditOpen}
           initial={{
             description: settings.description ?? '',
-            announcement: settings.announcement ?? '',
           }}
           saving={savingSettings}
           onSave={onSaveSettings}
@@ -895,11 +871,7 @@ export function GroupInfoDialog({
   );
 }
 
-/** Owner-only inline form for editing the two free-text settings the
- *  user-facing RPC actually supports (`description`, `announcement`).
- *  Diff-and-submit: only fields whose value differs from `initial`
- *  are sent so we don't churn `updated_at` on a no-op save, and the
- *  server's `updated_count` correctly reflects the actual changes. */
+/** Profile editor for owners/admins; governance settings remain separate. */
 function EditSettingsDialog({
   open,
   onOpenChange,
@@ -909,34 +881,28 @@ function EditSettingsDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initial: { description: string; announcement: string };
+  initial: { description: string };
   saving: boolean;
   onSave: (patch: {
     description?: string;
-    announcement?: string;
   }) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
   const [description, setDescription] = useState(initial.description);
-  const [announcement, setAnnouncement] = useState(initial.announcement);
 
   // Re-seed when the dialog opens (initial might change between mounts
   // because the outer settings state updated optimistically).
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) {
-      setDescription(initial.description);
-      setAnnouncement(initial.announcement);
-    }
-  }, [open, initial.description, initial.announcement]);
+    if (open && !wasOpen.current) setDescription(initial.description);
+    wasOpen.current = open;
+  }, [open, initial.description]);
 
-  const dirty =
-    description !== initial.description ||
-    announcement !== initial.announcement;
+  const dirty = description !== initial.description;
 
   const submit = () => {
-    const patch: { description?: string; announcement?: string } = {};
+    const patch: { description?: string } = {};
     if (description !== initial.description) patch.description = description;
-    if (announcement !== initial.announcement) patch.announcement = announcement;
     if (Object.keys(patch).length === 0) {
       onOpenChange(false);
       return;
@@ -962,19 +928,6 @@ function EditSettingsDialog({
               disabled={saving}
               placeholder={t('groups.settings_description_placeholder')}
               data-testid="group-settings-description-input"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="group-settings-announcement">
-              {t('groups.settings_announcement')}
-            </Label>
-            <Input
-              id="group-settings-announcement"
-              value={announcement}
-              onChange={(e) => setAnnouncement(e.currentTarget.value)}
-              disabled={saving}
-              placeholder={t('groups.settings_announcement_placeholder')}
-              data-testid="group-settings-announcement-input"
             />
           </div>
         </div>

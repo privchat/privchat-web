@@ -16,6 +16,7 @@
  * 先建 react 会因为拿不到 sdk 的类型而整片报 TS2307。
  */
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,8 +69,22 @@ const ensureBuilt = (name, dir) => {
 
 for (const { name, dir } of localDeps(root)) ensureBuilt(name, dir);
 
-// 快照是安装那一刻拷的，源码重建不会更新它。必须让 pnpm 重新拷一次。
-if (rebuilt.length > 0) {
+// A dependency may have been built separately; compare installed output, not just this run's work.
+const outputHash = (dir) => {
+  const hash = createHash('sha256');
+  const visit = (relative) => {
+    const file = join(dir, relative);
+    if (!existsSync(file)) { hash.update('missing:' + relative); return; }
+    if (statSync(file).isDirectory()) {
+      for (const name of readdirSync(file).sort()) visit(join(relative, name));
+    } else { hash.update(relative); hash.update(readFileSync(file)); }
+  };
+  visit('package.json'); visit('dist');
+  return hash.digest('hex');
+};
+const outdated = localDeps(root).filter(({ name, dir }) =>
+  outputHash(dir) !== outputHash(join(root, 'node_modules', name)));
+if (rebuilt.length > 0 || outdated.length > 0) {
   console.log(`[local-deps] 已重建 ${rebuilt.join(', ')}，刷新 pnpm 快照`);
   for (const { name } of localDeps(root)) {
     execSync(`rm -rf node_modules/.pnpm/${name.replace('@', '').replace('/', '+')}*`, { cwd: root });

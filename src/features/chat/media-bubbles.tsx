@@ -10,6 +10,7 @@
 // instead of an empty / cryptic text bubble.
 
 import { useCallback, useEffect, useState } from 'react';
+import { useLocationDialog } from './use-location-dialog';
 import {
   AlertTriangle,
   Download,
@@ -492,18 +493,11 @@ export function LocationBubble({
   meta: LocationMetadataVM;
   isSelf: boolean;
 }) {
-  // Minimum-viable: show coords + a tap target that opens the platform
-  // map app. Embedding a real map (Leaflet / Mapbox) adds 100+ KB and
-  // brings a tiles-API dependency — not worth it for a row that
-  // someone glances at once. Two decimal places ≈ 1.1 km precision,
-  // which keeps the chip narrow; the maps deep-link uses full
-  // precision so accuracy isn't lost.
-  const href = `https://www.google.com/maps?q=${meta.latitude},${meta.longitude}`;
+  const locationDialog = useLocationDialog();
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
+    <button
+      type="button"
+      onClick={() => locationDialog.open(meta)}
       className={cn(
         'flex items-center gap-2 rounded-lg px-3 py-2 text-sm max-w-[280px]',
         'transition-colors',
@@ -514,7 +508,7 @@ export function LocationBubble({
     >
       <MapPin className="h-5 w-5 shrink-0" />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">位置</div>
+        <div className="truncate font-medium">{meta.name ?? meta.address ?? '位置'}</div>
         <div
           className={cn(
             'text-[10px] opacity-80 font-mono tabular-nums',
@@ -525,7 +519,7 @@ export function LocationBubble({
         </div>
       </div>
       <ExternalLink className="h-4 w-4 shrink-0 opacity-70" />
-    </a>
+    </button>
   );
 }
 

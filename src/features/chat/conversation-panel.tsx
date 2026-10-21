@@ -10,6 +10,7 @@
 // the web app — `@privchat/react` only ships hooks/VMs.
 
 import { ChannelType } from '@privchat/sdk';
+import { useLocationDialog } from './use-location-dialog';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Gift, ImageIcon, Info, Paperclip, X as XIcon } from 'lucide-react';
@@ -23,6 +24,7 @@ import {
   usePresence,
   usePrivchatClient,
   useTyping,
+  useGroupProjectionRefresh,
   useUserProfile,
   useJumpToMessage,
 } from '@privchat/react';
@@ -89,6 +91,7 @@ export function ConversationPanel({
   className,
 }: ConversationPanelProps) {
   const { t } = useTranslation();
+  const locationDialog = useLocationDialog(channelId, channelType);
   const titleI18n = useConversationTitleI18n();
   const {
     messages,
@@ -260,6 +263,8 @@ export function ConversationPanel({
   // Refreshable pinned-message list. Wrapped so both the initial load
   // effect and the pin/unpin toggle can re-pull and keep the bar + the
   // row-menu labels in sync.
+  const pinnedScope = useRef(groupId);
+  pinnedScope.current = groupId;
   const refreshPinned = useCallback(async () => {
     if (groupId === undefined) {
       setPinnedItems([]);
@@ -267,15 +272,13 @@ export function ConversationPanel({
     }
     try {
       const resp = await groupOps.pinnedMessages(groupId);
-      setPinnedItems(resp.items);
+      if (pinnedScope.current === groupId) setPinnedItems(resp.items);
     } catch {
       // Non-fatal: leave the last-known list; a later toggle retries.
     }
   }, [groupId, groupOps]);
 
-  useEffect(() => {
-    void refreshPinned();
-  }, [refreshPinned]);
+  useGroupProjectionRefresh(groupId, 'pinned_messages_changed', refreshPinned);
 
   const pinnedIds = useMemo(
     () => new Set(pinnedItems.map((i) => String(i.message_id))),
@@ -619,7 +622,8 @@ export function ConversationPanel({
       </header>
 
       {!isDirect && groupId !== undefined && (
-        <PinnedBar
+        <PinnedBar key={groupId}
+          onOpen={(id) => { void jumpTo(channelId, channelType, id).then(() => { setFocusMessageId(id); setJumpFailed(false); }).catch(() => setJumpFailed(true)); }}
           items={pinnedItems}
           messages={timelineMessages}
           canManage={isManager}
@@ -737,6 +741,7 @@ export function ConversationPanel({
             e.currentTarget.value = '';
           }}
         />
+        {locationDialog.enabled && <Button variant="ghost" onClick={() => locationDialog.open()}>位置</Button>}
         {isBot && (
           <BotMenuButton
             channelId={channelId}

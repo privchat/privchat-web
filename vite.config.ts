@@ -1,9 +1,15 @@
 import path from 'node:path';
+import os from 'node:os';
+import { amapDevProxy } from '../privchat-app/location-web/server/amap-proxy.mjs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), amapDevProxy({
+    keyFile: path.resolve(__dirname, '.env.local'),
+    keyName: 'VITE_AMAP_MAPS_KEY',
+    secretFile: process.env.AMAP_PROXY_CONFIG ?? path.join(os.homedir(), '.config/weey/amap-server.env'),
+  })],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
