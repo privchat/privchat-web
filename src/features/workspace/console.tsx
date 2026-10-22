@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { getActiveAccessToken } from '@/lib/active-access-token';
 import { loadSession } from '@/lib/session-storage';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
-import { WorkspaceApi, type Binding, type Command, type Execution, type Node, type NodeEvent, type Permission, type WorkExecution, type WorkItem, type Workspace } from './api';
+import { WorkspaceApi, type Binding, type Command, type Execution, type Node, type NodeEvent, type Permission, type WorkExecution, type WorkItem, type WorkNote, type Workspace } from './api';
 import { WorkspaceRoomObserver, roomFailure, type RoomState } from './room-observer';
 import { permissionDetails } from './permission-details';
 
@@ -16,7 +16,7 @@ export class ConsoleIntent {
   private pending?: {path: string; body: Record<string, unknown>};
   async run<T>(api: WorkspaceApi, path: string, body: Record<string, unknown>, idKey = 'commandId'): Promise<T> {
     this.pending ??= {path, body: {...body, [idKey]: crypto.randomUUID()}};
-    if (this.pending.path !== path || Object.entries(body).some(([k,v]) => JSON.stringify(this.pending!.body[k]) !== JSON.stringify(v))) throw new Error('Retry the original request');
+    if (this.pending.path !== path || Object.keys(this.pending.body).length !== Object.keys(body).length+1 || Object.entries(body).some(([k,v]) => JSON.stringify(this.pending!.body[k]) !== JSON.stringify(v))) throw new Error('Retry the original request');
     const result = await api.post<T>(this.pending.path, this.pending.body);
     this.pending = undefined;
     return result;
@@ -30,7 +30,7 @@ export function WorkspaceConsole({client, open, onOpenChange, api}: {client: Pri
     <DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl">
       <DialogTitle>{t('agentWorkspace.title')}</DialogTitle>
       <DialogDescription>{t('agentWorkspace.permissionHint')}</DialogDescription>
-      {open && <ConsoleBody client={client} providedApi={api} />}
+      {open && <ConsoleBody key={client.sessionSnapshot().user_id} client={client} providedApi={api} />}
     </DialogContent>
   </Dialog>;
 }
@@ -50,6 +50,7 @@ function ConsoleBody({client,providedApi}: {client: PrivchatClient; providedApi?
   const [items,setItems] = useState<WorkItem[]>([]);
   const [bindings,setBindings] = useState<Binding[]>([]);
   const [executions,setExecutions] = useState<Execution[]>([]);
+  const [notes,setNotes] = useState<WorkNote[]>([]);
   const [selected,setSelected] = useState('');
   const [item,setItem] = useState('');
   const [binding,setBinding] = useState('');
@@ -60,6 +61,9 @@ function ConsoleBody({client,providedApi}: {client: PrivchatClient; providedApi?
   const [model,setModel] = useState('');
   const [workdir,setWorkdir] = useState('');
   const [capability,setCapability] = useState('');
+  const [delegation,setDelegation] = useState<string[]>([]);
+  const targets = (space ? bindings.filter(b=>b.revoked===0).map(b=>({nodeId:b.nodeId,capability:b.capability})) : nodes.filter(n=>n.state==='active').flatMap(n=>n.granted.map(capability=>({nodeId:n.nodeId,capability})))).filter(x=>x.capability!=='workspace_events_read');
+  const targetKey = (x:{nodeId:string;capability:string}) => `${x.nodeId}:${x.capability}`;
   const [error,setError] = useState(false);
   const [busy,setBusy] = useState(false);
   const [roomState,setRoomState] = useState<RoomState>('joining');
@@ -71,10 +75,10 @@ function ConsoleBody({client,providedApi}: {client: PrivchatClient; providedApi?
   const reload = async () => { const [s,n] = await Promise.all([api.list(),api.nodes()]); if(mounted.current){setSpaces(s);setNodes(n);} };
   useEffect(() => { void reload().catch(() => setError(true)); }, [api]);
   useEffect(() => {
-    setItems([]); setBindings([]); setItem(''); setBinding(''); setSelected('');
+    setItems([]); setBindings([]); setItem(''); setBinding(''); setSelected(''); setDelegation([]);
     if(!space) return;
     let active=true;
-    const watch = new WorkspaceRoomObserver(space,client,()=>api.join(space),()=>api.items(space),(state,rows)=>{if(active){setRoomState(state);setItems(rows);if(state==='denied'){setBindings([]);setSelected('');}}});
+    const watch = new WorkspaceRoomObserver(space,client,()=>api.join(space),()=>api.items(space),(state,rows)=>{if(active){setRoomState(state);setItems(rows);if(state==='denied'){setBindings([]);setItem('');setNotes([]);setExecutions([]);setDelegation([]);setSelected('');}}});
     observer.current=watch;
     const off=client.observeEvents(({event})=>{
       if(event.type==='channel_publish_received')watch.publish(event.channel_id,event.topic,event.payload_text);
@@ -87,19 +91,23 @@ function ConsoleBody({client,providedApi}: {client: PrivchatClient; providedApi?
   },[api,client,space]);
   useEffect(()=>{let active=true;setExecutions([]);setSelected('');if(node)void api.executions(node).then(x=>{if(active)setExecutions(x);}).catch(()=>setError(true));return()=>{active=false;};},[api,node]);
   useEffect(()=>{
-    let active=true,running=false;setSelected('');if(!item)return;
+    let active=true,running=false;setSelected('');setNotes([]);if(!item)return;
     const refresh=async()=>{if(running)return;running=true;try{
       const rows=await api.get<WorkExecution[]>(`/workspace/work-execution/list?workItemId=${encodeURIComponent(item)}`);
+      const records=await api.get<WorkNote[]>(`/workspace/work-note/list?workItemId=${encodeURIComponent(item)}`);
+      if(active)setNotes(records);
       if(active)setExecutions(rows.filter(x=>x.executionId).map(x=>({executionId:x.executionId!,nodeId:'',state:x.state??'unknown',stateVersion:0})));
-    }catch(e){if(active){setError(true);if(roomFailure(e)==='denied'){setExecutions([]);setSelected('');}}}finally{running=false;}};
+    }catch(e){if(active){setError(true);if(roomFailure(e)==='denied'){setNotes([]);setExecutions([]);setSelected('');}}}finally{running=false;}};
     void refresh();const timer=setInterval(()=>void refresh(),15000);return()=>{active=false;clearInterval(timer);};
   },[api,item]);
   async function act(action:()=>Promise<void>) {if(busy)return;setBusy(true);setError(false);try{await action();}catch{if(mounted.current)setError(true);}finally{if(mounted.current)setBusy(false);}}
   async function start() {
     if (completedStart.current) return;
+    if (!prompt.trim() || !model.trim() || !workdir.trim()) return;
     const params={prompt,model,workdirBindingId:workdir};
-    if(space){const r=await intent.current.run<WorkExecution>(api,'/workspace/work-execution/create',{workItemId:item,bindingId:binding,params},'requestId');if(mounted.current)setSelected(r.executionId??'');}
-    else {const r=await intent.current.run<Execution>(api,'/agent/executions',{nodeId:node,capability,scope:{kind:'private',ref:''},params},'requestId');if(mounted.current)setSelected(r.executionId);}
+    const delegationTargets=targets.filter(x=>delegation.includes(targetKey(x))).filter((x,i,a)=>a.findIndex(y=>targetKey(y)===targetKey(x))===i);
+    if(space){const r=await intent.current.run<WorkExecution>(api,'/workspace/work-execution/create',{workItemId:item,bindingId:binding,params,delegationTargets},'requestId');if(mounted.current)setSelected(r.executionId??'');}
+    else {const r=await intent.current.run<Execution>(api,'/agent/executions',{nodeId:node,capability,scope:{kind:'private',ref:''},params,delegationTargets},'requestId');if(mounted.current)setSelected(r.executionId);}
     completedStart.current=true;
   }
   return <div className="min-w-0 space-y-3" data-testid="workspace-console">
@@ -122,10 +130,12 @@ function ConsoleBody({client,providedApi}: {client: PrivchatClient; providedApi?
     <textarea aria-label={t('agentWorkspace.prompt')} className={field} value={prompt} onChange={e=>setPrompt(e.target.value)} disabled={intent.current.hasPending}/>
     <input aria-label={t('agentWorkspace.model')} placeholder={t('agentWorkspace.model')} className={field} value={model} onChange={e=>setModel(e.target.value)} disabled={intent.current.hasPending}/>
     <input aria-label={t('agentWorkspace.workdir')} placeholder={t('agentWorkspace.workdir')} className={field} value={workdir} onChange={e=>setWorkdir(e.target.value)} disabled={intent.current.hasPending}/>
+    <fieldset disabled={busy||intent.current.hasPending} className="space-y-2 rounded border p-3"><legend>{t('agentWorkspace.delegation')}</legend>{targets.filter((x,i,a)=>a.findIndex(y=>targetKey(y)===targetKey(x))===i).map(x=><label className="flex items-center gap-2" key={targetKey(x)}><input type="checkbox" disabled={delegation.length>=32&&!delegation.includes(targetKey(x))} checked={delegation.includes(targetKey(x))} onChange={e=>setDelegation(old=>e.target.checked?[...old,targetKey(x)]:old.filter(k=>k!==targetKey(x)))}/>{x.nodeId} · {x.capability}</label>)}</fieldset>
     <Button disabled={busy||completedStart.current||!prompt.trim()||!model.trim()||!workdir.trim()||(!space? !node||!capability : !item||!binding||roomState==='denied')} onClick={()=>void act(start)}>{t('agentWorkspace.run')}</Button>
     {completedStart.current&&<Button variant="outline" onClick={()=>{completedStart.current=false;setPrompt('');setSelected('');}}>{t('agentWorkspace.newRequest')}</Button>}
     <label className="block">{t('agentWorkspace.executions')}<select className={field} value={selected} onChange={e=>setSelected(e.target.value)}><option value="">{t('agentWorkspace.executions')}</option>{selected&&!executions.some(e=>e.executionId===selected)&&<option value={selected}>{selected}</option>}{executions.map(e=><option key={e.executionId} value={e.executionId}>{e.executionId} · {e.state}</option>)}</select></label>
     {selected&&<SessionConsole key={selected} api={api} executionId={selected} onContinue={setSelected} />}
+    {notes.length>0&&<section><h3>{t('agentWorkspace.records')}</h3>{notes.map(n=><div className="rounded border p-2" key={n.id}><p className="whitespace-pre-wrap break-words">{n.body}</p>{n.artifactRef&&<code className="break-all">{n.artifactRef}</code>}</div>)}</section>}
   </div>;
 }
 
@@ -143,12 +153,16 @@ export function SessionConsole({api,executionId,onContinue}: {api: WorkspaceApi;
   const [denied,setDenied]=useState(false);
   const [busy,setBusy]=useState(false);
   const [nextExecution,setNextExecution]=useState<string>();
+  const [children,setChildren]=useState<{childExecutionId:string;state:string}[]>([]);
+  const [childCursor,setChildCursor]=useState<string>();
+  const childrenExpanded=useRef(false);
   const pending=useRef(new Map<string,Command>());
   const applied=useRef(new Set<string>());
   const intent=useRef(new ConsoleIntent());
   const live=useRef(true);
   const seq=useRef(0);
   const renewal=useRef<{commandId:string;afterSeq:number} | undefined>(undefined);
+  const recovery=useRef<string | undefined>(undefined);
   const currentWatch=useRef(watch); currentWatch.current=watch;
   function accept(c:Command) {
     if(!live.current)return;
@@ -168,18 +182,21 @@ export function SessionConsole({api,executionId,onContinue}: {api: WorkspaceApi;
     const poll=async()=>{if(running||!live.current)return;running=true;try{
       const state=await api.execution(executionId);const perms=await api.permissions(executionId);
       if(!live.current)return;setExecution(state);setPermissions(perms);setError(false);
+      const childPage=await api.get<{items:{childExecutionId:string;state:string}[];nextCursor?:string}>(`/agent/executions/children?executionId=${encodeURIComponent(executionId)}&limit=100`);
+      if(!live.current)return;setChildren(old=>{const rows=new Map(old.map(x=>[x.childExecutionId,x]));for(const c of childPage.items??[])rows.set(c.childExecutionId,c);return [...rows.values()];});if(!childrenExpanded.current)setChildCursor(childPage.nextCursor);
       for(const c of pending.current.values()){const result=await api.command(c.executionId,c.commandId);if(!live.current)return;accept(result);}
       if(currentWatch.current){
         const page=await api.events(executionId,seq.current);if(!live.current)return;
-        if(page.snapshotRequired){setEvents([]);seq.current=0;setError(true);setWatch(undefined);}
+        if(page.snapshotRequired){setEvents([]);setHistory([]);seq.current=0;setError(true);setWatch(undefined);recovery.current??=crypto.randomUUID();}
         else{setEvents(old=>[...old,...page.items.filter(e=>e.seq>seq.current)].slice(-200));for(const e of page.items)seq.current=Math.max(seq.current,e.seq);}
-        if(currentWatch.current.expiresAt<=Date.now()+15_000&&!Array.from(pending.current.values()).some(c=>c.kind==='session.watch')){
+        if(!page.snapshotRequired&&currentWatch.current.expiresAt<=Date.now()+15_000&&!Array.from(pending.current.values()).some(c=>c.kind==='session.watch')){
           renewal.current??={commandId:crypto.randomUUID(),afterSeq:seq.current};
           const renewed=await api.post<Command>('/agent/sessions/watch',{executionId,...renewal.current,leaseMs:60000});
           if(!live.current)return;accept(renewed);renewal.current=undefined;
         }
       }
-    }catch(e){if(!live.current)return;setError(true);if(roomFailure(e)==='denied'){setDenied(true);setExecution(undefined);setPermissions([]);setHistory([]);setEvents([]);pending.current.clear();live.current=false;}}
+      if(recovery.current){const snapshot=await api.post<Command>('/agent/sessions/history',{executionId,commandId:recovery.current,limit:50});if(!live.current)return;accept(snapshot);recovery.current=undefined;}
+    }catch(e){if(!live.current)return;setError(true);if(roomFailure(e)==='denied'){setDenied(true);setExecution(undefined);setPermissions([]);setHistory([]);setEvents([]);setChildren([]);pending.current.clear();live.current=false;}}
     finally{running=false;}};
     void poll();const timer=setInterval(()=>void poll(),2000);
     return()=>{live.current=false;clearInterval(timer);const w=currentWatch.current;if(w)void api.post('/agent/sessions/unwatch',{executionId,commandId:crypto.randomUUID(),subscriptionId:w.subscriptionId}).catch(()=>{});};
@@ -203,5 +220,6 @@ export function SessionConsole({api,executionId,onContinue}: {api: WorkspaceApi;
     {events.map((e,i)=><pre key={i} className="whitespace-pre-wrap break-all text-sm">{JSON.stringify(e)}</pre>)}
     {permissions.filter(p=>p.status==='pending').map(p=><div key={p.permissionId} className="rounded border p-3"><pre className="whitespace-pre-wrap break-all">{permissionDetails(p.summary)??p.summary}</pre><p>{t('agentWorkspace.permissionHint')}</p>{(['allow_once','deny'] as const).map(decision=><Button key={decision} disabled={controls||p.expiresAt<=Date.now()||(decision==='allow_once'&&!permissionDetails(p.summary))} onClick={()=>{if(window.confirm(t('agentWorkspace.confirm')))void command('permissions/resolve',{permissionId:p.permissionId,requestDigest:p.requestDigest,decision});}}>{t(decision==='allow_once'?'agentWorkspace.approve':'agentWorkspace.deny')}</Button>)}{p.expiresAt<=Date.now()&&<p>{t('agentWorkspace.expired')}</p>}</div>)}
     {nextExecution&&nextExecution!==executionId&&<Button onClick={()=>onContinue?.(nextExecution)} disabled={!onContinue}>{t('agentWorkspace.executions')} · {nextExecution}</Button>}
+    {children.length>0&&<section><h3>{t('agentWorkspace.delegation')}</h3>{children.map(c=><Button key={c.childExecutionId} variant="outline" disabled={controls||!onContinue} onClick={()=>onContinue?.(c.childExecutionId)}>{c.childExecutionId} · {c.state}</Button>)}{childCursor&&<Button disabled={controls} onClick={()=>void api.get<{items:{childExecutionId:string;state:string}[];nextCursor?:string}>(`/agent/executions/children?executionId=${encodeURIComponent(executionId)}&limit=100&cursor=${encodeURIComponent(childCursor)}`).then(p=>{if(live.current){setChildren(old=>[...old,...p.items].filter((x,i,a)=>a.findIndex(y=>y.childExecutionId===x.childExecutionId)===i));childrenExpanded.current=true;setChildCursor(p.nextCursor);}}).catch(()=>setError(true))}>{t('agentWorkspace.more')}</Button>}</section>}
   </section>;
 }

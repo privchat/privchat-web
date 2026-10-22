@@ -2,10 +2,11 @@ import { getEnvelope, postAuthedEnvelope, requireData } from '@/lib/platform-env
 import { getActiveAccessToken } from '@/lib/active-access-token';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { normalizePlatformBaseUrl } from '@/lib/platform-base-url';
-import { PlatformConfigError } from '@/lib/platform-errors';
+import { PlatformApiError } from '@/lib/platform-errors';
 
 export interface Workspace { id: string; name: string; description: string; archived: number; myRole: string }
 export interface WorkItem { id: string; workspaceId: string; title: string; description: string; status: string; version: number }
+export interface WorkNote { id: string; workItemId: string; kind: string; body: string; artifactRef?: string | null }
 export interface Binding { id: string; nodeId: string; capability: string; revoked: number }
 export interface Execution { executionId: string; nodeId: string; state: string; stateVersion: number; result?: unknown }
 export interface WorkExecution { id: string; executionId: string | null; state: string | null }
@@ -23,7 +24,7 @@ export class WorkspaceApi {
   }
   private access(): string {
     const token = this.token();
-    if (!token) throw new PlatformConfigError('No active user session');
+    if (!token) throw new PlatformApiError(401, 'NOT_AUTHENTICATED');
     return token;
   }
   async get<T>(path: string): Promise<T> {

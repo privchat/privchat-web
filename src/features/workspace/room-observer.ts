@@ -51,7 +51,13 @@ export class WorkspaceRoomObserver {
           if (next.channelType !== 3 || next.eventProtocolVersion !== 1 || next.expiresAt <= this.now()) throw new Error('Unsupported room ticket');
           // Set before Subscribe so replay arriving with its response is buffered.
           this.ticket = next;
-          await this.transport.subscribeChannel(next.channelId, next.channelType, next.ticket);
+          try {
+            await this.transport.subscribeChannel(next.channelId, next.channelType, next.ticket);
+          } catch (error) {
+            // A ticket is not proof of an active subscription, including an ambiguous lost ACK.
+            await this.leave();
+            throw error;
+          }
           if (this.stopped) { await this.transport.unsubscribeChannel(next.channelId, next.channelType).catch(() => {}); return; }
         }
         const fresh = await this.snapshot();

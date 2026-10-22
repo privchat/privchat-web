@@ -1,4 +1,6 @@
 export const enWorkspace = {
+  "records": "Records and artifacts",
+  "delegation": "Optional delegation targets (none by default)",
   "title": "Workspaces and devices",
   "spaces": "Workspaces",
   "nodes": "Devices",
@@ -40,6 +42,8 @@ export const enWorkspace = {
   "unsupported": "This server or device does not support the operation"
 };
 export const zhWorkspace = {
+  "records": "记录与产物",
+  "delegation": "可选委托目标（默认不授权）",
   "title": "工作空间与设备",
   "spaces": "工作空间",
   "nodes": "设备节点",
@@ -81,6 +85,8 @@ export const zhWorkspace = {
   "unsupported": "当前服务端或设备不支持此操作"
 };
 export const viWorkspace = {
+  "records": "Ghi chú và sản phẩm",
+  "delegation": "Thiết bị được ủy quyền (mặc định không có)",
   "title": "Không gian và thiết bị",
   "spaces": "Không gian làm việc",
   "nodes": "Thiết bị",

@@ -44,6 +44,7 @@ test('lost HTTP response reuses command identity and forbids a changed operation
    fail=false;await intent.run(api as never,'/agent/sessions/send',{text:'one'});return {ids,changed};
  });
  expect(result.changed).toBe(true);expect(result.ids).toHaveLength(2);expect(result.ids[0]).toBe(result.ids[1]);
+ expect(result.ids[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
 });
 
 test('real session component polls commands, pages history and binds one-time approval digest',async({page})=>{
@@ -91,17 +92,29 @@ test('approval requires actual structured action details, not a tool name',async
  expect(result.bare).toBeNull();expect(result.local).toBeNull();expect(result.valid).toContain('src/a.ts');
 });
 
+test('network failure during subscribe never becomes live without a successful resubscribe',async({page})=>{
+ const result=await page.evaluate(async()=>{
+  const {WorkspaceRoomObserver}=await import('/src/features/workspace/room-observer.ts');let fail=true;const calls:string[]=[];const states:string[]=[];
+  const o=new WorkspaceRoomObserver('w',{subscribeChannel:async()=>{calls.push('subscribe');if(fail)throw Error('network');},unsubscribeChannel:async()=>{calls.push('leave');}},async()=>{calls.push('join');return{channelId:'1',channelType:3,ticket:'t',expiresAt:Date.now()+60000,eventProtocolVersion:1};},async()=>{calls.push('snapshot');return[];},s=>states.push(s));
+  await o.refresh();const first=[...calls];calls.length=0;fail=false;await o.refresh();return{first,second:calls,states};
+ });
+ expect(result.first).not.toContain('snapshot');expect(result.second).toEqual(['join','subscribe','snapshot']);expect(result.states).toEqual(['stale','live']);
+});
+
 test('workspace component joins before authorized snapshot and fits a phone viewport',async({page})=>{
  await page.setViewportSize({width:390,height:844});
  const paths:string[]=[];
+ const starts:Record<string,unknown>[]=[];
  await page.route('**/__workspace/app/**',async route=>{
   const path=new URL(route.request().url()).pathname;paths.push(path);
   let data:unknown=[];
   if(path.endsWith('/workspace/list'))data=[{id:'21',name:'Example workspace',description:'',archived:0,myRole:'owner'}];
-  if(path.endsWith('/agent/nodes'))data=[{nodeId:'8',name:'Work laptop',state:'active',granted:['coding']}];
+  if(path.endsWith('/agent/nodes'))data=[{nodeId:'8',name:'Work laptop',state:'active',granted:['coding']},{nodeId:'10',name:'Unbound laptop',state:'active',granted:['coding']}];
   if(path.endsWith('/room/join'))data={channelId:'400',channelType:3,ticket:'fixture',expiresAt:Date.now()+60000,eventProtocolVersion:1};
   if(path.endsWith('/work-item/list'))data=[{id:'31',workspaceId:'21',title:'Review change',description:'',status:'open',version:2}];
-  if(path.endsWith('/agent-binding/list'))data=[{id:'41',nodeId:'8',capability:'coding',revoked:0}];
+  if(path.endsWith('/work-note/list'))data=[{id:'71',workItemId:'31',kind:'artifact',body:'Authorized artifact record',artifactRef:'repo@commit:report.md'}];
+  if(path.endsWith('/agent-binding/list'))data=[{id:'41',nodeId:'8',capability:'coding',revoked:0},{id:'42',nodeId:'9',capability:'review',revoked:0},{id:'43',nodeId:'11',capability:'coding',revoked:1}];
+  if(path.endsWith('/work-execution/create')){starts.push(route.request().postDataJSON());data={id:'51',executionId:null,state:null};}
   await route.fulfill({json:{code:0,data}});
  });
  await page.evaluate(async()=>{const {mountWorkspaceConsole}=await import('/src/test-harness/workspace-console.tsx');mountWorkspaceConsole(`${location.origin}/__workspace/app`);});
@@ -119,7 +132,18 @@ test('workspace component joins before authorized snapshot and fits a phone view
  await expect(run).toBeDisabled();
  await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).fill('configured-model');
  await expect(run).toBeEnabled();
+ await expect(c.getByText('Authorized artifact record')).toBeVisible();
+ await expect(c.getByRole('checkbox')).toHaveCount(2);
+ await expect(c.getByRole('checkbox').first()).not.toBeChecked();
+ await expect(c.getByRole('checkbox').last()).not.toBeChecked();
  expect(paths.findIndex(p=>p.endsWith('/room/join'))).toBeLessThan(paths.findIndex(p=>p.endsWith('/work-item/list')));
  await expect.poll(async()=>{const box=await page.getByRole('dialog').boundingBox();return !!box&&box.x>=0&&box.x+box.width<=390;}).toBe(true);
  await page.screenshot({path:'/tmp/weey-workspace-console.png'});
+ await run.click();await expect.poll(()=>starts.length).toBe(1);
+ expect(starts[0].delegationTargets).toEqual([]);
+ await c.getByRole('button',{name:/New request|新请求|Yêu cầu mới/}).click();
+ await c.getByRole('textbox',{name:/Request|工作要求|Yêu cầu/,exact:true}).fill('Review again');
+ await c.getByRole('checkbox',{name:'9 · review'}).check();
+ await run.click();await expect.poll(()=>starts.length).toBe(2);
+ expect(starts[1].delegationTargets).toEqual([{nodeId:'9',capability:'review'}]);
 });
