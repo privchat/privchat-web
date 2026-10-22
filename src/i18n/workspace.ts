@@ -1,4 +1,10 @@
 export const enWorkspace = {
+  "failure_executor_not_logged_in": "The executor is not signed in on this device",
+  "failure_executor_version_unsupported": "This executor version is not supported; please update it",
+  "failure_executor_quota_exhausted": "The executor's usage limit was reached",
+  "failure_executor_unavailable": "The executor is not available on this device",
+  "failure_executor_error": "The executor reported an error",
+  "failureRetryable": "You can try again later",
   "records": "Records and artifacts",
   "delegation": "Optional delegation targets (none by default)",
   "title": "Workspaces and devices",
@@ -42,6 +48,12 @@ export const enWorkspace = {
   "unsupported": "This server or device does not support the operation"
 };
 export const zhWorkspace = {
+  "failure_executor_not_logged_in": "这台设备上的执行器未登录",
+  "failure_executor_version_unsupported": "执行器版本不在支持范围内，请升级",
+  "failure_executor_quota_exhausted": "执行器额度已用尽或被限流",
+  "failure_executor_unavailable": "这台设备上的执行器当前不可用",
+  "failure_executor_error": "执行器报告了错误",
+  "failureRetryable": "稍后可以重试",
   "records": "记录与产物",
   "delegation": "可选委托目标（默认不授权）",
   "title": "工作空间与设备",
@@ -85,6 +97,12 @@ export const zhWorkspace = {
   "unsupported": "当前服务端或设备不支持此操作"
 };
 export const viWorkspace = {
+  "failure_executor_not_logged_in": "Trình thực thi chưa đăng nhập trên thiết bị này",
+  "failure_executor_version_unsupported": "Phiên bản trình thực thi không được hỗ trợ, hãy cập nhật",
+  "failure_executor_quota_exhausted": "Trình thực thi đã hết hạn mức hoặc bị giới hạn",
+  "failure_executor_unavailable": "Trình thực thi hiện không khả dụng trên thiết bị này",
+  "failure_executor_error": "Trình thực thi báo lỗi",
+  "failureRetryable": "Bạn có thể thử lại sau",
   "records": "Ghi chú và sản phẩm",
   "delegation": "Thiết bị được ủy quyền (mặc định không có)",
   "title": "Không gian và thiết bị",

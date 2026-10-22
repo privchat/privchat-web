@@ -221,6 +221,9 @@ export function SessionConsole({api,executionId,onContinue}: {api: WorkspaceApi;
   const controls=busy||denied;
   return <section className="space-y-3 border-t pt-3" data-testid="session-console">
     <p role="status">{execution?.state??t('agentWorkspace.pending')}</p>
+    {(()=>{const f=(execution?.result as {failure?:{code?:string;retryable?:boolean;summary?:string}}|undefined)?.failure;if(!f)return null;
+      const known=['executor_not_logged_in','executor_version_unsupported','executor_quota_exhausted','executor_unavailable'];
+      return <p role="alert" data-testid="execution-failure">{t(`agentWorkspace.failure_${known.includes(f.code??'')?f.code:'executor_error'}`)}{f.retryable?` · ${t('agentWorkspace.failureRetryable')}`:''}{f.summary&&<span className="block text-xs text-muted-foreground">{f.summary}</span>}</p>;})()}
     {error&&<p role="alert">{t(denied?'agentWorkspace.denied':'agentWorkspace.error')}</p>}
     <div className="flex flex-wrap gap-2">
       <Button disabled={controls} onClick={()=>void command('sessions/inspect')}>{t('agentWorkspace.inspect')}</Button>
