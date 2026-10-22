@@ -1,16 +1,18 @@
-import { getEnvelope, postAuthedEnvelope, requireData } from '@/lib/platform-envelope';
+import { getEnvelope, postAuthedEnvelope, putEnvelope, requireData } from '@/lib/platform-envelope';
 import { getActiveAccessToken } from '@/lib/active-access-token';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { normalizePlatformBaseUrl } from '@/lib/platform-base-url';
 import { PlatformApiError } from '@/lib/platform-errors';
 
 export interface Workspace { id: string; name: string; description: string; archived: number; myRole: string }
-export interface WorkItem { id: string; workspaceId: string; title: string; description: string; status: string; version: number }
+export interface WorkItem { id: string; workspaceId: string; title: string; description: string; acceptance?: string; projectId?: string | null; status: string; version: number }
 export interface WorkNote { id: string; workItemId: string; kind: string; body: string; artifactRef?: string | null }
 export interface Binding { id: string; nodeId: string; capability: string; revoked: number }
 export interface Execution { executionId: string; nodeId: string; state: string; stateVersion: number; result?: unknown; capability?: string; scope?: {kind: string; ref: string}; nativeSessionId?: string | null; agentId?: string | null; params?: Record<string, unknown>; updatedAt?: number; createdAt?: number }
-export interface WorkExecution { id: string; executionId: string | null; state: string | null }
-export interface Node { nodeId: string; name: string; state: string; granted: string[]; capabilities?: {name: string; available: boolean; version?: string; reason?: string | null}[]; workdirs?: {id: string; label: string}[]; sessionDiscovery?: {external: boolean; reason: string} }
+export interface WorkExecution { id: string; executionId: string | null; state: string | null; employeeId?: string | null; workItemVersion?: number | null }
+export interface WorkReview { noteId: string; workItemId: string; workItemVersion: number; sourceWorkExecutionId: string; sourceExecutionId: string; evidenceNoteIds: string[]; evidenceDescription: string; reviewerEmployeeId: string; reviewerExecution: WorkExecution; requestedBy: string; createdAt: number; conclusion?: string | null; conclusionNoteId?: string | null; conclusionBody?: string | null; conclusionSource?: string | null }
+export interface Node { nodeId: string; name: string; state: string; platform?: string; runtimeVersion?: string; lastReportAt?: number | null; revokedAt?: number | null; deviceRevocation?: string | null; granted: string[]; capabilities?: {name: string; available: boolean; version?: string; reason?: string | null}[]; workdirs?: {id: string; label: string}[]; sessionDiscovery?: {external: boolean; reason: string} }
+export interface PairingView { pairingId: string; deviceName: string; platform: string; runtimeVersion: string; expiresAt: number }
 export interface Employee { agentId: string; name: string; executor: string; config: Record<string, unknown>; createdAt: number; nodeId?: string; roleDescription: string; title: string; model: string; workdirBindingId: string; executionId?: string }
 export interface EmployeeConfig { name: string; executor: string; nodeId: string; roleDescription: string; title: string; model: string; workdirBindingId: string; bindExecutionId?: string }
 export type EmployeeCreateRequest = EmployeeConfig & {requestId: string};
@@ -38,6 +40,12 @@ export class WorkspaceApi {
   async post<T>(path: string, body: unknown): Promise<T> {
     return requireData(await postAuthedEnvelope<T>(`${this.base}${path}`, this.access(), body), path);
   }
+  async put<T>(path: string, body: unknown): Promise<T> {
+    return requireData(await putEnvelope<T>(`${this.base}${path}`, this.access(), body), path);
+  }
+  grantNode(nodeId: string, capabilities: string[]) { return this.post<Node>('/agent/nodes/grant', {nodeId, capabilities}); }
+  revokeNode(nodeId: string) { return this.post<Node>('/agent/nodes/revoke', {nodeId}); }
+  approvePairing(pairingCode: string) { return this.post<PairingView>('/agent/pairing/approve', {pairingCode}); }
   list() { return this.get<Workspace[]>('/workspace/list'); }
   items(id: string) { return this.get<WorkItem[]>(`/workspace/work-item/list?workspaceId=${encodeURIComponent(id)}`); }
   bindings(id: string) { return this.get<Binding[]>(`/workspace/agent-binding/list?workspaceId=${encodeURIComponent(id)}`); }

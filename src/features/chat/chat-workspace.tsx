@@ -27,7 +27,7 @@
 //
 // `@privchat/react` does not handle responsiveness — host concern.
 
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bell,
@@ -75,6 +75,10 @@ import { captureException } from '@/lib/error-reporter';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { cn } from '@/lib/utils';
 import { WorkspaceConsole } from '@/features/workspace/console';
+import { DevicePage } from '@/features/workspace/devices';
+import { useWorkspaceApi } from '@/features/workspace/account-api';
+import { AssistantPage } from '@/features/workspace/assistant';
+import type { AssistantReference } from '@/features/workspace/assistant-api';
 
 // Lazy-loaded — log viewer is dev-only-ish, not in the first-paint
 // path. Splitting it shaves the console-buffer + dialog plumbing
@@ -134,6 +138,17 @@ export function ChatWorkspace({
 }: ChatWorkspaceProps) {
   const { t: workspaceT } = useTranslation();
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [workspaceFocus, setWorkspaceFocus] = useState<AssistantReference>();
+  const [workRoute, setWorkRoute] = useState(location.hash);
+  const routeLock = useRef(false);
+  useEffect(() => {
+    const change = () => {
+      if (routeLock.current && location.hash !== '#/assistant') {location.replace('#/assistant'); return;}
+      setWorkRoute(location.hash);
+    };
+    window.addEventListener('hashchange', change);
+    return () => window.removeEventListener('hashchange', change);
+  }, []);
   // Read session uid via the adapter seam rather than `handle.client`
   // directly so test harnesses can mount this workspace with a mock
   // adapter and no real `PrivchatClient` instance.
@@ -228,6 +243,13 @@ export function ChatWorkspace({
 
   const activeId = active === null ? null : `${active.channelId}:${active.channelType}`;
 
+  if (getConfiguredAccountMode() === 'platform' && workRoute === '#/agent/devices') {
+    return <DeviceScreen client={_handle.client} />;
+  }
+  if (getConfiguredAccountMode() === 'platform' && workRoute === '#/assistant') {
+    return <AssistantScreen client={_handle.client} onConsole={reference => {setWorkspaceFocus(reference); location.hash = ''; setWorkspaceOpen(true);}} onLockChange={locked => {routeLock.current = locked;}} />;
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-muted">
       <TopBar
@@ -246,8 +268,10 @@ export function ChatWorkspace({
       />
       <LazyLogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
       {getConfiguredAccountMode() === 'platform' && <>
-        <Button variant="ghost" onClick={() => setWorkspaceOpen(true)} data-testid="workspace-entry">{workspaceT('agentWorkspace.title')}</Button>
-        <WorkspaceConsole client={_handle.client} open={workspaceOpen} onOpenChange={setWorkspaceOpen} />
+        <Button variant="ghost" onClick={() => {setWorkspaceFocus(undefined); setWorkspaceOpen(true);}} data-testid="workspace-entry">{workspaceT('agentWorkspace.title')}</Button>
+        <Button variant="ghost" onClick={() => {location.hash = '/agent/devices';}} data-testid="devices-entry">{workspaceT('agentWorkspace.deviceManagement')}</Button>
+        <Button variant="ghost" onClick={() => {location.hash = '/assistant';}} data-testid="assistant-entry">{workspaceT('agentWorkspace.assistantTitle')}</Button>
+        <WorkspaceConsole client={_handle.client} open={workspaceOpen} onOpenChange={setWorkspaceOpen} focus={workspaceFocus} />
       </>}
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row">
@@ -312,6 +336,16 @@ export function ChatWorkspace({
       </div>
     </div>
   );
+}
+
+function DeviceScreen({client}: {client: PrivchatHandle['client']}) {
+  const api = useWorkspaceApi(client);
+  return <DevicePage api={api} onBack={() => {location.hash = '';}} />;
+}
+
+function AssistantScreen({client, onConsole, onLockChange}: {client: PrivchatHandle['client']; onConsole: (reference?: AssistantReference) => void; onLockChange: (locked: boolean) => void}) {
+  const api = useWorkspaceApi(client);
+  return <AssistantPage api={api} onBack={() => {location.hash = '';}} onConsole={onConsole} onLockChange={onLockChange} />;
 }
 
 /** Lazy wrapper for the logs dialog. Mounts on first open, stays

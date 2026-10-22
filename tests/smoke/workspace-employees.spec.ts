@@ -153,7 +153,7 @@ for (const [language, title] of [['en', 'Virtual employees'], ['zh-CN', '虚拟�
     await page.evaluate(async language => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage(language);}, language);
     await expect(panel.getByRole('heading', {name: title})).toBeVisible();
     await expect(panel).not.toContainText('agentWorkspace.');
-    const box = await panel.boundingBox(); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+    await expect.poll(async () => {const box = await panel.boundingBox(); return !!box && box.x >= 0 && box.x + box.width <= 390;}).toBe(true);
     await panel.getByRole('heading', {name: title}).scrollIntoViewIfNeeded();
     await page.screenshot({path: testInfo.outputPath('employee-mobile.png')});
   });

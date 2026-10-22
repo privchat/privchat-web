@@ -142,11 +142,11 @@ test('workspace component joins before authorized snapshot and fits a phone view
   const path=new URL(route.request().url()).pathname;paths.push(path);
   let data:unknown=[];
   if(path.endsWith('/workspace/list'))data=[{id:'21',name:'Example workspace',description:'',archived:0,myRole:'owner'}];
-  if(path.endsWith('/agent/nodes'))data=[{nodeId:'8',name:'Work laptop',state:'active',granted:['coding']},{nodeId:'10',name:'Unbound laptop',state:'active',granted:['coding']}];
+  if(path.endsWith('/agent/nodes'))data=[{nodeId:'8',name:'Work laptop',state:'active',granted:['agent.codex']},{nodeId:'10',name:'Unbound laptop',state:'active',granted:['agent.codex']}];
   if(path.endsWith('/room/join'))data={channelId:'400',channelType:3,ticket:'fixture',expiresAt:Date.now()+60000,eventProtocolVersion:1};
   if(path.endsWith('/work-item/list'))data=[{id:'31',workspaceId:'21',title:'Review change',description:'',status:'open',version:2}];
   if(path.endsWith('/work-note/list'))data=[{id:'71',workItemId:'31',kind:'artifact',body:'Authorized artifact record',artifactRef:'repo@commit:report.md'}];
-  if(path.endsWith('/agent-binding/list'))data=[{id:'41',nodeId:'8',capability:'coding',revoked:0},{id:'42',nodeId:'9',capability:'review',revoked:0},{id:'43',nodeId:'11',capability:'coding',revoked:1}];
+  if(path.endsWith('/agent-binding/list'))data=[{id:'41',nodeId:'8',capability:'agent.codex',revoked:0},{id:'42',nodeId:'9',capability:'agent.claude',revoked:0},{id:'43',nodeId:'11',capability:'agent.codex',revoked:1}];
   if(path.endsWith('/work-execution/create')){starts.push(route.request().postDataJSON());data={id:'51',executionId:null,state:null};}
   await route.fulfill({json:{code:0,data}});
  });
@@ -156,7 +156,7 @@ test('workspace component joins before authorized snapshot and fits a phone view
  await expect(c.getByRole('option',{name:'Review change · open'})).toBeAttached();
  await expect(c.getByRole('status')).toHaveText(/Up to date|已对账|Đã cập nhật/);
  await c.getByLabel(/Work items|工作事项|Công việc/).selectOption('31');
- await c.locator('label').filter({hasText:/Authorized capability|已授权能力|Năng lực/}).locator('select').selectOption('41');
+ await c.locator('label').filter({hasText:/Authorized capability|已授权能力|Năng lực/}).locator('select').last().selectOption('41');
  await c.getByRole('textbox',{name:/Request|工作要求|Yêu cầu/,exact:true}).fill('Review this change');
  await c.getByRole('textbox',{name:/Work directory binding|工作目录绑定|Thư mục/}).fill('repo');
  const run=c.getByRole('button',{name:/Start work|开始执行|Bắt đầu/});
@@ -166,9 +166,9 @@ test('workspace component joins before authorized snapshot and fits a phone view
  await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).first().fill('configured-model');
  await expect(run).toBeEnabled();
  await expect(c.getByText('Authorized artifact record')).toBeVisible();
- await expect(c.getByRole('checkbox')).toHaveCount(2);
- await expect(c.getByRole('checkbox').first()).not.toBeChecked();
- await expect(c.getByRole('checkbox').last()).not.toBeChecked();
+ await expect(c.getByRole('group',{name:/Optional delegation|可选委托|Thiết bị được/}).getByRole('checkbox')).toHaveCount(2);
+ await expect(c.getByRole('group',{name:/Optional delegation|可选委托|Thiết bị được/}).getByRole('checkbox').first()).not.toBeChecked();
+ await expect(c.getByRole('group',{name:/Optional delegation|可选委托|Thiết bị được/}).getByRole('checkbox').last()).not.toBeChecked();
  expect(paths.findIndex(p=>p.endsWith('/room/join'))).toBeLessThan(paths.findIndex(p=>p.endsWith('/work-item/list')));
  await expect.poll(async()=>{const box=await page.getByRole('dialog').boundingBox();return !!box&&box.x>=0&&box.x+box.width<=390;}).toBe(true);
  await page.screenshot({path:'/tmp/weey-workspace-console.png'});
@@ -176,7 +176,7 @@ test('workspace component joins before authorized snapshot and fits a phone view
  expect(starts[0].delegationTargets).toEqual([]);
  await c.getByRole('button',{name:/New request|新请求|Yêu cầu mới/}).click();
  await c.getByRole('textbox',{name:/Request|工作要求|Yêu cầu/,exact:true}).fill('Review again');
- await c.getByRole('checkbox',{name:'9 · review'}).check();
+ await c.getByRole('checkbox',{name:'9 · agent.claude'}).check();
  await run.click();await expect.poll(()=>starts.length).toBe(2);
- expect(starts[1].delegationTargets).toEqual([{nodeId:'9',capability:'review'}]);
+ expect(starts[1].delegationTargets).toEqual([{nodeId:'9',capability:'agent.claude'}]);
 });

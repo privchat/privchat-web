@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { getActiveAccessToken } from '@/lib/active-access-token';
-import { loadSession } from '@/lib/session-storage';
-import { getPlatformBaseUrl } from '@/lib/account-mode';
+import { useWorkspaceApi } from './account-api';
+import { WorkItemPanel } from './work-item';
+import { WorkflowPanel } from './workflow';
+import type { AssistantReference } from './assistant-api';
 import { WorkspaceApi, type Binding, type Command, type Execution, type Node, type NodeEvent, type Permission, type WorkExecution, type WorkItem, type WorkNote, type Workspace } from './api';
 import { WorkspaceRoomObserver, roomFailure, type RoomState } from './room-observer';
 import { permissionDetails } from './permission-details';
@@ -14,29 +15,34 @@ import { EmployeePanel } from './employees';
 export { ConsoleIntent } from './console-intent';
 
 const field = 'block min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm';
-export function WorkspaceConsole({client, open, onOpenChange, api}: {client: PrivchatClient; open: boolean; onOpenChange: (open: boolean) => void; api?: WorkspaceApi}) {
+const executableCapability = (capability: string) => capability === 'agent.codex' || capability === 'agent.claude';
+export function WorkspaceConsole({client, open, onOpenChange, api, focus}: {client: PrivchatClient; open: boolean; onOpenChange: (open: boolean) => void; api?: WorkspaceApi; focus?: AssistantReference}) {
   const {t} = useTranslation();
   const employeeRequestLocked = useRef(false);
   return <Dialog open={open} onOpenChange={value => {if (value || !employeeRequestLocked.current) onOpenChange(value);}}>
     <DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl">
       <DialogTitle>{t('agentWorkspace.title')}</DialogTitle>
       <DialogDescription>{t('agentWorkspace.permissionHint')}</DialogDescription>
-      {open && <ConsoleBody key={client.sessionSnapshot().user_id} client={client} providedApi={api} onEmployeeRequestLockChange={locked => {employeeRequestLocked.current = locked;}} />}
+      {open && <ConsoleBody key={client.sessionSnapshot().user_id} client={client} providedApi={api} focus={focus} onEmployeeRequestLockChange={locked => {employeeRequestLocked.current = locked;}} />}
     </DialogContent>
   </Dialog>;
 }
 
-function ConsoleBody({client,providedApi,onEmployeeRequestLockChange}: {client: PrivchatClient; providedApi?: WorkspaceApi; onEmployeeRequestLockChange: (locked: boolean) => void}) {
+function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {client: PrivchatClient; providedApi?: WorkspaceApi; onEmployeeRequestLockChange: (locked: boolean) => void; focus?: AssistantReference}) {
   const {t} = useTranslation();
   // Provider is scoped to this mounted account, not a global token that could switch owners.
-  const api = useMemo(() => {
-    if (providedApi) return providedApi;
-    const uid = client.sessionSnapshot().user_id;
-    return new WorkspaceApi(getPlatformBaseUrl() ?? '', () => client.sessionSnapshot().user_id === uid && loadSession()?.user_id === uid ? getActiveAccessToken() : null);
-  }, [client,providedApi]);
+  const api = useWorkspaceApi(client, providedApi);
+  const locks = useRef({employee: false, workflow: false});
+  const [workflowLocked, setWorkflowLocked] = useState(false);
+  function updateLock(source: 'employee' | 'workflow', locked: boolean) {
+    locks.current[source] = locked;
+    if (source === 'workflow') setWorkflowLocked(locked);
+    onEmployeeRequestLockChange(locks.current.employee || locks.current.workflow);
+  }
   const [spaces,setSpaces] = useState<Workspace[]>([]);
   const [nodes,setNodes] = useState<Node[]>([]);
-  const [space,setSpace] = useState('');
+  const [space,setSpace] = useState(focus?.workspaceId ?? '');
+  const [focusedExecution, setFocusedExecution] = useState(focus?.executionId ?? '');
   const [node,setNode] = useState('');
   const [items,setItems] = useState<WorkItem[]>([]);
   const [bindings,setBindings] = useState<Binding[]>([]);
@@ -44,6 +50,7 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange}: {client: 
   const [notes,setNotes] = useState<WorkNote[]>([]);
   const [selected,setSelected] = useState('');
   const [item,setItem] = useState('');
+  const currentItem = useRef(item); currentItem.current = item;
   const [binding,setBinding] = useState('');
   const [bindingNode,setBindingNode] = useState('');
   const [bindingCapability,setBindingCapability] = useState('');
@@ -53,7 +60,7 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange}: {client: 
   const [workdir,setWorkdir] = useState('');
   const [capability,setCapability] = useState('');
   const [delegation,setDelegation] = useState<string[]>([]);
-  const targets = (space ? bindings.filter(b=>b.revoked===0).map(b=>({nodeId:b.nodeId,capability:b.capability})) : nodes.filter(n=>n.state==='active').flatMap(n=>n.granted.map(capability=>({nodeId:n.nodeId,capability})))).filter(x=>x.capability!=='workspace_events_read');
+  const targets = (space ? bindings.filter(b=>b.revoked===0).map(b=>({nodeId:b.nodeId,capability:b.capability})) : nodes.filter(n=>n.state==='active').flatMap(n=>n.granted.map(capability=>({nodeId:n.nodeId,capability})))).filter(x=>executableCapability(x.capability));
   const targetKey = (x:{nodeId:string;capability:string}) => `${x.nodeId}:${x.capability}`;
   const [error,setError] = useState(false);
   const [busy,setBusy] = useState(false);
@@ -102,21 +109,24 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange}: {client: 
     completedStart.current=true;
   }
   return <div className="min-w-0 space-y-3" data-testid="workspace-console">
+    {focusedExecution && <SessionConsole key={`focused-${focusedExecution}`} api={api} executionId={focusedExecution} onContinue={setFocusedExecution}/>}
     {error&&<p role="alert">{t('agentWorkspace.error')}</p>}
-    <label className="block">{t('agentWorkspace.spaces')}<select className={field} value={space} onChange={e=>{setSpace(e.target.value);setNode('');}} disabled={busy||intent.current.hasPending}><option value="">{t('agentWorkspace.nodes')}</option>{spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+    <label className="block">{t('agentWorkspace.spaces')}<select className={field} value={space} onChange={e=>{setSpace(e.target.value);setNode('');}} disabled={busy||intent.current.hasPending||workflowLocked}><option value="">{t('agentWorkspace.nodes')}</option>{spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
     <div className="flex gap-2"><input aria-label={t('agentWorkspace.name')} className={field} value={name} onChange={e=>setName(e.target.value)}/><Button disabled={busy||!name.trim()} onClick={()=>void act(async()=>{if(space)await api.post('/workspace/work-item/create',{workspaceId:space,title:name});else await api.post('/workspace/create',{name});setName('');await reload();await observer.current?.refresh();})}>{t('agentWorkspace.create')}</Button></div>
     {space ? <>
       <p role="status">{t(`agentWorkspace.${roomState}`)}</p><Button onClick={()=>{if(roomState==='denied'||roomState==='capacity'){setSpace('');}else void observer.current?.refresh(true);}}>{t('agentWorkspace.refresh')}</Button>
-      <label className="block">{t('agentWorkspace.work')}<select className={field} value={item} onChange={e=>setItem(e.target.value)}><option value="">{t('agentWorkspace.work')}</option>{items.map(i=><option key={i.id} value={i.id}>{i.title} · {i.status}</option>)}</select></label>
-      <label className="block">{t('agentWorkspace.binding')}<select className={field} value={binding} onChange={e=>setBinding(e.target.value)}><option value="">{t('agentWorkspace.binding')}</option>{bindings.filter(b=>b.capability!=='workspace_events_read').map(b=><option key={b.id} value={b.id}>{b.nodeId} · {b.capability}</option>)}</select></label>
+      <label className="block">{t('agentWorkspace.work')}<select disabled={workflowLocked} className={field} value={item} onChange={e=>setItem(e.target.value)}><option value="">{t('agentWorkspace.work')}</option>{items.map(i=><option key={i.id} value={i.id}>{i.title} · {i.status}</option>)}</select></label>
+      {items.find(i => i.id === item) && <WorkItemPanel key={item} api={api} item={items.find(i => i.id === item)!} notes={notes} readOnly={roomState === 'denied' || roomState === 'joining' || spaces.find(s => s.id === space)?.archived !== 0} refresh={async () => {await observer.current?.refresh(); const rows = await api.get<WorkNote[]>(`/workspace/work-note/list?workItemId=${encodeURIComponent(item)}`); if (mounted.current && currentItem.current === item) setNotes(rows);}} />}
+      {items.find(i => i.id === item) && <WorkflowPanel key={`workflow-${item}`} api={api} item={items.find(i => i.id === item)!} notes={notes} nodes={nodes} bindings={bindings} readOnly={roomState === 'denied' || roomState === 'joining' || spaces.find(s => s.id === space)?.archived !== 0} onLockChange={locked => updateLock('workflow', locked)} onExecution={setSelected} />}
+      <label className="block">{t('agentWorkspace.binding')}<select className={field} value={binding} onChange={e=>setBinding(e.target.value)}><option value="">{t('agentWorkspace.binding')}</option>{bindings.filter(b=>executableCapability(b.capability)).map(b=><option key={b.id} value={b.id}>{b.nodeId} · {b.capability}</option>)}</select></label>
       <details><summary>{t('agentWorkspace.create')} · {t('agentWorkspace.binding')}</summary>
         <select className={field} aria-label={t('agentWorkspace.nodes')} value={bindingNode} onChange={e=>{setBindingNode(e.target.value);setBindingCapability('');}}><option value="">{t('agentWorkspace.nodes')}</option>{nodes.filter(n=>n.state==='active').map(n=><option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select>
-        <select className={field} aria-label={t('agentWorkspace.binding')} value={bindingCapability} onChange={e=>setBindingCapability(e.target.value)}><option value="">{t('agentWorkspace.binding')}</option>{nodes.find(n=>n.nodeId===bindingNode)?.granted.filter(c=>c!=='workspace_events_read').map(c=><option key={c}>{c}</option>)}</select>
+        <select className={field} aria-label={t('agentWorkspace.binding')} value={bindingCapability} onChange={e=>setBindingCapability(e.target.value)}><option value="">{t('agentWorkspace.binding')}</option>{nodes.find(n=>n.nodeId===bindingNode)?.granted.filter(c=>executableCapability(c)).map(c=><option key={c}>{c}</option>)}</select>
         <Button disabled={busy||!bindingNode||!bindingCapability} onClick={()=>{if(window.confirm(t('agentWorkspace.confirm')))void act(async()=>{await api.post('/workspace/agent-binding/create',{workspaceId:space,nodeId:bindingNode,capability:bindingCapability});setBindings((await api.bindings(space)).filter(b=>b.revoked===0));});}}>{t('agentWorkspace.create')}</Button>
       </details>
     </> : <>
       <label className="block">{t('agentWorkspace.nodes')}<select className={field} value={node} onChange={e=>{setNode(e.target.value);setCapability('');}}><option value="">{t('agentWorkspace.nodes')}</option>{nodes.filter(n=>n.state==='active').map(n=><option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select></label>
-      <select aria-label={t('agentWorkspace.binding')} className={field} value={capability} onChange={e=>setCapability(e.target.value)}><option value="">{t('agentWorkspace.binding')}</option>{nodes.find(n=>n.nodeId===node)?.granted.filter(c=>c!=='workspace_events_read').map(c=><option key={c}>{c}</option>)}</select>
+      <select aria-label={t('agentWorkspace.binding')} className={field} value={capability} onChange={e=>setCapability(e.target.value)}><option value="">{t('agentWorkspace.binding')}</option>{nodes.find(n=>n.nodeId===node)?.granted.filter(c=>executableCapability(c)).map(c=><option key={c}>{c}</option>)}</select>
     </>}
     <textarea aria-label={t('agentWorkspace.prompt')} className={field} value={prompt} onChange={e=>setPrompt(e.target.value)} disabled={intent.current.hasPending}/>
     <input aria-label={t('agentWorkspace.model')} placeholder={t('agentWorkspace.model')} className={field} value={model} onChange={e=>setModel(e.target.value)} disabled={intent.current.hasPending}/>
@@ -126,8 +136,7 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange}: {client: 
     {completedStart.current&&<Button variant="outline" onClick={()=>{completedStart.current=false;setPrompt('');setSelected('');}}>{t('agentWorkspace.newRequest')}</Button>}
     <label className="block">{t('agentWorkspace.executions')}<select className={field} value={selected} onChange={e=>setSelected(e.target.value)}><option value="">{t('agentWorkspace.executions')}</option>{selected&&!executions.some(e=>e.executionId===selected)&&<option value={selected}>{selected}</option>}{executions.map(e=><option key={e.executionId} value={e.executionId}>{e.executionId} · {e.state}</option>)}</select></label>
     {selected&&<SessionConsole key={selected} api={api} executionId={selected} onContinue={setSelected} />}
-    <EmployeePanel api={api} nodes={nodes} refreshNodes={reload} onRequestLockChange={onEmployeeRequestLockChange} renderSession={id => <SessionConsole key={id} api={api} executionId={id} employeeManaged />} />
-    {notes.length>0&&<section><h3>{t('agentWorkspace.records')}</h3>{notes.map(n=><div className="rounded border p-2" key={n.id}><p className="whitespace-pre-wrap break-words">{n.body}</p>{n.artifactRef&&<code className="break-all">{n.artifactRef}</code>}</div>)}</section>}
+    <EmployeePanel api={api} nodes={nodes} refreshNodes={reload} onRequestLockChange={locked => updateLock('employee', locked)} renderSession={id => <SessionConsole key={id} api={api} executionId={id} employeeManaged />} />
   </div>;
 }
 

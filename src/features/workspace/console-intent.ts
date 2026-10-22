@@ -14,7 +14,7 @@ function definiteRejection(e: unknown): boolean {
 export class ConsoleIntent {
   private pending?: {path: string; body: Record<string, unknown>};
   private maybeCommitted = false;
-  async run<T>(api: WorkspaceApi, path: string, body: Record<string, unknown>, idKey = 'commandId'): Promise<T> {
+  async run<T>(api: WorkspaceApi, path: string, body: Record<string, unknown>, idKey = 'commandId', retain?: (result: T) => boolean): Promise<T> {
     if (!this.pending) { this.pending = {path, body: {...body, [idKey]: crypto.randomUUID()}}; this.maybeCommitted = false; }
     if (this.pending.path !== path || Object.keys(this.pending.body).length !== Object.keys(body).length+1 || Object.entries(body).some(([k,v]) => JSON.stringify(this.pending!.body[k]) !== JSON.stringify(v))) throw new Error('Retry the original request');
     let result: T;
@@ -23,7 +23,8 @@ export class ConsoleIntent {
       if (definiteRejection(e) && !this.maybeCommitted) this.pending = undefined; else this.maybeCommitted = true;
       throw e;
     }
-    this.pending = undefined;
+    if (retain?.(result)) this.maybeCommitted = true;
+    else this.pending = undefined;
     return result;
   }
   get hasPending(): boolean { return this.pending !== undefined; }
