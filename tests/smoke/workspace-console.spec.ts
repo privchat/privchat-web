@@ -66,6 +66,20 @@ test('definite rejection releases the key so input can be corrected; unknown out
  expect(result.ids[1]).toMatch(/^[A-Za-z0-9_-]{8,40}$/);
 });
 
+test('an auth error after an unknown outcome keeps the original key',async({page})=>{
+ const result=await page.evaluate(async()=>{
+   const {ConsoleIntent}=await import('/src/features/workspace/console.tsx');
+   const {PlatformApiError}=await import('/src/lib/platform-errors.ts');
+   const ids:string[]=[];let step=0;
+   const api={post:async(_p:string,body:{requestId:string})=>{ids.push(body.requestId);const s=step++;if(s===0)throw new Error('lost');if(s===1)throw new PlatformApiError(401,'NOT_AUTHENTICATED');if(s===2)throw new PlatformApiError(10100,'WORKSPACE_INVALID');return {};}};
+   const intent=new ConsoleIntent();const pend:boolean[]=[];
+   for(let i=0;i<3;i++){try{await intent.run(api as never,'/x',{text:'one'},'requestId');}catch{}pend.push(intent.hasPending);}
+   await intent.run(api as never,'/x',{text:'one'},'requestId');
+   return {ids,pend};
+ });
+ expect(result.pend).toEqual([true,true,true]);expect(new Set(result.ids).size).toBe(1);expect(result.ids).toHaveLength(4);
+});
+
 test('real session component polls commands, pages history and binds one-time approval digest',async({page})=>{
   const submitted:Array<{path:string;body:Record<string,unknown>}>=[];
   await page.route('**/__console/app/agent/**',async route=>{
