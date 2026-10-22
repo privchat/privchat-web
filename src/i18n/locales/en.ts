@@ -1,3 +1,4 @@
+import { enWorkspace } from '../workspace';
 // English (default fallback for vi until proper translations land).
 //
 // `as const` would freeze every leaf into a string-literal type, forcing
@@ -5,6 +6,7 @@
 // pinned but each leaf to accept any string — so we apply the schema
 // type explicitly without `as const`.
 export const en: LocaleSchema = {
+  agentWorkspace: enWorkspace,
   app: {
     name: '{{brand}}',
     loading: 'Loading…',
@@ -752,6 +754,7 @@ export const en: LocaleSchema = {
 };
 
 export interface LocaleSchema {
+  agentWorkspace: typeof enWorkspace;
   app: {
     name: string;
     loading: string;

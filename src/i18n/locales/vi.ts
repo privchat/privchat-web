@@ -1,3 +1,4 @@
+import { viWorkspace } from '../workspace';
 import type { LocaleSchema } from './en';
 
 // Vietnamese translations. Typed as `LocaleSchema` (not `Partial<>`)
@@ -6,6 +7,7 @@ import type { LocaleSchema } from './en';
 // Keep terminology stable across the file: "trò chuyện" for "chat",
 // "liên hệ" for "contacts", "nhóm" for "group" etc.
 export const vi: LocaleSchema = {
+  agentWorkspace: viWorkspace,
   app: {
     name: '{{brand}}',
     loading: 'Đang tải…',

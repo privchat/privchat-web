@@ -74,6 +74,7 @@ import { QrcodeScanDialog } from './qrcode-scan-dialog';
 import { captureException } from '@/lib/error-reporter';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { cn } from '@/lib/utils';
+import { WorkspaceConsole } from '@/features/workspace/console';
 
 // Lazy-loaded — log viewer is dev-only-ish, not in the first-paint
 // path. Splitting it shaves the console-buffer + dialog plumbing
@@ -131,6 +132,8 @@ export function ChatWorkspace({
   switchError,
   clearSwitchError,
 }: ChatWorkspaceProps) {
+  const { t: workspaceT } = useTranslation();
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   // Read session uid via the adapter seam rather than `handle.client`
   // directly so test harnesses can mount this workspace with a mock
   // adapter and no real `PrivchatClient` instance.
@@ -242,6 +245,10 @@ export function ChatWorkspace({
         onOpenGroupChannel={onOpenGroup}
       />
       <LazyLogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
+      {getConfiguredAccountMode() === 'platform' && <>
+        <Button variant="ghost" onClick={() => setWorkspaceOpen(true)} data-testid="workspace-entry">{workspaceT('agentWorkspace.title')}</Button>
+        <WorkspaceConsole client={_handle.client} open={workspaceOpen} onOpenChange={setWorkspaceOpen} />
+      </>}
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row">
         {/* List pane */}

@@ -1,6 +1,8 @@
+import { zhWorkspace } from '../workspace';
 import type { LocaleSchema } from './en';
 
 export const zhCN: LocaleSchema = {
+  agentWorkspace: zhWorkspace,
   app: {
     name: '{{brand}}',
     loading: '加载中…',
