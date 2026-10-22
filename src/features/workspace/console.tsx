@@ -9,15 +9,27 @@ import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { WorkspaceApi, type Binding, type Command, type Execution, type Node, type NodeEvent, type Permission, type WorkExecution, type WorkItem, type WorkNote, type Workspace } from './api';
 import { WorkspaceRoomObserver, roomFailure, type RoomState } from './room-observer';
 import { permissionDetails } from './permission-details';
+import { PlatformApiError, PlatformHttpError } from '@/lib/platform-errors';
 
 const field = 'block min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm';
 /** Keep the same ID and body until a response is received. A lost response is not permission to create new work. */
+/** System-range envelope codes (busy / timeout / database …), network loss and protocol errors leave the outcome unknown. */
+function definiteRejection(e: unknown): boolean {
+  if (e instanceof PlatformApiError) return e.code === 401 || e.code === 403 || e.code >= 1000;
+  return e instanceof PlatformHttpError && (e.status === 401 || e.status === 403);
+}
 export class ConsoleIntent {
   private pending?: {path: string; body: Record<string, unknown>};
   async run<T>(api: WorkspaceApi, path: string, body: Record<string, unknown>, idKey = 'commandId'): Promise<T> {
     this.pending ??= {path, body: {...body, [idKey]: crypto.randomUUID()}};
     if (this.pending.path !== path || Object.keys(this.pending.body).length !== Object.keys(body).length+1 || Object.entries(body).some(([k,v]) => JSON.stringify(this.pending!.body[k]) !== JSON.stringify(v))) throw new Error('Retry the original request');
-    const result = await api.post<T>(this.pending.path, this.pending.body);
+    let result: T;
+    try { result = await api.post<T>(this.pending.path, this.pending.body); }
+    catch (e) {
+      // A definite rejection created nothing, so the user may correct the input; unknown outcomes keep the key.
+      if (definiteRejection(e)) this.pending = undefined;
+      throw e;
+    }
     this.pending = undefined;
     return result;
   }

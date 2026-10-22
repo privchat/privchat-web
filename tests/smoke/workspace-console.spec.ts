@@ -47,6 +47,25 @@ test('lost HTTP response reuses command identity and forbids a changed operation
  expect(result.ids[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
 });
 
+test('definite rejection releases the key so input can be corrected; unknown outcome keeps it',async({page})=>{
+ const result=await page.evaluate(async()=>{
+   const {ConsoleIntent}=await import('/src/features/workspace/console.tsx');
+   const {PlatformApiError}=await import('/src/lib/platform-errors.ts');
+   const ids:string[]=[];let reply:'reject'|'busy'|'ok'='reject';
+   const api={post:async(_p:string,body:{requestId:string})=>{ids.push(body.requestId);if(reply==='reject')throw new PlatformApiError(10100,'WORKSPACE_INVALID');if(reply==='busy')throw new PlatformApiError(4,'INTERNAL');return {};}};
+   const intent=new ConsoleIntent();
+   try{await intent.run(api as never,'/workspace/work-execution/create',{text:'bad'},'requestId');}catch{}
+   const afterReject=intent.hasPending;
+   reply='busy';try{await intent.run(api as never,'/workspace/work-execution/create',{text:'fixed'},'requestId');}catch{}
+   const afterBusy=intent.hasPending;
+   reply='ok';await intent.run(api as never,'/workspace/work-execution/create',{text:'fixed'},'requestId');
+   return {ids,afterReject,afterBusy};
+ });
+ expect(result.afterReject).toBe(false);expect(result.afterBusy).toBe(true);
+ expect(result.ids).toHaveLength(3);expect(result.ids[0]).not.toBe(result.ids[1]);expect(result.ids[1]).toBe(result.ids[2]);
+ expect(result.ids[1]).toMatch(/^[A-Za-z0-9_-]{8,40}$/);
+});
+
 test('real session component polls commands, pages history and binds one-time approval digest',async({page})=>{
   const submitted:Array<{path:string;body:Record<string,unknown>}>=[];
   await page.route('**/__console/app/agent/**',async route=>{
