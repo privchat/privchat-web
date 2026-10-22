@@ -9,49 +9,24 @@ import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { WorkspaceApi, type Binding, type Command, type Execution, type Node, type NodeEvent, type Permission, type WorkExecution, type WorkItem, type WorkNote, type Workspace } from './api';
 import { WorkspaceRoomObserver, roomFailure, type RoomState } from './room-observer';
 import { permissionDetails } from './permission-details';
-import { PlatformApiError, PlatformHttpError } from '@/lib/platform-errors';
+import { ConsoleIntent } from './console-intent';
+import { EmployeePanel } from './employees';
+export { ConsoleIntent } from './console-intent';
 
 const field = 'block min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm';
-/** System-range envelope codes (busy / timeout / database …), network loss and protocol errors leave the outcome unknown. */
-function definiteRejection(e: unknown): boolean {
-  if (e instanceof PlatformApiError) return e.code === 401 || e.code === 403 || e.code >= 1000;
-  return e instanceof PlatformHttpError && (e.status === 401 || e.status === 403);
-}
-/**
- * Keep the same ID and body until a response is received. A lost response is not permission to create new work.
- * Only a definite rejection of a request that never had an unknown outcome releases the key; once an attempt may
- * have been committed, later errors (including an expired login) keep it so recovery retries the same request.
- */
-export class ConsoleIntent {
-  private pending?: {path: string; body: Record<string, unknown>};
-  private maybeCommitted = false;
-  async run<T>(api: WorkspaceApi, path: string, body: Record<string, unknown>, idKey = 'commandId'): Promise<T> {
-    if (!this.pending) { this.pending = {path, body: {...body, [idKey]: crypto.randomUUID()}}; this.maybeCommitted = false; }
-    if (this.pending.path !== path || Object.keys(this.pending.body).length !== Object.keys(body).length+1 || Object.entries(body).some(([k,v]) => JSON.stringify(this.pending!.body[k]) !== JSON.stringify(v))) throw new Error('Retry the original request');
-    let result: T;
-    try { result = await api.post<T>(this.pending.path, this.pending.body); }
-    catch (e) {
-      if (definiteRejection(e) && !this.maybeCommitted) this.pending = undefined; else this.maybeCommitted = true;
-      throw e;
-    }
-    this.pending = undefined;
-    return result;
-  }
-  get hasPending(): boolean { return this.pending !== undefined; }
-}
-
 export function WorkspaceConsole({client, open, onOpenChange, api}: {client: PrivchatClient; open: boolean; onOpenChange: (open: boolean) => void; api?: WorkspaceApi}) {
   const {t} = useTranslation();
-  return <Dialog open={open} onOpenChange={onOpenChange}>
+  const employeeRequestLocked = useRef(false);
+  return <Dialog open={open} onOpenChange={value => {if (value || !employeeRequestLocked.current) onOpenChange(value);}}>
     <DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl">
       <DialogTitle>{t('agentWorkspace.title')}</DialogTitle>
       <DialogDescription>{t('agentWorkspace.permissionHint')}</DialogDescription>
-      {open && <ConsoleBody key={client.sessionSnapshot().user_id} client={client} providedApi={api} />}
+      {open && <ConsoleBody key={client.sessionSnapshot().user_id} client={client} providedApi={api} onEmployeeRequestLockChange={locked => {employeeRequestLocked.current = locked;}} />}
     </DialogContent>
   </Dialog>;
 }
 
-function ConsoleBody({client,providedApi}: {client: PrivchatClient; providedApi?: WorkspaceApi}) {
+function ConsoleBody({client,providedApi,onEmployeeRequestLockChange}: {client: PrivchatClient; providedApi?: WorkspaceApi; onEmployeeRequestLockChange: (locked: boolean) => void}) {
   const {t} = useTranslation();
   // Provider is scoped to this mounted account, not a global token that could switch owners.
   const api = useMemo(() => {
@@ -151,11 +126,12 @@ function ConsoleBody({client,providedApi}: {client: PrivchatClient; providedApi?
     {completedStart.current&&<Button variant="outline" onClick={()=>{completedStart.current=false;setPrompt('');setSelected('');}}>{t('agentWorkspace.newRequest')}</Button>}
     <label className="block">{t('agentWorkspace.executions')}<select className={field} value={selected} onChange={e=>setSelected(e.target.value)}><option value="">{t('agentWorkspace.executions')}</option>{selected&&!executions.some(e=>e.executionId===selected)&&<option value={selected}>{selected}</option>}{executions.map(e=><option key={e.executionId} value={e.executionId}>{e.executionId} · {e.state}</option>)}</select></label>
     {selected&&<SessionConsole key={selected} api={api} executionId={selected} onContinue={setSelected} />}
+    <EmployeePanel api={api} nodes={nodes} refreshNodes={reload} onRequestLockChange={onEmployeeRequestLockChange} renderSession={id => <SessionConsole key={id} api={api} executionId={id} employeeManaged />} />
     {notes.length>0&&<section><h3>{t('agentWorkspace.records')}</h3>{notes.map(n=><div className="rounded border p-2" key={n.id}><p className="whitespace-pre-wrap break-words">{n.body}</p>{n.artifactRef&&<code className="break-all">{n.artifactRef}</code>}</div>)}</section>}
   </div>;
 }
 
-export function SessionConsole({api,executionId,onContinue}: {api: WorkspaceApi; executionId: string; onContinue?: (id: string) => void}) {
+export function SessionConsole({api,executionId,onContinue,employeeManaged=false}: {api: WorkspaceApi; executionId: string; onContinue?: (id: string) => void; employeeManaged?: boolean}) {
   const {t}=useTranslation();
   const [execution,setExecution]=useState<Execution>();
   const [permissions,setPermissions]=useState<Permission[]>([]);
@@ -232,8 +208,8 @@ export function SessionConsole({api,executionId,onContinue}: {api: WorkspaceApi;
       <Button disabled={controls} onClick={()=>void command(watch?'sessions/unwatch':'sessions/watch',watch?{subscriptionId:watch.subscriptionId}:{afterSeq:seq.current,leaseMs:60000})}>{t(watch?'agentWorkspace.unwatch':'agentWorkspace.watch')}</Button>
       <Button disabled={controls} variant="destructive" onClick={()=>{if(window.confirm(t('agentWorkspace.confirm')))void api.post<Execution>('/agent/executions/cancel',{executionId}).then(e=>{if(live.current)setExecution(e);}).catch(()=>{if(live.current)setError(true);});}}>{t('agentWorkspace.stop')}</Button>
     </div>
-    <textarea className={field} aria-label={t('agentWorkspace.followup')} value={text} disabled={intent.current.hasPending} onChange={e=>setText(e.target.value)}/>
-    <Button disabled={controls||!text.trim()||commands.some(c=>c.kind==='session.send'&&(c.status==='pending'||c.status==='unknown'))} onClick={()=>void command('sessions/send',{continueFromExecutionId:executionId,text})}>{t('agentWorkspace.followup')}</Button>
+    {!employeeManaged&&<><textarea className={field} aria-label={t('agentWorkspace.followup')} value={text} disabled={intent.current.hasPending} onChange={e=>setText(e.target.value)}/>
+    <Button disabled={controls||!text.trim()||commands.some(c=>c.kind==='session.send'&&(c.status==='pending'||c.status==='unknown'))} onClick={()=>void command('sessions/send',{continueFromExecutionId:executionId,text})}>{t('agentWorkspace.followup')}</Button></>}
     {commands.map(c=><div key={c.commandId}><p>{c.kind} · {c.status==='unknown'?t('agentWorkspace.unknown'):c.status==='pending'?t('agentWorkspace.pending'):c.status}</p>{c.result?.data&&c.kind==='session.inspect'&&<pre className="whitespace-pre-wrap break-all">{JSON.stringify(c.result.data,null,2)}</pre>}</div>)}
     {history.map((h,i)=><pre key={String(h.id??i)} className="whitespace-pre-wrap break-words text-sm">{String(h.text??h.toolName??h.kind??'')}</pre>)}
     {events.map((e,i)=><pre key={i} className="whitespace-pre-wrap break-all text-sm">{JSON.stringify(e)}</pre>)}

@@ -161,9 +161,9 @@ test('workspace component joins before authorized snapshot and fits a phone view
  await c.getByRole('textbox',{name:/Work directory binding|工作目录绑定|Thư mục/}).fill('repo');
  const run=c.getByRole('button',{name:/Start work|开始执行|Bắt đầu/});
  await expect(run).toBeDisabled();
- await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).fill('   ');
+ await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).first().fill('   ');
  await expect(run).toBeDisabled();
- await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).fill('configured-model');
+ await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).first().fill('configured-model');
  await expect(run).toBeEnabled();
  await expect(c.getByText('Authorized artifact record')).toBeVisible();
  await expect(c.getByRole('checkbox')).toHaveCount(2);

@@ -8,9 +8,14 @@ export interface Workspace { id: string; name: string; description: string; arch
 export interface WorkItem { id: string; workspaceId: string; title: string; description: string; status: string; version: number }
 export interface WorkNote { id: string; workItemId: string; kind: string; body: string; artifactRef?: string | null }
 export interface Binding { id: string; nodeId: string; capability: string; revoked: number }
-export interface Execution { executionId: string; nodeId: string; state: string; stateVersion: number; result?: unknown }
+export interface Execution { executionId: string; nodeId: string; state: string; stateVersion: number; result?: unknown; capability?: string; scope?: {kind: string; ref: string}; nativeSessionId?: string | null; agentId?: string | null; params?: Record<string, unknown>; updatedAt?: number; createdAt?: number }
 export interface WorkExecution { id: string; executionId: string | null; state: string | null }
-export interface Node { nodeId: string; name: string; state: string; granted: string[] }
+export interface Node { nodeId: string; name: string; state: string; granted: string[]; capabilities?: {name: string; available: boolean; version?: string; reason?: string | null}[]; workdirs?: {id: string; label: string}[]; sessionDiscovery?: {external: boolean; reason: string} }
+export interface Employee { agentId: string; name: string; executor: string; config: Record<string, unknown>; createdAt: number; nodeId?: string; roleDescription: string; title: string; model: string; workdirBindingId: string; executionId?: string }
+export interface EmployeeConfig { name: string; executor: string; nodeId: string; roleDescription: string; title: string; model: string; workdirBindingId: string; bindExecutionId?: string }
+export type EmployeeCreateRequest = EmployeeConfig & {requestId: string};
+export type EmployeeUpdateRequest = EmployeeConfig & {requestId: string; agentId: string};
+export interface EmployeeSendRequest { agentId: string; requestId: string; text: string }
 export interface RoomTicket { channelId: string; channelType: number; ticket: string; expiresAt: number; eventProtocolVersion: number }
 export interface Command { commandId: string; executionId: string; kind: string; status: 'pending' | 'applied' | 'rejected' | 'unknown'; result?: { data?: Record<string, unknown>; error?: unknown } }
 export interface Permission { permissionId: string; requestDigest: string; summary: string; expiresAt: number; status: string }
@@ -38,6 +43,10 @@ export class WorkspaceApi {
   bindings(id: string) { return this.get<Binding[]>(`/workspace/agent-binding/list?workspaceId=${encodeURIComponent(id)}`); }
   join(workspaceId: string) { return this.post<RoomTicket>('/workspace/room/join', { workspaceId }); }
   nodes() { return this.get<Node[]>('/agent/nodes'); }
+  employees() { return this.get<Employee[]>('/agent/agents'); }
+  createEmployee(body: EmployeeCreateRequest) { return this.post<Employee>('/agent/agents', body); }
+  updateEmployee(body: EmployeeUpdateRequest) { return this.post<Employee>('/agent/agents/update', body); }
+  sendEmployee(body: EmployeeSendRequest) { return this.post<Execution>('/agent/agents/send', body); }
   executions(nodeId: string) { return this.get<Execution[]>(`/agent/executions/list?nodeId=${encodeURIComponent(nodeId)}`); }
   execution(id: string) { return this.get<Execution>(`/agent/executions/get?executionId=${encodeURIComponent(id)}`); }
   command(executionId: string, commandId: string) { return this.get<Command>(`/agent/commands/get?executionId=${encodeURIComponent(executionId)}&commandId=${encodeURIComponent(commandId)}`); }
