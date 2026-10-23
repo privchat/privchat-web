@@ -19,6 +19,7 @@ async function mock(page: Page, override?: (path: string, query: URL, body: any)
     if (path === '/agent/nodes') data = [node]; if (path === '/workspace/agent-binding/list') data = [{id: 'b', nodeId: 'n', capability: 'agent.codex', revoked: 0}];
     if (path === '/workspace/employee/candidates' || path === '/workspace/employee/list') data = [employee]; if (path === '/workspace/work-item/create') data = item('42');
     if (path === '/workspace/employee/page') data = {items: [employee], nextCursor: null, hasMore: false};
+    if (path === '/workspace/room/join') data = {channelId: '400', channelType: 3, ticket: 'fixture-room', expiresAt: Date.now() + 60000, eventProtocolVersion: 1};
     if (path === '/workspace/activity/page') data = url.searchParams.has('cursor') ? feed([row('1', 'done'), row('2', 'cancelled'), row('21')], false) : feed();
     const custom = override?.(path, url, body); if (custom === 'abort') {await route.abort(); return;} await route.fulfill({json: {code: 0, data: custom === undefined ? data : custom}});
   }); return requests;
@@ -93,4 +94,59 @@ test('blocked accepted create-and-assign stays recoverable across reload without
   await expect.poll(() => requests.filter(request => request.path === '/workspace/work-execution/assign').length).toBe(3);
   expect(requests.filter(request => request.path === '/workspace/work-item/create')).toHaveLength(1);
   for (const request of requests.filter(request => request.path === '/workspace/work-execution/assign')) expect(request.body).toEqual(first);
+});
+
+async function mountNormal(page: Page) {
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage('en');
+    const {mountNormalWorkspaceConsole} = await import('/src/test-harness/workspace-console.tsx'); mountNormalWorkspaceConsole(`${location.origin}/__v16/app`);
+  });
+}
+async function roomCalls(page: Page) {return page.evaluate(async () => (await import('/src/test-harness/workspace-console.tsx')).normalRoomCalls);}
+async function emitRoomChange(page: Page, workspaceId = 'w') {
+  await page.evaluate(async workspaceId => {
+    const {emitNormalRoomEvent} = await import('/src/test-harness/workspace-console.tsx');
+    emitNormalRoomEvent({type: 'channel_publish_received', channel_id: '400', topic: 'workspace.event', payload_text: JSON.stringify({protocolVersion: 1, workspaceId, kind: 'work_item.changed', resourceId: '21', resourceVersion: 2})});
+  }, workspaceId);
+}
+
+test('normal entry keeps home room-free, subscribes only viewed space, refreshes tail on events and stops on exit/unmount', async ({page}) => {
+  let changed = false;
+  const requests = await mock(page, (path, query) => path === '/workspace/activity/page'
+    ? {...feed([row('21', changed ? 'done' : 'open', changed ? 2 : 1)], false), items: [{...row('21', changed ? 'done' : 'open', changed ? 2 : 1), item: {...item('21', changed ? 'done' : 'open', changed ? 2 : 1), workspaceId: query.searchParams.get('workspaceId')}}]}
+    : undefined);
+  await mountNormal(page); await expect(page.getByTestId('workspace-card')).toHaveCount(2);
+  expect(await roomCalls(page)).toEqual([]); expect(requests.some(request => request.path.includes('/room/'))).toBe(false);
+  await page.getByTestId('workspace-card').first().click(); await expect(page.getByTestId('task-card')).toHaveCount(1);
+  expect(await roomCalls(page)).toEqual(['observe', 'subscribe:400']);
+  const joined = requests.findIndex(request => request.path === '/workspace/room/join'); const snapshot = requests.findIndex(request => request.path === '/workspace/activity/page'); expect(joined).toBeLessThan(snapshot);
+  const reads = requests.filter(request => request.path === '/workspace/activity/page').length;
+  changed = true; await emitRoomChange(page); await expect(page.getByTestId('task-card')).toContainText('Business status: Done');
+  expect(requests.filter(request => request.path === '/workspace/activity/page')).toHaveLength(reads + 1);
+  await page.getByTestId('workspace-detail').getByRole('button', {name: 'Back', exact: true}).click(); await expect(page.getByTestId('workspace-home')).toBeVisible();
+  await expect.poll(() => roomCalls(page)).toEqual(['observe', 'subscribe:400', 'off', 'unsubscribe:400']);
+  const exitedReads = requests.filter(request => request.path === '/workspace/activity/page').length; await emitRoomChange(page); expect(requests.filter(request => request.path === '/workspace/activity/page')).toHaveLength(exitedReads);
+  await page.getByTestId('workspace-card').last().click(); await expect(page.getByTestId('task-card')).toHaveCount(1);
+  expect(requests.filter(request => request.path === '/workspace/room/join').map(request => request.body.workspaceId)).toEqual(['w', 'other']);
+  await page.evaluate(async () => (await import('/src/test-harness/workspace-console.tsx')).unmountNormalWorkspaceConsole());
+  await expect.poll(async () => (await roomCalls(page)).filter(call => call === 'unsubscribe:400').length).toBe(2);
+  expect(requests.some(request => request.path === '/workspace/work-item/list')).toBe(false);
+});
+
+test('normal room event buffers changes while reading history, preserves anchor and ignores other spaces', async ({page}) => {
+  let changed = false;
+  const requests = await mock(page, (path, query) => path === '/workspace/activity/page' && !query.searchParams.has('cursor') && changed ? feed([row('21', 'done', 2), row('22')]) : undefined);
+  await mountNormal(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Earlier work items'}).click();
+  const host = page.getByTestId('task-feed-scroll'); await host.evaluate(el => {el.scrollTop = 0; el.dispatchEvent(new Event('scroll', {bubbles: true}));});
+  const anchor = await host.locator('[data-item-id="1"]').evaluate(el => el.getBoundingClientRect().top);
+  const reads = requests.filter(request => request.path === '/workspace/activity/page').length;
+  changed = true; await emitRoomChange(page, 'other'); expect(requests.filter(request => request.path === '/workspace/activity/page')).toHaveLength(reads);
+  await emitRoomChange(page); await expect(page.getByRole('button', {name: 'Updates available'})).toBeVisible();
+  await expect(page.getByTestId('task-card').nth(2)).toContainText('Business status: Open');
+  expect(await host.locator('[data-item-id="1"]').evaluate(el => el.getBoundingClientRect().top)).toBe(anchor);
+  expect(requests.filter(request => request.path === '/workspace/activity/page')).toHaveLength(reads + 1);
+  await page.getByRole('button', {name: 'Updates available'}).click(); await expect(page.getByTestId('task-card').nth(2)).toContainText('Business status: Done');
+  expect(await host.locator('[data-item-id="1"]').evaluate(el => el.getBoundingClientRect().top)).toBe(anchor);
+  expect(requests.filter(request => request.path === '/workspace/activity/page').every(request => request.query.searchParams.get('view') === 'task_feed_v1' && request.query.searchParams.get('limit') === '20')).toBe(true);
 });

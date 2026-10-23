@@ -36,7 +36,7 @@ export function WorkspaceConsole({client, open, onOpenChange, api, focus}: {clie
 function WorkspaceEntry({client, providedApi, focus, onLockChange}: {client: PrivchatClient; providedApi?: WorkspaceApi; focus?: AssistantReference; onLockChange: (locked: boolean) => void}) {
   const api = useWorkspaceApi(client, providedApi);
   if (focus) return <ConsoleBody client={client} providedApi={api} focus={focus} onEmployeeRequestLockChange={onLockChange}/>;
-  return <WorkspacePage api={api} renderSession={id => <SessionConsole key={id} api={api} executionId={id}/>} onLockChange={onLockChange}/>;
+  return <WorkspacePage client={client} api={api} renderSession={id => <SessionConsole key={id} api={api} executionId={id}/>} onLockChange={onLockChange}/>;
 }
 
 export function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {client: PrivchatClient; providedApi?: WorkspaceApi; onEmployeeRequestLockChange: (locked: boolean) => void; focus?: AssistantReference}) {

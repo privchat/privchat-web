@@ -21,7 +21,7 @@ export function mountRecordsConsole(baseUrl: string) {
   return select;
 }
 
-import { ConsoleBody } from '@/features/workspace/console';
+import { ConsoleBody, WorkspaceConsole } from '@/features/workspace/console';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { WorkspacePage } from '@/features/workspace/workspace-page';
 import type { PrivchatClient } from '@privchat/sdk';
@@ -49,6 +49,28 @@ export function mountWorkspacePage(baseUrl: string) {
   host.className = 'mx-auto max-w-3xl p-3';
   const root = createRoot(host);
   root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
+}
+
+export const normalRoomCalls: string[] = [];
+let normalRoomListener: Parameters<PrivchatClient['observeEvents']>[0] | undefined;
+let normalRoomUnmount: (() => void) | undefined;
+export function emitNormalRoomEvent(event: unknown) {normalRoomListener?.({event} as never);}
+export function unmountNormalWorkspaceConsole() {normalRoomUnmount?.(); normalRoomUnmount = undefined;}
+export function mountNormalWorkspaceConsole(baseUrl: string) {
+  unmountNormalWorkspaceConsole(); normalRoomCalls.length = 0;
+  const host = document.createElement('div'); document.body.replaceChildren(host);
+  const root = createRoot(host);
+  const client = {
+    sessionSnapshot: () => ({user_id: 'fixture'}),
+    subscribeChannel: async (id: string) => {normalRoomCalls.push(`subscribe:${id}`);},
+    unsubscribeChannel: async (id: string) => {normalRoomCalls.push(`unsubscribe:${id}`);},
+    observeEvents: (listener: Parameters<PrivchatClient['observeEvents']>[0]) => {
+      normalRoomCalls.push('observe'); normalRoomListener = listener;
+      return () => {normalRoomCalls.push('off'); if (normalRoomListener === listener) normalRoomListener = undefined;};
+    },
+  } as unknown as PrivchatClient;
+  normalRoomUnmount = () => {root.unmount(); host.remove();};
+  root.render(<WorkspaceConsole client={client} api={new WorkspaceApi(baseUrl, () => 'test')} open onOpenChange={open => {if (!open) unmountNormalWorkspaceConsole();}}/>);
 }
 
 export function mountDevicePage(baseUrl: string) {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { MoreHorizontal } from 'lucide-react';
+import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { Binding, Node, Project, WorkNote, WorkspaceActivity, WorkspaceApi, WorkspaceSummary } from './api';
@@ -12,7 +13,7 @@ import { SpaceEmployees } from './space-employees';
 import { WorkItemPanel } from './work-item';
 import { WorkflowPanel } from './workflow';
 
-export function WorkspacePage({api, renderSession, onLockChange}: {api: WorkspaceApi; renderSession: (id: string) => ReactNode; onLockChange: (locked: boolean) => void}) {
+export function WorkspacePage({api, client, renderSession, onLockChange}: {api: WorkspaceApi; client?: PrivchatClient; renderSession: (id: string) => ReactNode; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
   const [spaces, setSpaces] = useState<WorkspaceSummary[]>([]);
   const [page, setPage] = useState(1);
@@ -63,7 +64,7 @@ export function WorkspacePage({api, renderSession, onLockChange}: {api: Workspac
     </header>{readOnly && <p>{l('readOnly')}</p>}
     <div hidden={!!detail}>
       <label>{l('project')}<select className={workspaceField} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-      <TaskFeed key={`${space.id}:${projectId}:${revision}`} api={api} workspaceId={space.id} projectId={projectId || undefined} onOpen={setDetail}/>
+      <TaskFeed key={`${space.id}:${projectId}:${revision}`} api={api} client={client} workspaceId={space.id} projectId={projectId || undefined} onOpen={setDetail}/>
     </div>
     {detail && <WorkDetails key={detail.item.id} api={api} row={detail} readOnly={readOnly} onBack={() => setDetail(undefined)} renderSession={renderSession} onLockChange={lock}/>}
   </section>;

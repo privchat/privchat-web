@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
-import type { TaskFeedPage, WorkspaceActivity, WorkspaceApi } from './api';
+import type { TaskFeedPage, WorkItem, WorkspaceActivity, WorkspaceApi } from './api';
 import { historical, mergeTaskFeed, validateTaskFeed } from './task-feed';
 import { usePageLabels } from './page-labels';
-import { roomFailure } from './room-observer';
+import { WorkspaceRoomObserver, roomFailure } from './room-observer';
 
-export function TaskFeed({api, workspaceId, projectId, onOpen}: {api: WorkspaceApi; workspaceId: string; projectId?: string; onOpen: (row: WorkspaceActivity) => void}) {
+export function TaskFeed({api, client, workspaceId, projectId, onOpen}: {api: WorkspaceApi; client?: PrivchatClient; workspaceId: string; projectId?: string; onOpen: (row: WorkspaceActivity) => void}) {
   const l = usePageLabels();
   const {t} = useTranslation();
   const [rows, setRows] = useState<WorkspaceActivity[]>([]);
@@ -18,6 +19,9 @@ export function TaskFeed({api, workspaceId, projectId, onOpen}: {api: WorkspaceA
   const viewport = useRef<HTMLDivElement>(null);
   const live = useRef(false);
   const running = useRef(false);
+  const observer = useRef<WorkspaceRoomObserver | undefined>(undefined);
+  const refreshQueued = useRef(false);
+  const accessDenied = useRef(false);
   const initialized = useRef(false);
   const bottom = useRef(true);
   const anchor = useRef<{id: string; offset: number; top: number} | undefined>(undefined);
@@ -39,28 +43,55 @@ export function TaskFeed({api, workspaceId, projectId, onOpen}: {api: WorkspaceA
     initialized.current = true;
     setPending(undefined);
   }
-  async function load(older = false, explicit = false) {
-    if (running.current || denied) return;
+  async function load(older = false, explicit = false, roomSnapshot = false): Promise<WorkItem[]> {
+    if (accessDenied.current) return [];
+    if (running.current) {if (roomSnapshot) refreshQueued.current = true; return [];}
     running.current = true; setBusy(true);
     try {
       const next = validateTaskFeed(await api.taskFeed(workspaceId, projectId, older ? olderCursor.current ?? undefined : undefined), workspaceId, projectId);
-      if (!live.current) return;
+      if (!live.current) return [];
       setError(false);
-      if (next.refreshRequired) {setPending(next); return;}
+      if (next.refreshRequired) {setPending(next); return [];}
       if (!initialized.current || older || bottom.current || explicit) apply(next, older);
       else if (next.items.some(row => JSON.stringify(currentRows.current.find(old => old.item.id === row.item.id)) !== JSON.stringify(row))) setPending(next);
+      return next.items.map(row => row.item);
     } catch (e) {
-      if (!live.current) return;
+      if (!live.current) return [];
       setError(true);
-      if (roomFailure(e) === 'denied') {setDenied(true); setRows([]); setPending(undefined); setPage(undefined);}
-    } finally {running.current = false; if (live.current) setBusy(false);}
+      if (roomFailure(e) === 'denied') {accessDenied.current = true; setDenied(true); setRows([]); setPending(undefined); setPage(undefined);}
+      if (roomSnapshot) throw e;
+      return [];
+    } finally {
+      running.current = false;
+      if (live.current) {
+        setBusy(false);
+        if (refreshQueued.current) {refreshQueued.current = false; void observer.current?.refresh();}
+      }
+    }
   }
   useEffect(() => {
     live.current = true;
+    if (client) {
+      const watch = new WorkspaceRoomObserver(workspaceId, client, () => api.join(workspaceId), () => load(false, false, true), state => {
+        if (!live.current) return;
+        if (state === 'denied') {accessDenied.current = true; setDenied(true); setRows([]); setPage(undefined); setPending(undefined);}
+        if (state !== 'live') setError(true);
+      });
+      observer.current = watch;
+      const off = client.observeEvents(({event}) => {
+        if (event.type === 'channel_publish_received') watch.publish(event.channel_id, event.topic, event.payload_text);
+        if (event.type === 'connection_state_changed') void watch.refresh(true);
+      });
+      const foreground = () => {if (document.visibilityState === 'visible') void watch.refresh(true);};
+      void watch.refresh();
+      const timer = setInterval(() => void watch.refresh(), 15000);
+      document.addEventListener('visibilitychange', foreground);
+      return () => {live.current = false; off(); clearInterval(timer); document.removeEventListener('visibilitychange', foreground); void watch.stop(); observer.current = undefined;};
+    }
     void load();
     const timer = setInterval(() => void load(), 15000);
     return () => {live.current = false; clearInterval(timer);};
-  }, [api, workspaceId, projectId]);
+  }, [api, client, workspaceId, projectId]);
   useLayoutEffect(() => {
     const host = viewport.current;
     if (!host) return;
