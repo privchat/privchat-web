@@ -1,4 +1,5 @@
 import type { RoomTicket, WorkItem } from './api';
+import { PlatformApiError } from '../../lib/platform-errors';
 
 export interface RoomTransport {
   subscribeChannel(id: string, type: number, ticket?: string): Promise<unknown>;
@@ -9,7 +10,8 @@ export function roomFailure(error: unknown): RoomState {
   const e = error as {code?: number; status?: number; machineCode?: string; response?: {reason_code?: number}};
   const reason = e?.response?.reason_code;
   if (reason === 3 || reason === 8) return 'capacity';
-  if ([4, 6, 7, 9, 10, 12].includes(reason ?? -1) || [401, 403, 10004, 10201].includes(e?.code ?? e?.status ?? -1)) return 'denied';
+  const revoked = error instanceof PlatformApiError && ['AGENT_NODE_REVOKED', 'AGENT_CAPABILITY_NOT_GRANTED', 'AGENT_ACTOR_FORBIDDEN', 'WORKSPACE_FORBIDDEN'].includes(error.machineCode ?? '');
+  if (revoked || [4, 6, 7, 9, 10, 12, 13].includes(reason ?? -1) || [401, 403, 10004, 10201].includes(e?.code ?? e?.status ?? -1)) return 'denied';
   return 'stale';
 }
 
@@ -73,7 +75,7 @@ export class WorkspaceRoomObserver {
         this.mode = roomFailure(error);
         if (this.mode === 'denied' || this.mode === 'capacity') {
           this.rows = []; this.dirty = false; this.versions.clear(); await this.leave();
-        } else if ((error as {response?:{reason_code?:number}})?.response?.reason_code === 13 || (this.ticket && this.ticket.expiresAt <= this.now())) {
+        } else if (this.ticket && this.ticket.expiresAt <= this.now()) {
           this.rows = []; await this.leave();
         }
         this.update(this.mode, this.rows);

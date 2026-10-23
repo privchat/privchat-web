@@ -8,11 +8,12 @@ import { initReactI18next } from 'react-i18next';
 import { en } from './locales/en';
 import { zhCN } from './locales/zh-CN';
 import { vi } from './locales/vi';
+import { zhTW } from './locales/zh-TW';
 import { brandConfig } from '@/lib/brand-config';
 
-export type SupportedLanguage = 'en' | 'zh-CN' | 'vi';
+export type SupportedLanguage = 'en' | 'zh-CN' | 'zh-TW' | 'vi';
 
-export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['zh-CN', 'en', 'vi'];
+export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['zh-CN', 'zh-TW', 'en', 'vi'];
 
 const STORAGE_KEY = 'privchat.web.lang';
 
@@ -23,6 +24,7 @@ void i18n
     resources: {
       en: { translation: en },
       'zh-CN': { translation: zhCN },
+      'zh-TW': { translation: zhTW },
       vi: { translation: vi },
     },
     supportedLngs: SUPPORTED_LANGUAGES,

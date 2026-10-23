@@ -12,6 +12,10 @@ import { WorkspaceRoomObserver, roomFailure, type RoomState } from './room-obser
 import { permissionDetails } from './permission-details';
 import { ConsoleIntent } from './console-intent';
 import { EmployeePanel } from './employees';
+import { WorkspaceActivityList } from './activity';
+import { SessionRecords } from './session-records';
+import type { WorkspaceActivity } from './api';
+import { publicRecords } from './public-records';
 export { ConsoleIntent } from './console-intent';
 
 const field = 'block min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm';
@@ -50,6 +54,9 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {cl
   const [notes,setNotes] = useState<WorkNote[]>([]);
   const [selected,setSelected] = useState('');
   const [item,setItem] = useState('');
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityItem, setActivityItem] = useState<WorkspaceActivity>();
+  const displayedItem = items.find(row => row.id === item) ?? (activityItem?.item.id === item && activityItem.item.workspaceId === space ? activityItem.item : undefined);
   const currentItem = useRef(item); currentItem.current = item;
   const [binding,setBinding] = useState('');
   const [bindingNode,setBindingNode] = useState('');
@@ -73,10 +80,10 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {cl
   const reload = async () => { const [s,n] = await Promise.all([api.list(),api.nodes()]); if(mounted.current){setSpaces(s);setNodes(n);} };
   useEffect(() => { void reload().catch(() => setError(true)); }, [api]);
   useEffect(() => {
-    setItems([]); setBindings([]); setItem(''); setBinding(''); setSelected(''); setDelegation([]);
+    setItems([]); setBindings([]); setItem(''); setBinding(''); setSelected(''); setDelegation([]); setActivityItem(undefined); setActivityOpen(false);
     if(!space) return;
     let active=true;
-    const watch = new WorkspaceRoomObserver(space,client,()=>api.join(space),()=>api.items(space),(state,rows)=>{if(active){setRoomState(state);setItems(rows);if(state==='denied'){setBindings([]);setItem('');setNotes([]);setExecutions([]);setDelegation([]);setSelected('');}}});
+    const watch = new WorkspaceRoomObserver(space,client,()=>api.join(space),()=>api.items(space),(state,rows)=>{if(active){setRoomState(state);setItems(rows);if(state==='denied'){setBindings([]);setItem('');setNotes([]);setExecutions([]);setDelegation([]);setSelected('');setActivityItem(undefined);setFocusedExecution('');}}});
     observer.current=watch;
     const off=client.observeEvents(({event})=>{
       if(event.type==='channel_publish_received')watch.publish(event.channel_id,event.topic,event.payload_text);
@@ -111,13 +118,17 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {cl
   return <div className="min-w-0 space-y-3" data-testid="workspace-console">
     {focusedExecution && <SessionConsole key={`focused-${focusedExecution}`} api={api} executionId={focusedExecution} onContinue={setFocusedExecution}/>}
     {error&&<p role="alert">{t('agentWorkspace.error')}</p>}
-    <label className="block">{t('agentWorkspace.spaces')}<select className={field} value={space} onChange={e=>{setSpace(e.target.value);setNode('');}} disabled={busy||intent.current.hasPending||workflowLocked}><option value="">{t('agentWorkspace.nodes')}</option>{spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+    <label className="block">{t('agentWorkspace.spaces')}<select className={field} value={space} onChange={e=>{setSpace(e.target.value);setNode('');setFocusedExecution('');}} disabled={busy||intent.current.hasPending||workflowLocked}><option value="">{t('agentWorkspace.nodes')}</option>{spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
     <div className="flex gap-2"><input aria-label={t('agentWorkspace.name')} className={field} value={name} onChange={e=>setName(e.target.value)}/><Button disabled={busy||!name.trim()} onClick={()=>void act(async()=>{if(space)await api.post('/workspace/work-item/create',{workspaceId:space,title:name});else await api.post('/workspace/create',{name});setName('');await reload();await observer.current?.refresh();})}>{t('agentWorkspace.create')}</Button></div>
     {space ? <>
       <p role="status">{t(`agentWorkspace.${roomState}`)}</p><Button onClick={()=>{if(roomState==='denied'||roomState==='capacity'){setSpace('');}else void observer.current?.refresh(true);}}>{t('agentWorkspace.refresh')}</Button>
+      <Button variant="outline" aria-expanded={activityOpen} disabled={workflowLocked || roomState === 'denied'} onClick={() => setActivityOpen(value => !value)}>{t('agentWorkspace.activity')}</Button>
+      {activityOpen && roomState !== 'denied' && <WorkspaceActivityList key={`${api.base}:${space}`} api={api} workspaceId={space} onOpen={row => {if (workflowLocked) return; setActivityItem(row); setItem(row.item.id); setFocusedExecution(row.latestExecution?.executionId ?? '');}} onDenied={() => {
+        void observer.current?.stop(); setRoomState('denied'); setItems([]); setBindings([]); setItem(''); setNotes([]); setExecutions([]); setSelected(''); setFocusedExecution(''); setActivityItem(undefined);
+      }}/>}
       <label className="block">{t('agentWorkspace.work')}<select disabled={workflowLocked} className={field} value={item} onChange={e=>setItem(e.target.value)}><option value="">{t('agentWorkspace.work')}</option>{items.map(i=><option key={i.id} value={i.id}>{i.title} · {i.status}</option>)}</select></label>
-      {items.find(i => i.id === item) && <WorkItemPanel key={item} api={api} item={items.find(i => i.id === item)!} notes={notes} readOnly={roomState === 'denied' || roomState === 'joining' || spaces.find(s => s.id === space)?.archived !== 0} refresh={async () => {await observer.current?.refresh(); const rows = await api.get<WorkNote[]>(`/workspace/work-note/list?workItemId=${encodeURIComponent(item)}`); if (mounted.current && currentItem.current === item) setNotes(rows);}} />}
-      {items.find(i => i.id === item) && <WorkflowPanel key={`workflow-${item}`} api={api} item={items.find(i => i.id === item)!} notes={notes} nodes={nodes} bindings={bindings} readOnly={roomState === 'denied' || roomState === 'joining' || spaces.find(s => s.id === space)?.archived !== 0} onLockChange={locked => updateLock('workflow', locked)} onExecution={setSelected} />}
+      {displayedItem && <WorkItemPanel key={item} api={api} item={displayedItem} notes={notes} readOnly={roomState === 'denied' || roomState === 'joining' || spaces.find(s => s.id === space)?.archived !== 0} refresh={async () => {await observer.current?.refresh(); const rows = await api.get<WorkNote[]>(`/workspace/work-note/list?workItemId=${encodeURIComponent(item)}`); if (mounted.current && currentItem.current === item) setNotes(rows);}} />}
+      {displayedItem && <WorkflowPanel key={`workflow-${item}`} api={api} item={displayedItem} notes={notes} nodes={nodes} bindings={bindings} readOnly={roomState === 'denied' || roomState === 'joining' || spaces.find(s => s.id === space)?.archived !== 0} onLockChange={locked => updateLock('workflow', locked)} onExecution={setSelected} />}
       <label className="block">{t('agentWorkspace.binding')}<select className={field} value={binding} onChange={e=>setBinding(e.target.value)}><option value="">{t('agentWorkspace.binding')}</option>{bindings.filter(b=>executableCapability(b.capability)).map(b=><option key={b.id} value={b.id}>{b.nodeId} · {b.capability}</option>)}</select></label>
       <details><summary>{t('agentWorkspace.create')} · {t('agentWorkspace.binding')}</summary>
         <select className={field} aria-label={t('agentWorkspace.nodes')} value={bindingNode} onChange={e=>{setBindingNode(e.target.value);setBindingCapability('');}}><option value="">{t('agentWorkspace.nodes')}</option>{nodes.filter(n=>n.state==='active').map(n=><option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select>
@@ -141,6 +152,10 @@ function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {cl
 }
 
 export function SessionConsole({api,executionId,onContinue,employeeManaged=false}: {api: WorkspaceApi; executionId: string; onContinue?: (id: string) => void; employeeManaged?: boolean}) {
+  return <SessionConsoleBody key={executionId} api={api} executionId={executionId} onContinue={onContinue} employeeManaged={employeeManaged}/>;
+}
+
+function SessionConsoleBody({api,executionId,onContinue,employeeManaged=false}: {api: WorkspaceApi; executionId: string; onContinue?: (id: string) => void; employeeManaged?: boolean}) {
   const {t}=useTranslation();
   const [execution,setExecution]=useState<Execution>();
   const [permissions,setPermissions]=useState<Permission[]>([]);
@@ -165,6 +180,9 @@ export function SessionConsole({api,executionId,onContinue,employeeManaged=false
   const renewal=useRef<{commandId:string;afterSeq:number} | undefined>(undefined);
   const recovery=useRef<string | undefined>(undefined);
   const currentWatch=useRef(watch); currentWatch.current=watch;
+  function denyAccess() {
+    setDenied(true); setError(true); setExecution(undefined); setPermissions([]); setHistory([]); setEvents([]); setChildren([]); setCommands([]); setNextExecution(undefined); pending.current.clear(); live.current = false;
+  }
   function accept(c:Command) {
     if(!live.current)return;
     setCommands(old=>[...old.filter(x=>x.commandId!==c.commandId),c].slice(-20));
@@ -197,7 +215,7 @@ export function SessionConsole({api,executionId,onContinue,employeeManaged=false
         }
       }
       if(recovery.current){const snapshot=await api.post<Command>('/agent/sessions/history',{executionId,commandId:recovery.current,limit:50});if(!live.current)return;accept(snapshot);recovery.current=undefined;}
-    }catch(e){if(!live.current)return;setError(true);if(roomFailure(e)==='denied'){setDenied(true);setExecution(undefined);setPermissions([]);setHistory([]);setEvents([]);setChildren([]);pending.current.clear();live.current=false;}}
+    }catch(e){if(!live.current)return;setError(true);if(roomFailure(e)==='denied')denyAccess();}
     finally{running=false;}};
     void poll();const timer=setInterval(()=>void poll(),2000);
     return()=>{live.current=false;clearInterval(timer);const w=currentWatch.current;if(w)void api.post('/agent/sessions/unwatch',{executionId,commandId:crypto.randomUUID(),subscriptionId:w.subscriptionId}).catch(()=>{});};
@@ -210,6 +228,7 @@ export function SessionConsole({api,executionId,onContinue,employeeManaged=false
       const known=['executor_not_logged_in','executor_version_unsupported','executor_quota_exhausted','executor_unavailable'];
       return <p role="alert" data-testid="execution-failure">{t(`agentWorkspace.failure_${known.includes(f.code??'')?f.code:'executor_error'}`)}{f.retryable?` · ${t('agentWorkspace.failureRetryable')}`:''}{f.summary&&<span className="block text-xs text-muted-foreground">{f.summary}</span>}</p>;})()}
     {error&&<p role="alert">{t(denied?'agentWorkspace.denied':'agentWorkspace.error')}</p>}
+    {!denied && <SessionRecords key={executionId} api={api} executionId={executionId} onDenied={denyAccess}/>}
     <div className="flex flex-wrap gap-2">
       <Button disabled={controls} onClick={()=>void command('sessions/inspect')}>{t('agentWorkspace.inspect')}</Button>
       <Button disabled={controls} onClick={()=>void command('sessions/history',{limit:50})}>{t('agentWorkspace.history')}</Button>
@@ -221,7 +240,7 @@ export function SessionConsole({api,executionId,onContinue,employeeManaged=false
     <Button disabled={controls||!text.trim()||commands.some(c=>c.kind==='session.send'&&(c.status==='pending'||c.status==='unknown'))} onClick={()=>void command('sessions/send',{continueFromExecutionId:executionId,text})}>{t('agentWorkspace.followup')}</Button></>}
     {commands.map(c=><div key={c.commandId}><p>{c.kind} · {c.status==='unknown'?t('agentWorkspace.unknown'):c.status==='pending'?t('agentWorkspace.pending'):c.status}</p>{c.result?.data&&c.kind==='session.inspect'&&<pre className="whitespace-pre-wrap break-all">{JSON.stringify(c.result.data,null,2)}</pre>}</div>)}
     {history.map((h,i)=><pre key={String(h.id??i)} className="whitespace-pre-wrap break-words text-sm">{String(h.text??h.toolName??h.kind??'')}</pre>)}
-    {events.map((e,i)=><pre key={i} className="whitespace-pre-wrap break-all text-sm">{JSON.stringify(e)}</pre>)}
+    {events.map(e => <div key={e.seq}>{publicRecords(e).map((record, index) => <p key={index} className="whitespace-pre-wrap break-words text-sm">{record.text ?? t(`agentWorkspace.${record.state ? `execution_${record.state}` : `record_${record.kind}`}`)}</p>)}</div>)}
     {permissions.filter(p=>p.status==='pending').map(p=><div key={p.permissionId} className="rounded border p-3"><pre className="whitespace-pre-wrap break-all">{permissionDetails(p.summary)??p.summary}</pre><p>{t('agentWorkspace.permissionHint')}</p>{(['allow_once','deny'] as const).map(decision=><Button key={decision} disabled={controls||p.expiresAt<=Date.now()||(decision==='allow_once'&&!permissionDetails(p.summary))} onClick={()=>{if(window.confirm(t('agentWorkspace.confirm')))void command('permissions/resolve',{permissionId:p.permissionId,requestDigest:p.requestDigest,decision});}}>{t(decision==='allow_once'?'agentWorkspace.approve':'agentWorkspace.deny')}</Button>)}{p.expiresAt<=Date.now()&&<p>{t('agentWorkspace.expired')}</p>}</div>)}
     {nextExecution&&nextExecution!==executionId&&<Button onClick={()=>onContinue?.(nextExecution)} disabled={!onContinue}>{t('agentWorkspace.executions')} · {nextExecution}</Button>}
     {children.length>0&&<section><h3>{t('agentWorkspace.delegation')}</h3>{children.map(c=><Button key={c.childExecutionId} variant="outline" disabled={controls||!onContinue} onClick={()=>onContinue?.(c.childExecutionId)}>{c.childExecutionId} · {c.state}</Button>)}{childCursor&&<Button disabled={controls} onClick={()=>void api.get<{items:{childExecutionId:string;state:string}[];nextCursor?:string}>(`/agent/executions/children?executionId=${encodeURIComponent(executionId)}&limit=100&cursor=${encodeURIComponent(childCursor)}`).then(p=>{if(live.current){setChildren(old=>[...old,...p.items].filter((x,i,a)=>a.findIndex(y=>y.childExecutionId===x.childExecutionId)===i));childrenExpanded.current=true;setChildCursor(p.nextCursor);}}).catch(()=>setError(true))}>{t('agentWorkspace.more')}</Button>}</section>}

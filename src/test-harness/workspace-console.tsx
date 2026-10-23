@@ -11,6 +11,16 @@ export function mountSessionConsole(baseUrl: string) {
   return ()=>{root.unmount();host.remove();};
 }
 
+/** Re-render the same exported component to exercise execution-switch response fencing. */
+export function mountRecordsConsole(baseUrl: string) {
+  const host = document.createElement('div'); document.body.replaceChildren(host);
+  const root = createRoot(host);
+  const api = new WorkspaceApi(baseUrl, () => 'test');
+  const select = (executionId: string) => root.render(<SessionConsole api={api} executionId={executionId}/>);
+  select('1');
+  return select;
+}
+
 import { WorkspaceConsole } from '@/features/workspace/console';
 import type { PrivchatClient } from '@privchat/sdk';
 import { DevicePage } from '@/features/workspace/devices';

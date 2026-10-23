@@ -22,6 +22,13 @@ export interface RoomTicket { channelId: string; channelType: number; ticket: st
 export interface Command { commandId: string; executionId: string; kind: string; status: 'pending' | 'applied' | 'rejected' | 'unknown'; result?: { data?: Record<string, unknown>; error?: unknown } }
 export interface Permission { permissionId: string; requestDigest: string; summary: string; expiresAt: number; status: string }
 export interface NodeEvent { seq: number; kind: string; payload: Record<string, unknown> }
+export interface ArchivedNodeEvent extends NodeEvent { protocolVersion: 1; executionId: string; eventId: string }
+export interface WorkspaceActivity { item: WorkItem; latestExecution: WorkExecution | null; executionCount: number }
+export interface WorkspaceActivityPage { items: WorkspaceActivity[]; nextCursor: string | null }
+export interface SessionRecordsPage {
+  items: ArchivedNodeEvent[]; nextCursor: string | null; snapshotRequired: boolean;
+  lastArchivedSeq: number; coverage: 'normalized_events_only';
+}
 
 /** Platform HTTP only. Node credentials are never used by the user console. */
 export class WorkspaceApi {
@@ -48,6 +55,12 @@ export class WorkspaceApi {
   approvePairing(pairingCode: string) { return this.post<PairingView>('/agent/pairing/approve', {pairingCode}); }
   list() { return this.get<Workspace[]>('/workspace/list'); }
   items(id: string) { return this.get<WorkItem[]>(`/workspace/work-item/list?workspaceId=${encodeURIComponent(id)}`); }
+  activity(workspaceId: string, beforeId?: string) {
+    return this.get<WorkspaceActivityPage>(`/workspace/activity/page?workspaceId=${encodeURIComponent(workspaceId)}${beforeId === undefined ? '' : `&beforeId=${encodeURIComponent(beforeId)}`}&limit=20`);
+  }
+  records(executionId: string, afterSeq = '0') {
+    return this.get<SessionRecordsPage>(`/agent/sessions/records?executionId=${encodeURIComponent(executionId)}&afterSeq=${encodeURIComponent(afterSeq)}&limit=50`);
+  }
   bindings(id: string) { return this.get<Binding[]>(`/workspace/agent-binding/list?workspaceId=${encodeURIComponent(id)}`); }
   join(workspaceId: string) { return this.post<RoomTicket>('/workspace/room/join', { workspaceId }); }
   nodes() { return this.get<Node[]>('/agent/nodes'); }

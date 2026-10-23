@@ -108,13 +108,13 @@ test('real session component polls commands, pages history and binds one-time ap
   expect(submitted.filter(x=>x.path==='sessions/history')[1]?.body.cursor).toBe('cursor-2');
 });
 
-test('same-second revoked ticket retries join, but business revocation clears and stops',async({page})=>{
+test('revoked Room access clears and stops until explicitly reauthorized',async({page})=>{
  const result=await page.evaluate(async()=>{
    const {WorkspaceRoomObserver}=await import('/src/features/workspace/room-observer.ts');let joins=0,subscribe=0;const states:string[]=[];
    const o=new WorkspaceRoomObserver('w',{subscribeChannel:async()=>{if(++subscribe===1)throw{response:{reason_code:13}};},unsubscribeChannel:async()=>{}},async()=>{joins++;return{channelId:'1',channelType:3,ticket:'t'+joins,expiresAt:Date.now()+60000,eventProtocolVersion:1};},async()=>[],s=>states.push(s));
    await o.refresh();await o.refresh();await o.stop();return{joins,states};
  });
- expect(result.joins).toBe(2);expect(result.states).toEqual(['stale','live']);
+ expect(result.joins).toBe(1);expect(result.states).toEqual(['denied']);
 });
 
 test('approval requires actual structured action details, not a tool name',async({page})=>{
