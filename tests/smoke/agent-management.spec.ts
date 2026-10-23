@@ -75,73 +75,6 @@ test('work item updates carry snapshot version and append artifact notes', async
   expect(writes[2].body).toEqual({workItemId: '5', kind: 'artifact', body: 'Build evidence', artifactRef: 'commit:def456'});
 });
 
-async function assistantRoutes(page: import('@playwright/test').Page, send: (route: import('@playwright/test').Route) => Promise<void>) {
-  await page.route('**/__manage/app/**', async route => {
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith('/conversation/send')) return send(route);
-    const data = path.endsWith('/personal') ? {available: true, claimed: true} : path.endsWith('/conversation/list') ? {items: [], nextAfterId: '0', hasMore: false} : path.endsWith('/agents') ? [employee] : path.endsWith('/nodes') ? [node] : path.endsWith('/workspace/list') ? [{id: '4', name: 'Team', archived: 0}] : path.endsWith('/work-item/list') ? [item] : path.endsWith('/agent-binding/list') ? [binding, {...binding, id: '60', nodeId: '99'}] : path.endsWith('/work-execution/list') ? [link] : path.endsWith('/work-note/list') ? [note] : [];
-    await route.fulfill({json: {code: 0, data}});
-  });
-  await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(`${location.origin}/__manage/app`);});
-}
-
-test('assistant reload resends the identical persisted request after lost response and localizes receipts with target navigation', async ({page}) => {
-  const bodies: any[] = [];
-  await assistantRoutes(page, async route => {
-    const body = route.request().postDataJSON(); bodies.push(body);
-    if (bodies.length === 1) return route.abort();
-    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: [{id: '11', requestId: body.requestId, role: 'user', text: body.text, kind: 'message', createdAt: 1}, {id: '12', requestId: body.requestId, role: 'assistant', text: 'Execution 9: running', kind: 'reply', createdAt: 2, result: {outcome: 'accepted', summary: 'Execution 9: running', state: 'running', reference: {executionId: '9', agentId: '3'}}}]}}});
-  });
-  const p = page.getByTestId('assistant-page');
-  await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
-  await p.getByLabel('Explicit action').selectOption('send_employee');
-  await p.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3');
-  await p.getByLabel('Goal or message').fill('Implement only core');
-  await p.getByRole('button', {name: 'Send message', exact: true}).click();
-  await expect(p.getByRole('button', {name: 'Retry same request'})).toBeVisible();
-  await expect(p.getByLabel('Goal or message')).toBeDisabled();
-  await page.reload();
-  await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(`${location.origin}/__manage/app`);});
-  await expect(p.getByLabel('Goal or message')).toHaveValue('Implement only core');
-  await expect(p.getByRole('button', {name: 'Back', exact: true})).toBeDisabled();
-  expect(bodies).toHaveLength(1);
-  await p.getByRole('button', {name: 'Retry same request'}).click();
-  await expect(p.getByText('Accepted; not completed · Running', {exact: true})).toBeVisible();
-  expect(bodies[0]).toEqual(bodies[1]);
-  expect(bodies[0].requestId).toHaveLength(36);
-  expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('privchat.web.assistant.pending.')))).toEqual([]);
-  await expect(p).not.toContainText('Execution 9: running');
-  await expect(p.getByText('Implement only core', {exact: true})).toBeVisible();
-  await p.getByRole('button', {name: 'Open this execution in console'}).click();
-  expect(await p.evaluate(el => el.parentElement?.dataset.reference)).toBe(JSON.stringify({executionId: '9', agentId: '3'}));
-});
-
-test('assistant workspace assign and review use version, matching binding and source link IDs', async ({page}) => {
-  const bodies: any[] = [];
-  await assistantRoutes(page, async route => {const body = route.request().postDataJSON(); bodies.push(body); await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: []}}});});
-  const p = page.getByTestId('assistant-page');
-  await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
-  await p.getByLabel('Explicit action').selectOption('assign');
-  await p.getByRole('combobox', {name: /^Workspaces/}).selectOption('4');
-  await p.getByRole('combobox', {name: /^Work items/}).selectOption('5');
-  await p.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3');
-  await p.getByRole('combobox', {name: /^Authorized capability/}).selectOption('6');
-  await expect(p.getByLabel('Authorized capability').getByRole('option')).toHaveCount(2);
-  await p.getByLabel('Goal or message').fill('Implement core');
-  await p.getByRole('button', {name: 'Send message', exact: true}).click();
-  await expect.poll(() => bodies.length).toBe(1);
-  expect(bodies[0].action).toEqual({kind: 'assign', context: {workspaceId: '4', workItemId: '5', workItemVersion: 7, agentId: '3', bindingId: '6'}});
-  await p.getByLabel('Explicit action').selectOption('review');
-  await p.getByLabel('Successful source work execution (link ID)').selectOption('8');
-  await p.getByLabel('Fixed evidence and revision').fill('commit abc123, immutable build v1');
-  await p.getByRole('checkbox', {name: /commit:abc123/}).check();
-  await p.getByLabel('Goal or message').fill('Review only this evidence');
-  await p.getByRole('button', {name: 'Send message', exact: true}).click();
-  await expect.poll(() => bodies.length).toBe(2);
-  expect(bodies[1].action).toEqual({kind: 'review', context: {workspaceId: '4', workItemId: '5', workItemVersion: 7, agentId: '3', bindingId: '6', workExecutionId: '8', evidenceNoteIds: ['7'], evidenceDescription: 'commit abc123, immutable build v1'}});
-  expect(bodies[1]).not.toHaveProperty('sourceExecutionIds');
-});
-
 test('workflow assigns, snapshots source link and explicitly records a human review without accepting work', async ({page}) => {
   const posts: {path: string; body: any}[] = [];
   let reviewed = false, recorded = false;
@@ -184,256 +117,44 @@ test('workflow assigns, snapshots source link and explicitly records a human rev
   expect(posts.some(p => p.path.includes('update-status'))).toBe(false);
 });
 
-test('assistant localizes every real agent state and retains pending domain requests', async ({page}) => {
-  let sends = 0;
-  const bodies: any[] = [];
-  await assistantRoutes(page, async route => {
-    const body = route.request().postDataJSON(); bodies.push(body); sends++;
-    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: sends === 1 ? 'pending' : 'settled', messages: ['accepted', 'dispatched', 'waiting_user', 'cancelling'].map((state, index) => ({id: String(20 + index), requestId: body.requestId, role: 'assistant', text: `Execution 9: ${state}`, kind: 'report', createdAt: 1, result: {outcome: 'accepted', summary: `Execution 9: ${state}`, state, reference: {executionId: '9'}}}))}}});
+
+test('personal assistant opens an SDK Direct chat without REST conversation traffic or a dedicated composer', async ({page}) => {
+  const requests: string[] = [];
+  await page.route('**/__manage/app/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    requests.push(path);
+    if (path.endsWith('/personal/open-chat')) {
+      expect(route.request().method()).toBe('POST');
+      expect(route.request().postDataJSON()).toEqual({});
+      return route.fulfill({json: {code: 0, data: {channelId: '9223372036854775000', assistantUid: '9223372036854775001', name: 'Personal Xiaowei'}}});
+    }
+    expect(path.endsWith('/assistant/personal')).toBe(true);
+    await route.fulfill({json: {code: 0, data: {available: true, claimed: true}}});
   });
+  await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(location.origin + '/__manage/app');});
   const p = page.getByTestId('assistant-page');
-  await p.getByLabel('Goal or message').fill('Show capability help');
-  await p.getByRole('button', {name: 'Send message', exact: true}).click();
-  await expect(p.getByRole('button', {name: 'Retry same request'})).toBeVisible();
-  await expect(p.getByRole('button', {name: 'Back', exact: true})).toBeDisabled();
-  await p.getByRole('button', {name: 'Retry same request'}).click();
-  await expect(p.getByText('Accepted; not completed · Waiting for your confirmation in console')).toBeVisible();
-  expect(bodies[0]).toEqual(bodies[1]);
-  await page.evaluate(async () => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage('zh-CN');});
-  await expect(p.getByText('已受理，尚未完成 · 已下发设备')).toBeVisible();
-  await expect(p.getByText('已受理，尚未完成 · 等待你在操作台确认')).toBeVisible();
-  await expect(p.getByText('已受理，尚未完成 · 已请求取消，等待设备确认')).toBeVisible();
-  await expect(p).not.toContainText('Execution 9:');
-  await page.setViewportSize({width: 390, height: 844});
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect.poll(() => p.evaluate(el => el.parentElement?.dataset.chat)).toBe(JSON.stringify({channelId: '9223372036854775000', channelType: 1, peer: {uid: '9223372036854775001', name: 'Personal Xiaowei'}}));
+  expect(await p.evaluate(el => el.parentElement?.dataset.sdkLoaded)).toBe('true');
+  await expect(p.locator('textarea, input, select')).toHaveCount(0);
+  expect(requests.some(path => path.includes('/conversation/'))).toBe(false);
 });
 
-test('assistant automatically reads authoritative reports without sending another action', async ({page}) => {
-  let sends = 0, reports = 0;
-  await assistantRoutes(page, async route => {sends++; await route.abort();});
+test('unclaimed assistant requires confirmation then opens the ordinary Direct', async ({page}) => {
+  const writes: string[] = [];
+  await page.route('**/__manage/app/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() === 'POST') writes.push(path);
+    const data = path.endsWith('/personal/claim') ? {assistantUid: '73', name: 'Xiaowei'}
+      : path.endsWith('/personal/open-chat') ? {channelId: '84', assistantUid: '73', name: 'Xiaowei'}
+      : {available: true, claimed: false};
+    if (path.endsWith('/personal/claim')) expect(route.request().postDataJSON()).toEqual({confirmed: true});
+    await route.fulfill({json: {code: 0, data}});
+  });
+  await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(location.origin + '/__manage/app');});
   const p = page.getByTestId('assistant-page');
-  await expect(p.getByRole('button', {name: 'Send message', exact: true})).toBeDisabled();
-  await p.getByLabel('Goal or message').fill('Only check reports');
-  await expect(p.getByRole('button', {name: 'Send message', exact: true})).toBeEnabled();
-  await page.route('**/__manage/app/assistant/conversation/list?**', async route => {
-    const url = new URL(route.request().url());
-    expect(url.searchParams.get('refresh')).toBe('true');
-    reports++;
-    await route.fulfill({json: {code: 0, data: {items: [{id: '100', requestId: 'prior-request', role: 'assistant', text: 'Execution 9: succeeded', kind: 'report', createdAt: 1, result: {outcome: 'completed', state: 'succeeded', summary: 'Execution 9: succeeded', reference: {executionId: '9'}}}], nextAfterId: '100', hasMore: false}}});
-  });
-  await expect(p.getByText('Request completed · Execution succeeded; acceptance still required', {exact: true})).toBeVisible({timeout: 10000});
-  await expect(p).not.toContainText('Execution 9: succeeded');
-  expect(reports).toBeGreaterThan(0); expect(sends).toBe(0);
+  await expect(p.getByRole('button', {name: 'Claim assistant', exact: true})).toBeVisible();
+  expect(writes).toEqual([]);
+  await p.getByRole('button', {name: 'Claim assistant', exact: true}).click();
+  await expect.poll(() => p.evaluate(el => el.parentElement?.dataset.chat)).toBe(JSON.stringify({channelId: '84', channelType: 1, peer: {uid: '73', name: 'Xiaowei'}}));
+  expect(writes).toEqual(['/__manage/app/assistant/personal/claim', '/__manage/app/assistant/personal/open-chat']);
 });
-
-test('assistant refreshes source work executions so a completed assignment becomes reviewable without reselecting the item', async ({page}) => {
-  let reads = 0, sends = 0;
-  await assistantRoutes(page, async route => {sends++; await route.abort();});
-  await page.route('**/__manage/app/workspace/work-execution/list?**', async route => {
-    reads++;
-    await route.fulfill({json: {code: 0, data: [{...link, state: reads === 1 ? 'running' : 'succeeded'}]}});
-  });
-  const p = page.getByTestId('assistant-page');
-  await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
-  await p.getByLabel('Explicit action').selectOption('review');
-  await p.getByRole('combobox', {name: /^Workspaces/}).selectOption('4');
-  await p.getByRole('combobox', {name: /^Work items/}).selectOption('5');
-  await expect.poll(() => reads).toBeGreaterThan(0);
-  const source = p.getByLabel('Successful source work execution (link ID)');
-  await expect(source.getByRole('option', {name: '8 · 9 · succeeded', exact: true})).toBeAttached({timeout: 10000});
-  await source.selectOption('8');
-  expect(reads).toBeGreaterThan(1); expect(sends).toBe(0);
-});
-
-const naturalCommands = [
-  '让「开发」做登录修复',
-  '让「开发」处理「登录修复」任务：修复验证码',
-  '让「评审」评审「登录修复」任务，证据：commit abc123',
-  '查看「开发」的进度',
-  '停止「开发」的任务',
-];
-
-for (const command of naturalCommands) {
-  test(`natural Chinese command sends no action: ${command}`, async ({page}) => {
-    const bodies: any[] = [];
-    const detail = '已处理中文指令；评审证据 commit abc123。\n尚未验收或发布。';
-    await assistantRoutes(page, async route => {
-      const body = route.request().postDataJSON(); bodies.push(body);
-      await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: [
-        {id: '201', requestId: body.requestId, role: 'user', text: body.text, kind: 'message', createdAt: 1},
-        {id: '202', requestId: body.requestId, role: 'assistant', text: 'Execution 9: running', kind: 'reply', createdAt: 2, result: {replyKind: 'task', outcome: 'accepted', summary: 'Execution 9: running', state: 'running', detail, reference: {executionId: '9'}}},
-      ]}}});
-    });
-    const p = page.getByTestId('assistant-page');
-    await expect(p.getByRole('combobox')).toHaveCount(0);
-    await p.getByLabel('Goal or message').fill(command);
-    await p.getByRole('button', {name: 'Send message', exact: true}).click();
-    await expect(p.getByText(command, {exact: true})).toBeVisible();
-    await expect(p.getByText(detail, {exact: true})).toBeVisible();
-    await expect(p.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toBeVisible();
-    await expect(p.getByTestId('assistant-task-status')).toHaveText('Accepted; not completed · Running');
-    await expect(p).not.toContainText('Execution 9: running');
-    expect(bodies).toHaveLength(1);
-    expect(bodies[0]).toEqual({requestId: expect.any(String), text: command});
-    expect(bodies[0].requestId).toHaveLength(36);
-  });
-}
-
-test('natural clarification/help keep text; legacy tasks without replyKind keep localized state and safe detail', async ({page}) => {
-  const bodies: any[] = [];
-  const clarification = '有两位名为「开发」的员工，请明确员工名称。';
-  const help = '支持按名称指派、评审、查看进度和停止任务。';
-  const legacy = '请补充要处理的任务名称。';
-  const literal = '<img src=x onerror="window.__unsafe=true">';
-  const replies = [
-    {text: clarification, result: {outcome: 'completed', summary: clarification, replyKind: 'clarification', state: 'succeeded', detail: null}},
-    {text: '', result: {outcome: 'completed', summary: help, replyKind: 'help', state: 'succeeded', detail: literal}},
-    {text: legacy},
-    {text: '未来回复类型仍可阅读', result: {outcome: 'completed', summary: '未来回复类型仍可阅读', replyKind: 'future', detail: {internal: 'must not stringify'}}},
-    {text: 'Raw legacy state-only reply', result: {outcome: 'accepted', summary: 'Raw legacy state-only summary', state: 'running', detail: '旧服务员工输出：正在修复登录。'}},
-    {text: 'Raw legacy reference-only reply', result: {outcome: 'completed', summary: 'Raw legacy reference-only summary', reference: {executionId: '9'}, detail: '旧服务员工输出：评审发现缺少测试。'}},
-    {text: 'Raw legacy nullable-kind reply', result: {outcome: 'completed', summary: 'Raw legacy nullable-kind summary', replyKind: null, state: 'succeeded', reference: {executionId: '9'}, detail: '旧服务员工输出：等待人工验收。'}},
-  ];
-  await assistantRoutes(page, async route => {
-    const body = route.request().postDataJSON(); bodies.push(body);
-    const reply = replies[bodies.length - 1];
-    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: [{id: String(300 + bodies.length), requestId: body.requestId, role: 'assistant', kind: 'reply', createdAt: 1, ...reply}]}}});
-  });
-  const p = page.getByTestId('assistant-page');
-  for (const [index, command] of ['让「开发」做登录修复', '帮助', '处理任务', '查看进度', '查看「开发」的进度', '查看「评审」的进度', '查看「测试」的进度'].entries()) {
-    await p.getByLabel('Goal or message').fill(command);
-    await p.getByRole('button', {name: 'Send message', exact: true}).click();
-    await expect.poll(() => bodies.length).toBe(index + 1);
-    await expect(p.getByLabel('Goal or message')).toHaveValue('');
-  }
-  for (const text of [clarification, help, legacy, literal, '未来回复类型仍可阅读']) {
-    await expect(p.getByText(text, {exact: true})).toHaveCount(1);
-    await expect(p.getByText(text, {exact: true})).toBeVisible();
-  }
-  for (const text of [clarification, help]) {
-    const reply = p.getByTestId('assistant-message').filter({has: page.getByText(text, {exact: true})});
-    await expect(reply.getByTestId('assistant-task-status')).toHaveCount(0);
-    await expect(reply).not.toContainText(/Accepted|Request completed|Execution succeeded/);
-    await expect(reply.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toHaveCount(0);
-  }
-  for (const [detail, status] of [
-    ['旧服务员工输出：正在修复登录。', 'Accepted; not completed · Running'],
-    ['旧服务员工输出：评审发现缺少测试。', 'Request completed'],
-    ['旧服务员工输出：等待人工验收。', 'Request completed · Execution succeeded; acceptance still required'],
-  ]) {
-    const reply = p.getByTestId('assistant-message').filter({has: page.getByText(detail!, {exact: true})});
-    await expect(reply.getByText(detail!, {exact: true})).toBeVisible();
-    await expect(reply.getByTestId('assistant-task-status')).toHaveText(status!);
-    await expect(reply.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toBeVisible();
-  }
-  await expect(p).not.toContainText('Raw legacy');
-  await expect(p.locator('img')).toHaveCount(0);
-  await expect(p).not.toContainText('must not stringify');
-  for (const body of bodies) expect(Object.keys(body).sort()).toEqual(['requestId', 'text']);
-  expect(new Set(bodies.map(body => body.requestId)).size).toBe(7);
-});
-
-test('natural retries preserve the identical Chinese body and key across ambiguous errors and pending receipt', async ({page}) => {
-  const bodies: any[] = [];
-  await assistantRoutes(page, async route => {
-    const body = route.request().postDataJSON(); bodies.push(body);
-    if (bodies.length === 1) return route.abort();
-    if (bodies.length === 2) return route.fulfill({status: 500, body: 'response lost'});
-    if (bodies.length === 3) return route.fulfill({json: {code: 4, message: 'BUSY'}});
-    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: bodies.length === 4 ? 'pending' : 'settled', messages: [{id: '401', requestId: body.requestId, role: 'assistant', text: '正在查询', kind: 'reply', createdAt: 1, result: {replyKind: 'task', summary: '正在查询', outcome: 'accepted', state: 'running', detail: '开发正在修复登录验证码。'}}]}}});
-  });
-  const p = page.getByTestId('assistant-page');
-  const input = p.getByLabel('Goal or message');
-  await input.fill('查看「开发」的进度');
-  await p.getByRole('button', {name: 'Send message', exact: true}).click();
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    await expect(p.getByRole('button', {name: 'Retry same request'})).toBeEnabled();
-    await expect(input).toBeDisabled();
-    await expect(p.getByRole('button', {name: 'Advanced explicit controls (optional)'})).toBeDisabled();
-    await expect(p.getByRole('button', {name: 'Back', exact: true})).toBeDisabled();
-    await p.getByRole('button', {name: 'Retry same request'}).click();
-    await expect.poll(() => bodies.length).toBe(attempt + 1);
-  }
-  await expect(input).toBeEnabled();
-  await expect(input).toHaveValue('');
-  await expect(p.getByText('开发正在修复登录验证码。', {exact: true})).toHaveCount(1);
-  for (const body of bodies) expect(body).toEqual(bodies[0]);
-  expect(bodies[0]).toEqual({requestId: expect.any(String), text: '查看「开发」的进度'});
-});
-
-test('closing advanced mode ignores stale explicit target validation and sends natural text', async ({page}) => {
-  const bodies: any[] = [];
-  await assistantRoutes(page, async route => {
-    const body = route.request().postDataJSON(); bodies.push(body);
-    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: []}}});
-  });
-  const p = page.getByTestId('assistant-page');
-  const toggle = p.getByRole('button', {name: 'Advanced explicit controls (optional)'});
-  await toggle.click();
-  await p.getByLabel('Explicit action').selectOption('assign');
-  await p.getByLabel('Goal or message').fill('让「开发」做登录修复');
-  await expect(p.getByRole('button', {name: 'Send message', exact: true})).toBeDisabled();
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await p.getByRole('button', {name: 'Send message', exact: true}).click();
-  await expect.poll(() => bodies.length).toBe(1);
-  expect(bodies[0]).not.toHaveProperty('action');
-});
-
-test('polled task review report displays employee-provided final detail without another send', async ({page}) => {
-  let sends = 0;
-  await assistantRoutes(page, async route => {sends++; await route.abort();});
-  const p = page.getByTestId('assistant-page');
-  await expect(p.getByLabel('Goal or message')).toBeEnabled();
-  const detail = '评审报告：commit abc123\n发现验证码超时边界未覆盖，请补充测试。\n此评审不代表验收或发布。';
-  await page.route('**/__manage/app/assistant/conversation/list?**', async route => {
-    await route.fulfill({json: {code: 0, data: {items: [{id: '501', requestId: 'earlier-review', role: 'assistant', kind: 'report', text: 'Execution 9: succeeded', createdAt: 1, result: {replyKind: 'task', outcome: 'completed', summary: 'Execution 9: succeeded', state: 'succeeded', detail, reference: {workspaceId: '4', workItemId: '5', executionId: '9'}}}], nextAfterId: '501', hasMore: false}}});
-  });
-  await expect(p.getByText(detail, {exact: true})).toBeVisible({timeout: 10000});
-  await expect(p.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toBeVisible();
-  await expect(p.getByTestId('assistant-task-status')).toHaveText('Request completed · Execution succeeded; acceptance still required');
-  await expect(p).not.toContainText('Execution 9: succeeded');
-  await p.getByRole('button', {name: 'Open this execution in console'}).click();
-  expect(await p.evaluate(el => el.parentElement?.dataset.reference)).toBe(JSON.stringify({workspaceId: '4', workItemId: '5', executionId: '9'}));
-  expect(sends).toBe(0);
-});
-
-for (const response of ['pending', 'unknown', 'mismatched', 'missing-messages']) {
-  test(`assistant reload preserves review snapshot after ${response} receipt without relying on target forms`, async ({page}) => {
-    const bodies: any[] = [];
-    await assistantRoutes(page, async route => {
-      const body = route.request().postDataJSON(); bodies.push(body);
-      const data = bodies.length > 1 ? {requestId: body.requestId, status: 'settled', messages: []}
-        : {requestId: response === 'mismatched' ? 'another-request' : body.requestId,
-          status: ['pending', 'unknown'].includes(response) ? response : 'settled',
-          ...(response === 'missing-messages' ? {} : {messages: []})};
-      await route.fulfill({json: {code: 0, data}});
-    });
-    const p = page.getByTestId('assistant-page');
-    await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
-    await p.getByLabel('Explicit action').selectOption('review');
-    await p.getByRole('combobox', {name: /^Workspaces/}).selectOption('4');
-    await p.getByRole('combobox', {name: /^Work items/}).selectOption('5');
-    await p.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3');
-    await p.getByRole('combobox', {name: /^Authorized capability/}).selectOption('6');
-    await p.getByLabel('Successful source work execution (link ID)').selectOption('8');
-    await p.getByLabel('Fixed evidence and revision').fill('immutable commit abc123');
-    await p.getByRole('checkbox', {name: /commit:abc123/}).check();
-    await p.getByLabel('Goal or message').fill('Review original snapshot');
-    await p.getByRole('button', {name: 'Send message', exact: true}).click();
-    await expect(p.getByRole('button', {name: 'Retry same request'})).toBeVisible();
-    await page.reload();
-    // Target snapshots may be gone or changed; recovery must use only the saved request.
-    await page.route('**/__manage/app/workspace/**', route => route.fulfill({json: {code: 0, data: []}}));
-    await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(`${location.origin}/__manage/app`);});
-    await expect(p.getByLabel('Goal or message')).toHaveValue('Review original snapshot');
-    await expect(p.getByRole('button', {name: 'Back', exact: true})).toBeDisabled();
-    expect(bodies).toHaveLength(1); // No automatic replay or new execution on reload.
-    await p.getByRole('button', {name: 'Retry same request'}).click();
-    await expect(p.getByRole('button', {name: 'Retry same request'})).toHaveCount(0);
-    expect(bodies).toHaveLength(2);
-    expect(bodies[1]).toEqual(bodies[0]);
-    expect(bodies[1].action.context).toEqual({workspaceId: '4', workItemId: '5', workItemVersion: 7, agentId: '3', bindingId: '6', workExecutionId: '8', evidenceNoteIds: ['7'], evidenceDescription: 'immutable commit abc123'});
-    expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('privchat.web.assistant.pending.')))).toEqual([]);
-  });
-}

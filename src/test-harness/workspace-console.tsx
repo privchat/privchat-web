@@ -48,7 +48,12 @@ export function mountDevicePage(baseUrl: string) {
 }
 export function mountAssistantPage(baseUrl: string) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
-  createRoot(host).render(<AssistantPage api={new WorkspaceApi(baseUrl, () => 'test')} onBack={() => {}} onConsole={reference => {host.dataset.reference = JSON.stringify(reference);}} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
+  const client = {
+    sessionSnapshot: () => ({user_id: 'fixture'}),
+    bootstrapChannels: async () => {host.dataset.sdkLoaded = 'true'; return [];},
+  } as unknown as PrivchatClient;
+  createRoot(host).render(<AssistantPage api={new WorkspaceApi(baseUrl, () => 'test')} client={client} onBack={() => {}}
+    onSelect={(channelId, channelType, peer) => {host.dataset.chat = JSON.stringify({channelId, channelType, peer});}}/>);
 }
 export function mountWorkItem(baseUrl: string, item: WorkItem, notes: WorkNote[]) {
   const host = document.createElement('div'); document.body.replaceChildren(host);

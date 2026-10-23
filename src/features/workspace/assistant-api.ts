@@ -1,5 +1,3 @@
-import { WorkspaceApi } from './api';
-
 export type AssistantActionKind = 'help' | 'status' | 'send_employee' | 'assign' | 'review' | 'cancel';
 export interface AssistantContext {
   workspaceId?: string; workItemId?: string; bindingId?: string; agentId?: string;
@@ -40,8 +38,4 @@ export function assistantErrorLabel(code: string, outcome: string): string {
     AGENT_NODE_REVOKED: 'denied',
   };
   return known[code] ?? (outcome === 'unknown' ? 'unknown' : 'actionRejected');
-}
-
-export function conversationPage(api: WorkspaceApi, afterId: string) {
-  return api.get<ConversationPage>(`/assistant/conversation/list?afterId=${encodeURIComponent(afterId)}&limit=50&refresh=true`);
 }

@@ -50,6 +50,7 @@ export const enWorkspace = {
 "openTarget":"Open this execution in console",
 "receiptSettled":"Processed; see the action outcome above",
   "assistantTitle": "Xiaowei",
+  "assistantChatHint": "Chat with your personal assistant in the regular chat. Workspaces have a separate entry.",
   "assistantHint": "The assistant supports Chinese commands for named employees and tasks, not general Q&A. Try: 查看「开发」的进度 or 让「开发」做登录修复. If a name or request is unclear, it will ask you to clarify. Accepted is not completed; permissions need explicit approval.",
   "assistantAdvanced": "Advanced explicit controls (optional)",
   "assistantEmployeeOutput": "Employee-provided output, not a verified assistant audit or acceptance.",
@@ -244,6 +245,7 @@ export const zhWorkspace = {
 "openTarget":"在操作台打开此执行",
 "receiptSettled":"已处理，请查看上方动作结果",
   "assistantTitle": "小薇",
+  "assistantChatHint": "在普通聊天中与私人小薇交流，工作空间保留独立入口。",
   "assistantHint": "支持按员工和任务名称下达中文指令，不是通用问答。试试：让「开发」做登录修复；让「开发」处理「登录修复」任务：修复验证码；让「评审」评审「登录修复」任务，证据：commit abc123；查看「开发」的进度；停止「开发」的任务。名称重复或目标不清时会追问。受理不等于完成，权限仍需明确批准。",
   "assistantAdvanced": "高级明确操作（可选）",
   "assistantEmployeeOutput": "员工提供的输出，不代表助理已核验审计或验收。",
@@ -438,6 +440,7 @@ export const viWorkspace = {
 "openTarget":"Mở lượt thực thi này",
 "receiptSettled":"Đã xử lý; xem kết quả ở trên",
   "assistantTitle": "Tiểu Vy",
+  "assistantChatHint": "Trò chuyện với trợ lý cá nhân trong cuộc trò chuyện thông thường. Không gian làm việc có lối vào riêng.",
   "assistantHint": "Trợ lý hỗ trợ lệnh tiếng Trung theo tên nhân viên và công việc, không phải hỏi đáp tổng quát. Thử: 查看「开发」的进度 hoặc 让「开发」做登录修复. Trợ lý sẽ hỏi rõ nếu tên hoặc yêu cầu chưa rõ. Đã nhận không có nghĩa hoàn tất; quyền cần phê duyệt rõ ràng.",
   "assistantAdvanced": "Thao tác nâng cao (tùy chọn)",
   "assistantEmployeeOutput": "Nội dung do nhân viên cung cấp, không phải kiểm toán đã được trợ lý xác minh hay nghiệm thu.",
@@ -584,6 +587,7 @@ export const viWorkspace = {
 // WF-05 has Traditional Chinese copy; unrelated legacy workspace copy falls back to zh-CN.
 export const zhTWWorkspace: typeof enWorkspace = {
   ...zhWorkspace,
+  assistantChatHint: '在一般聊天中與私人小薇交流，工作空間保留獨立入口。',
   record_permission_requested: '歷史審批要求',
   record_permission_resolved: '歷史審批處理記錄',
   record_permission_hint: '僅為歷史記錄。實際批准只能在目前待審批面板進行。',

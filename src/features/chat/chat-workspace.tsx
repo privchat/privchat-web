@@ -27,7 +27,7 @@
 //
 // `@privchat/react` does not handle responsiveness — host concern.
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Bell,
@@ -79,6 +79,7 @@ import { DevicePage } from '@/features/workspace/devices';
 import { useWorkspaceApi } from '@/features/workspace/account-api';
 import { AssistantPage } from '@/features/workspace/assistant';
 import type { AssistantReference } from '@/features/workspace/assistant-api';
+import type { SelectPersonalChat } from '@/features/workspace/personal-chat';
 
 // Lazy-loaded — log viewer is dev-only-ish, not in the first-paint
 // path. Splitting it shaves the console-buffer + dialog plumbing
@@ -140,10 +141,8 @@ export function ChatWorkspace({
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workspaceFocus, setWorkspaceFocus] = useState<AssistantReference>();
   const [workRoute, setWorkRoute] = useState(location.hash);
-  const routeLock = useRef(false);
   useEffect(() => {
     const change = () => {
-      if (routeLock.current && location.hash !== '#/assistant') {location.replace('#/assistant'); return;}
       setWorkRoute(location.hash);
     };
     window.addEventListener('hashchange', change);
@@ -243,11 +242,18 @@ export function ChatWorkspace({
 
   const activeId = active === null ? null : `${active.channelId}:${active.channelType}`;
 
+  const onAssistantChat = useCallback<SelectPersonalChat>((channelId, channelType, peer) => {
+    onSelect(channelId, channelType, peer);
+    setTab('chats');
+    location.hash = '';
+    setWorkRoute('');
+  }, [onSelect]);
+
   if (getConfiguredAccountMode() === 'platform' && workRoute === '#/agent/devices') {
     return <DeviceScreen client={_handle.client} />;
   }
   if (getConfiguredAccountMode() === 'platform' && workRoute === '#/assistant') {
-    return <AssistantScreen client={_handle.client} onConsole={reference => {setWorkspaceFocus(reference); location.hash = ''; setWorkspaceOpen(true);}} onLockChange={locked => {routeLock.current = locked;}} />;
+    return <AssistantScreen client={_handle.client} onSelect={onAssistantChat} />;
   }
 
   return (
@@ -343,9 +349,9 @@ function DeviceScreen({client}: {client: PrivchatHandle['client']}) {
   return <DevicePage api={api} onBack={() => {location.hash = '';}} />;
 }
 
-function AssistantScreen({client, onConsole, onLockChange}: {client: PrivchatHandle['client']; onConsole: (reference?: AssistantReference) => void; onLockChange: (locked: boolean) => void}) {
+function AssistantScreen({client, onSelect}: {client: PrivchatHandle['client']; onSelect: SelectPersonalChat}) {
   const api = useWorkspaceApi(client);
-  return <AssistantPage api={api} onBack={() => {location.hash = '';}} onConsole={onConsole} onLockChange={onLockChange} />;
+  return <AssistantPage api={api} client={client} onBack={() => {location.hash = '';}} onSelect={onSelect} />;
 }
 
 /** Lazy wrapper for the logs dialog. Mounts on first open, stays
