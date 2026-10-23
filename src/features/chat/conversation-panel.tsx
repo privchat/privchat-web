@@ -234,9 +234,10 @@ export function ConversationPanel({
   // 本地 user store 提供（SenderNameLabel 已有该回落），群名片 alias 目前
   // 全站为空且无任何端可设置。见 CHANNEL_SPEC §9.2.2。失败时降级为只读。
   useEffect(() => {
+    setIsManager(false);
+    setRoleByUid(new Map());
+    setPinnedItems([]);
     if (groupId === undefined) {
-      setIsManager(false);
-      setRoleByUid(new Map());
       return;
     }
     let cancelled = false;

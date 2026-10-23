@@ -46,6 +46,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Avatar } from './avatar';
 import { errorText } from './error-text';
+import { groupIntroductionErrorText } from './group-introduction-error';
 import { QrcodeDisplayDialog } from './qrcode-display-dialog';
 import { GroupApprovalDialog } from './group-approval-dialog';
 
@@ -116,6 +117,7 @@ export function GroupInfoDialog({
   });
   const [editOpen, setEditOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [toggleMuteAllBusy, setToggleMuteAllBusy] = useState(false);
   // Per-flag busy guards for the owner/admin-editable boolean toggles
   // (allow_member_add_friend / allow_search). Keyed by the patch field
@@ -424,7 +426,7 @@ export function GroupInfoDialog({
   }) => {
     if (settings === null || savingSettings) return;
     setSavingSettings(true);
-    setError(null);
+    setProfileSaveError(null);
     try {
       await ops.updateProfile(groupId, patch);
       setSettings((prev) =>
@@ -440,7 +442,7 @@ export function GroupInfoDialog({
       );
       setEditOpen(false);
     } catch (e) {
-      setError(`${t('groups.settings_save_failed')}: ${errorText(e)}`);
+      setProfileSaveError(groupIntroductionErrorText(e, t));
     } finally {
       setSavingSettings(false);
     }
@@ -539,7 +541,7 @@ export function GroupInfoDialog({
                     <button
                       type="button"
                       className="text-xs text-primary hover:underline"
-                      onClick={() => setEditOpen(true)}
+                      onClick={() => { setProfileSaveError(null); setEditOpen(true); }}
                     >
                       {t('groups.settings_edit')}
                     </button>
@@ -843,6 +845,7 @@ export function GroupInfoDialog({
             description: settings.description ?? '',
           }}
           saving={savingSettings}
+          error={profileSaveError}
           onSave={onSaveSettings}
         />
       )}
@@ -877,12 +880,14 @@ function EditSettingsDialog({
   onOpenChange,
   initial,
   saving,
+  error,
   onSave,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial: { description: string };
   saving: boolean;
+  error: string | null;
   onSave: (patch: {
     description?: string;
   }) => Promise<void> | void;
@@ -916,6 +921,7 @@ function EditSettingsDialog({
         <DialogHeader>
           <DialogTitle>{t('groups.settings_edit_title')}</DialogTitle>
         </DialogHeader>
+        {error !== null && <div role="alert" className="text-sm text-destructive">{error}</div>}
         <div className="space-y-3">
           <div className="space-y-1">
             <Label htmlFor="group-settings-description">
