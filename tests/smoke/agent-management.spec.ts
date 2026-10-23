@@ -85,7 +85,7 @@ async function assistantRoutes(page: import('@playwright/test').Page, send: (rou
   await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(`${location.origin}/__manage/app`);});
 }
 
-test('assistant resends the identical request after lost response and localizes receipts with target navigation', async ({page}) => {
+test('assistant reload resends the identical persisted request after lost response and localizes receipts with target navigation', async ({page}) => {
   const bodies: any[] = [];
   await assistantRoutes(page, async route => {
     const body = route.request().postDataJSON(); bodies.push(body);
@@ -100,10 +100,16 @@ test('assistant resends the identical request after lost response and localizes 
   await p.getByRole('button', {name: 'Send message', exact: true}).click();
   await expect(p.getByRole('button', {name: 'Retry same request'})).toBeVisible();
   await expect(p.getByLabel('Goal or message')).toBeDisabled();
+  await page.reload();
+  await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(`${location.origin}/__manage/app`);});
+  await expect(p.getByLabel('Goal or message')).toHaveValue('Implement only core');
+  await expect(p.getByRole('button', {name: 'Back', exact: true})).toBeDisabled();
+  expect(bodies).toHaveLength(1);
   await p.getByRole('button', {name: 'Retry same request'}).click();
   await expect(p.getByText('Accepted; not completed · Running', {exact: true})).toBeVisible();
   expect(bodies[0]).toEqual(bodies[1]);
   expect(bodies[0].requestId).toHaveLength(36);
+  expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('privchat.web.assistant.pending.')))).toEqual([]);
   await expect(p).not.toContainText('Execution 9: running');
   await expect(p.getByText('Implement only core', {exact: true})).toBeVisible();
   await p.getByRole('button', {name: 'Open this execution in console'}).click();
@@ -391,3 +397,43 @@ test('polled task review report displays employee-provided final detail without 
   expect(await p.evaluate(el => el.parentElement?.dataset.reference)).toBe(JSON.stringify({workspaceId: '4', workItemId: '5', executionId: '9'}));
   expect(sends).toBe(0);
 });
+
+for (const response of ['pending', 'unknown', 'mismatched', 'missing-messages']) {
+  test(`assistant reload preserves review snapshot after ${response} receipt without relying on target forms`, async ({page}) => {
+    const bodies: any[] = [];
+    await assistantRoutes(page, async route => {
+      const body = route.request().postDataJSON(); bodies.push(body);
+      const data = bodies.length > 1 ? {requestId: body.requestId, status: 'settled', messages: []}
+        : {requestId: response === 'mismatched' ? 'another-request' : body.requestId,
+          status: ['pending', 'unknown'].includes(response) ? response : 'settled',
+          ...(response === 'missing-messages' ? {} : {messages: []})};
+      await route.fulfill({json: {code: 0, data}});
+    });
+    const p = page.getByTestId('assistant-page');
+    await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
+    await p.getByLabel('Explicit action').selectOption('review');
+    await p.getByRole('combobox', {name: /^Workspaces/}).selectOption('4');
+    await p.getByRole('combobox', {name: /^Work items/}).selectOption('5');
+    await p.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3');
+    await p.getByRole('combobox', {name: /^Authorized capability/}).selectOption('6');
+    await p.getByLabel('Successful source work execution (link ID)').selectOption('8');
+    await p.getByLabel('Fixed evidence and revision').fill('immutable commit abc123');
+    await p.getByRole('checkbox', {name: /commit:abc123/}).check();
+    await p.getByLabel('Goal or message').fill('Review original snapshot');
+    await p.getByRole('button', {name: 'Send message', exact: true}).click();
+    await expect(p.getByRole('button', {name: 'Retry same request'})).toBeVisible();
+    await page.reload();
+    // Target snapshots may be gone or changed; recovery must use only the saved request.
+    await page.route('**/__manage/app/workspace/**', route => route.fulfill({json: {code: 0, data: []}}));
+    await page.evaluate(async () => {const {mountAssistantPage} = await import('/src/test-harness/workspace-console.tsx'); mountAssistantPage(`${location.origin}/__manage/app`);});
+    await expect(p.getByLabel('Goal or message')).toHaveValue('Review original snapshot');
+    await expect(p.getByRole('button', {name: 'Back', exact: true})).toBeDisabled();
+    expect(bodies).toHaveLength(1); // No automatic replay or new execution on reload.
+    await p.getByRole('button', {name: 'Retry same request'}).click();
+    await expect(p.getByRole('button', {name: 'Retry same request'})).toHaveCount(0);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toEqual(bodies[0]);
+    expect(bodies[1].action.context).toEqual({workspaceId: '4', workItemId: '5', workItemVersion: 7, agentId: '3', bindingId: '6', workExecutionId: '8', evidenceNoteIds: ['7'], evidenceDescription: 'immutable commit abc123'});
+    expect(await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('privchat.web.assistant.pending.')))).toEqual([]);
+  });
+}

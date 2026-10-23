@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { WorkspaceApi, type Binding, type Employee, type Execution, type Node, type WorkExecution, type WorkItem, type WorkNote, type Workspace } from './api';
 import { matchingEmployeeBindings, ReviewEvidenceFields } from './workflow-targets';
-import { ConsoleIntent } from './console-intent';
+import { persistentAssistantIntent } from './console-intent-storage';
+import { getActiveAccountKey, subscribeActiveAccount } from '../../lib/active-account';
 import { PlatformHttpError } from '@/lib/platform-errors';
 import { roomFailure } from './room-observer';
 import { assistantErrorLabel, assistantReplyText, conversationPage, isAssistantTask, type AssistantActionKind, type AssistantContext, type AssistantIdentity, type AssistantMessage, type AssistantReference, type ConversationSendResult } from './assistant-api';
@@ -41,7 +42,8 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
   const [hasMore, setHasMore] = useState(false);
   const [ready, setReady] = useState(false);
   const [receipt, setReceipt] = useState('');
-  const intent = useRef(new ConsoleIntent());
+  const accountKey = useSyncExternalStore(subscribeActiveAccount, getActiveAccountKey);
+  const intent = useMemo(() => persistentAssistantIntent(accountKey, api.base), [accountKey, api]);
   const cursor = useRef('0');
   const live = useRef(false);
   const polling = useRef(false);
@@ -54,7 +56,8 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
   const valid = !advanced || (!targetError && (kind === 'help' || workspaceAction
     ? kind === 'help' || (!!item && space?.archived === 0 && !['done', 'cancelled'].includes(item.status) && candidates.some(b => b.id === bindingId) && (kind !== 'review' || (!!description.trim() && links.some(l => l.id === source && l.state === 'succeeded' && l.executionId))))
     : spaceId ? !!source && links.some(l => l.id === source && l.executionId) : !!employeeId && (kind !== 'cancel' || !!executionId)));
-  const locked = busy || intent.current.hasPending;
+  const locked = busy || intent.hasPending;
+  useEffect(() => { onLockChange(locked); }, [locked, onLockChange]);
   const merge = (rows: AssistantMessage[]) => setMessages(old => [...new Map([...old, ...rows].map(m => [m.id, m])).values()].sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0));
   async function refresh() {
     if (polling.current) return;
@@ -114,25 +117,38 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
   }, [api, itemId]);
   async function send() {
     if (inFlight.current) return;
-    if (!intent.current.hasPending && (!valid || !text.trim())) return;
-    if (advanced && kind === 'cancel' && !intent.current.hasPending && !window.confirm(label('confirm'))) return;
+    if (!intent.hasPending && (!valid || !text.trim())) return;
+    if (advanced && kind === 'cancel' && !intent.hasPending && !window.confirm(label('confirm'))) return;
     inFlight.current = true; setBusy(true); setError(''); onLockChange(true);
     try {
-      const context: AssistantContext = !advanced || kind === 'help' ? {} : workspaceAction ? {
-        workspaceId: spaceId, workItemId: itemId, workItemVersion: item!.version, agentId: employeeId, bindingId,
-        ...(kind === 'review' ? {workExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description} : {}),
-      } : spaceId ? {workspaceId: spaceId, workItemId: itemId, workExecutionId: source}
-        : executionId && kind !== 'send_employee' ? {agentId: employeeId, executionId} : {agentId: employeeId};
-      const result = await intent.current.run<ConversationSendResult>(api, '/assistant/conversation/send', {text, ...(advanced ? {action: {kind, context}} : {})}, 'requestId', r => r.status === 'pending');
+      const retain = (result: ConversationSendResult) => {
+        if (!result || result.requestId !== intent.pendingRequest?.body.requestId ||
+            !['pending', 'settled'].includes(result.status) || !Array.isArray(result.messages)) {
+          throw new Error('Invalid assistant receipt');
+        }
+        return result.status === 'pending';
+      };
+      let result: ConversationSendResult;
+      if (intent.hasPending) {
+        // Recovery must not depend on a freshly loaded form or target snapshot.
+        result = await intent.retry<ConversationSendResult>(api, retain);
+      } else {
+        const context: AssistantContext = !advanced || kind === 'help' ? {} : workspaceAction ? {
+          workspaceId: spaceId, workItemId: itemId, workItemVersion: item!.version, agentId: employeeId, bindingId,
+          ...(kind === 'review' ? {workExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description} : {}),
+        } : spaceId ? {workspaceId: spaceId, workItemId: itemId, workExecutionId: source}
+          : executionId && kind !== 'send_employee' ? {agentId: employeeId, executionId} : {agentId: employeeId};
+        result = await intent.run<ConversationSendResult>(api, '/assistant/conversation/send', {text, ...(advanced ? {action: {kind, context}} : {})}, 'requestId', retain);
+      }
       if (!live.current) return;
       merge(result.messages); setReceipt(result.status);
-      if (!intent.current.hasPending) setText('');
+      if (!intent.hasPending) setText('');
     } catch (e) {if (live.current) {
       const denied = roomFailure(e) === 'denied';
-      setError(denied ? 'denied' : intent.current.hasPending ? 'unknown' : 'error');
+      setError(denied ? 'denied' : intent.hasPending ? 'unknown' : 'error');
       if (denied) {setMessages([]); setReady(false);}
     }}
-    finally {inFlight.current = false; onLockChange(intent.current.hasPending); if (live.current) setBusy(false);}
+    finally {inFlight.current = false; onLockChange(intent.hasPending); if (live.current) setBusy(false);}
   }
   return <main data-testid="assistant-page" className="mx-auto w-full max-w-4xl min-w-0 space-y-4 overflow-y-auto p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><h1 className="text-xl font-semibold">{label('assistantTitle')}</h1><div className="flex flex-wrap gap-2"><Button variant="outline" disabled={locked} onClick={() => onConsole()}>{label('openConsole')}</Button><Button variant="outline" disabled={locked} onClick={onBack}>{label('back')}</Button></div></div>
@@ -162,7 +178,7 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
       {receipt && <p role="status">{label('assistantReceipt')}: {label(receipt === 'settled' ? 'receiptSettled' : 'pending')}</p>}
       <form className="space-y-3" onSubmit={e => {e.preventDefault(); void send();}}>
         <fieldset disabled={locked || !ready} className="min-w-0 space-y-3">
-          <label className="block">{label('assistantGoal')}<textarea className={field} value={text} onChange={e => setText(e.target.value)}/></label>
+          <label className="block">{label('assistantGoal')}<textarea className={field} value={String(intent.pendingRequest?.body.text ?? text)} onChange={e => setText(e.target.value)}/></label>
           <Button type="button" variant="outline" aria-expanded={advanced} aria-controls="assistant-advanced" onClick={() => setAdvanced(value => !value)}>{label('assistantAdvanced')}</Button>
           {advanced && <div id="assistant-advanced" className="space-y-3">
           <label className="block">{label('assistantAction')}<select className={field} value={kind} onChange={e => {setKind(e.target.value as AssistantActionKind); setExecutionId(''); setSource(''); if (e.target.value === 'send_employee') setSpaceId('');}}>{(['help', 'status', 'send_employee', 'assign', 'review', 'cancel'] as const).map(k => <option key={k} value={k}>{label(`action_${k}`)}</option>)}</select></label>
@@ -179,7 +195,7 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
           </>}
           </div>}
         </fieldset>
-        {intent.current.hasPending ? <><p role="status">{label('retryRecovery')}</p><Button disabled={busy} type="submit">{label('retrySame')}</Button></> : <Button disabled={busy || !ready || !text.trim() || !valid}>{label('sendEmployee')}</Button>}
+        {intent.hasPending ? <><p role="status">{label('retryRecovery')}</p><Button disabled={busy} type="submit">{label('retrySame')}</Button></> : <Button disabled={busy || !ready || !text.trim() || !valid}>{label('sendEmployee')}</Button>}
       </form>
     </>}
   </main>;
