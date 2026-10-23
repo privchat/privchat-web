@@ -5,6 +5,7 @@ import { WorkspaceApi, type Employee, type EmployeeConfig, type Execution, type 
 import { ConsoleIntent } from './console-intent';
 import { roomFailure } from './room-observer';
 import { PlatformApiError, PlatformHttpError } from '@/lib/platform-errors';
+import { usePageLabels } from './page-labels';
 
 const field = 'block min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm';
 const emptyConfig: EmployeeConfig = {name: '', nodeId: '', executor: '', roleDescription: '', title: '', model: '', workdirBindingId: ''};
@@ -46,7 +47,8 @@ export function bindingCandidates(rows: Execution[], nodeId: string, executor: s
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 }
 
-export function EmployeePanel({api, nodes, refreshNodes, renderSession, onRequestLockChange}: {api: WorkspaceApi; nodes: Node[]; refreshNodes: () => Promise<void>; renderSession: (id: string) => ReactNode; onRequestLockChange: (locked: boolean) => void}) {
+export function EmployeePanel({api, nodes, refreshNodes, renderSession, onRequestLockChange, workspaceMode = false}: {api: WorkspaceApi; nodes: Node[]; refreshNodes: () => Promise<void>; renderSession: (id: string) => ReactNode; onRequestLockChange: (locked: boolean) => void; workspaceMode?: boolean}) {
+  const pageLabel = usePageLabels();
   const {t} = useTranslation();
   const label = (key: string) => t(`agentWorkspace.${key}`);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -87,11 +89,11 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
   useEffect(() => {
     let active = true;
     setRows([]); setCandidatesError(false);
-    if (editing || !config.nodeId || !config.executor) {setCandidatesLoading(false); return;}
+    if (workspaceMode || editing || !config.nodeId || !config.executor) {setCandidatesLoading(false); return;}
     setCandidatesLoading(true);
     void api.executions(config.nodeId).then(r => {if (active) setRows(r);}).catch(() => {if (active) setCandidatesError(true);}).finally(() => {if (active) setCandidatesLoading(false);});
     return () => {active = false;};
-  }, [api, config.nodeId, config.executor, editing, candidateRefresh]);
+  }, [api, config.nodeId, config.executor, editing, candidateRefresh, workspaceMode]);
 
   function choose(id: string) {
     if (locked) return;
@@ -147,7 +149,7 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
     {employee && <div className="space-y-2 rounded border p-3 text-sm break-words">
       <p>{employee.name} · {employee.title}</p><p className="whitespace-pre-wrap">{employee.roleDescription}</p>
       <p>{nodeBound ? employee.nodeId : label('unconfigured')} · {employee.executor} · {employee.model} · {employee.workdirBindingId}</p>
-      <p>{label('managedSession')}: {nodeBound ? executionId || label('sessionOnSend') : label('unconfigured')}</p>
+      <p>{workspaceMode ? pageLabel('privateNotImported') : `${label('managedSession')}: ${nodeBound ? executionId || label('sessionOnSend') : label('unconfigured')}`}</p>
       <Button variant="outline" disabled={locked || !ready || editing || !nodeBound} onClick={() => {
         setConfig({name: employee.name, title: employee.title, roleDescription: employee.roleDescription, nodeId: employee.nodeId!, executor: employee.executor, model: employee.model, workdirBindingId: employee.workdirBindingId});
         setEditing(true); setSaved(false);
@@ -170,10 +172,10 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
             <option value="">{label('workdir')}</option>{node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label} · {w.id}</option>)}
           </select></label>
           {node && (!node.workdirs?.length || !executors.length) && <p>{label('unconfigured')}</p>}
-          <p className="text-sm">{label('bindingHint')}</p>
+          <p className="text-sm">{workspaceMode ? pageLabel('privateNotImported') : label('bindingHint')}</p>
           {candidatesLoading && <p role="status">{label('loading')}</p>}
           {candidatesError && <p role="alert">{label('candidateError')}</p>}
-          <label className="block">{label('managedSession')}<select className={field} value={config.bindExecutionId ?? ''} disabled={candidatesLoading || candidatesError} onChange={e => {setConfig({...config, bindExecutionId: e.target.value || undefined}); setConfirmed(false);}}>
+          <label className="block">{label('managedSession')}<select className={field} value={config.bindExecutionId ?? ''} disabled={workspaceMode || candidatesLoading || candidatesError} onChange={e => {setConfig({...config, bindExecutionId: e.target.value || undefined}); setConfirmed(false);}}>
             <option value="">{label('sessionOnSend')}</option>{candidates.map(e => <option key={e.executionId} value={e.executionId}>{typeof e.params?.title === 'string' ? `${e.params.title} · ` : ''}{e.executionId} · {e.state} · {String(e.params?.model ?? '')} · {String(e.params?.workdirBindingId ?? '')}</option>)}
           </select></label>
           {config.bindExecutionId && <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/>{label('confirmBinding')}</label>}
@@ -183,7 +185,7 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
         {editing && <Button type="button" variant="outline" disabled={locked} onClick={() => {setEditing(false); setConfig({...emptyConfig});}}>{label('back')}</Button>}
       </div>
     </form>}
-    {employee && !editing && <>
+    {employee && !editing && !workspaceMode && <>
       <label className="block">{label('employeeMessage')}<textarea className={field} value={text} disabled={locked || !nodeBound} onChange={e => setText(e.target.value)}/></label>
       <Button disabled={locked || !ready || !nodeBound || !text.trim()} onClick={() => {if (!nodeBound) return; void act(async () => {
         const result = await intent.current.run<Execution>(api, '/agent/agents/send', {agentId: employee.agentId, text}, 'requestId');

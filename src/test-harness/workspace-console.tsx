@@ -21,7 +21,9 @@ export function mountRecordsConsole(baseUrl: string) {
   return select;
 }
 
-import { WorkspaceConsole } from '@/features/workspace/console';
+import { ConsoleBody } from '@/features/workspace/console';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { WorkspacePage } from '@/features/workspace/workspace-page';
 import type { PrivchatClient } from '@privchat/sdk';
 import { DevicePage } from '@/features/workspace/devices';
 import { AssistantPage } from '@/features/workspace/assistant';
@@ -39,7 +41,14 @@ export function mountWorkspaceConsole(baseUrl: string) {
     unsubscribeChannel:async(id:string)=>{workspaceSubscriptions.push(`leave:${id}`);},
   } as unknown as PrivchatClient;
   const root=createRoot(host);
-  root.render(<WorkspaceConsole client={client} api={new WorkspaceApi(baseUrl,()=> 'test')} open onOpenChange={()=>{root.unmount();host.remove();}}/>);
+  root.render(<Dialog open onOpenChange={()=>{root.unmount();host.remove();}}><DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl"><DialogTitle>Workspace legacy controls</DialogTitle><ConsoleBody client={client} providedApi={new WorkspaceApi(baseUrl,()=> 'test')} onEmployeeRequestLockChange={() => {}}/></DialogContent></Dialog>);
+}
+
+export function mountWorkspacePage(baseUrl: string) {
+  const host = document.createElement('div'); document.body.replaceChildren(host);
+  host.className = 'mx-auto max-w-3xl p-3';
+  const root = createRoot(host);
+  root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
 }
 
 export function mountDevicePage(baseUrl: string) {

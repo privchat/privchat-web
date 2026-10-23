@@ -16,6 +16,7 @@ import { WorkspaceActivityList } from './activity';
 import { SessionRecords } from './session-records';
 import type { WorkspaceActivity } from './api';
 import { publicRecords } from './public-records';
+import { WorkspacePage } from './workspace-page';
 export { ConsoleIntent } from './console-intent';
 
 const field = 'block min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm';
@@ -27,12 +28,18 @@ export function WorkspaceConsole({client, open, onOpenChange, api, focus}: {clie
     <DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl">
       <DialogTitle>{t('agentWorkspace.title')}</DialogTitle>
       <DialogDescription>{t('agentWorkspace.permissionHint')}</DialogDescription>
-      {open && <ConsoleBody key={client.sessionSnapshot().user_id} client={client} providedApi={api} focus={focus} onEmployeeRequestLockChange={locked => {employeeRequestLocked.current = locked;}} />}
+      {open && <WorkspaceEntry key={client.sessionSnapshot().user_id} client={client} providedApi={api} focus={focus} onLockChange={locked => {employeeRequestLocked.current = locked;}} />}
     </DialogContent>
   </Dialog>;
 }
 
-function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {client: PrivchatClient; providedApi?: WorkspaceApi; onEmployeeRequestLockChange: (locked: boolean) => void; focus?: AssistantReference}) {
+function WorkspaceEntry({client, providedApi, focus, onLockChange}: {client: PrivchatClient; providedApi?: WorkspaceApi; focus?: AssistantReference; onLockChange: (locked: boolean) => void}) {
+  const api = useWorkspaceApi(client, providedApi);
+  if (focus) return <ConsoleBody client={client} providedApi={api} focus={focus} onEmployeeRequestLockChange={onLockChange}/>;
+  return <WorkspacePage api={api} renderSession={id => <SessionConsole key={id} api={api} executionId={id}/>} onLockChange={onLockChange}/>;
+}
+
+export function ConsoleBody({client,providedApi,onEmployeeRequestLockChange,focus}: {client: PrivchatClient; providedApi?: WorkspaceApi; onEmployeeRequestLockChange: (locked: boolean) => void; focus?: AssistantReference}) {
   const {t} = useTranslation();
   // Provider is scoped to this mounted account, not a global token that could switch owners.
   const api = useWorkspaceApi(client, providedApi);

@@ -85,6 +85,8 @@ test('workflow assigns, snapshots source link and explicitly records a human rev
     let data: unknown = [];
     if (body) posts.push({path, body});
     if (path.endsWith('/agents')) data = [employee];
+    if (path.endsWith('/employee/candidates')) data = [{id: 'ref-3', workspaceId: '4', employeeId: employee.agentId, name: employee.name, nodeId: employee.nodeId, capability: 'agent.codex', workdirBindingId: employee.workdirBindingId, available: true, projectTargetIds: []}];
+    if (path.endsWith('/employee/page')) data = {items: [{id: 'ref-3', workspaceId: '4', employeeId: employee.agentId, name: employee.name, nodeId: employee.nodeId, capability: 'agent.codex', workdirBindingId: employee.workdirBindingId, available: true, projectTargetIds: []}], nextCursor: null, hasMore: false};
     if (path.endsWith('/work-execution/list')) data = [link];
     if (path.endsWith('/assign')) data = {id: '10', executionId: '11', state: 'accepted'};
     if (path.endsWith('/request-review')) {reviewed = true; data = review();}
@@ -157,4 +159,21 @@ test('unclaimed assistant requires confirmation then opens the ordinary Direct',
   await p.getByRole('button', {name: 'Claim assistant', exact: true}).click();
   await expect.poll(() => p.evaluate(el => el.parentElement?.dataset.chat)).toBe(JSON.stringify({channelId: '84', channelType: 1, peer: {uid: '73', name: 'Xiaowei'}}));
   expect(writes).toEqual(['/__manage/app/assistant/personal/claim', '/__manage/app/assistant/personal/open-chat']);
+});
+
+test('blocked assignment receipt keeps original request and never reports success or opens execution', async ({page}) => {
+  const assigns: any[] = [];
+  await page.route('**/__manage/app/**', async route => {
+    const path = new URL(route.request().url()).pathname; let data: unknown = [];
+    if (path.endsWith('/employee/page')) data = {items: [{id: 'ref-3', workspaceId: '4', employeeId: '3', name: 'Engineer', nodeId: '2', capability: 'agent.codex', workdirBindingId: 'repo', available: true, projectTargetIds: []}], nextCursor: null, hasMore: false};
+    if (path.endsWith('/assign')) {assigns.push(route.request().postDataJSON()); data = {id: 'held', executionId: 'accepted-held', state: 'accepted', deliveryBlockedReason: 'AUTHORITY_CHANGED_PRIVATE_DETAIL'};}
+    await route.fulfill({json: {code: 0, data}});
+  });
+  await page.evaluate(async ({item, node, binding}) => {const {mountWorkflow} = await import('/src/test-harness/workspace-console.tsx'); mountWorkflow(`${location.origin}/__manage/app`, item, [node], [binding], []);}, {item, node, binding});
+  const panel = page.getByTestId('workflow-panel');
+  await panel.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3'); await panel.getByRole('combobox', {name: /^Authorized capability/}).selectOption('6');
+  await panel.getByLabel('Work instructions', {exact: true}).fill('Keep original identity'); await panel.getByRole('button', {name: 'Assign to employee'}).click();
+  await expect(panel.getByTestId('delivery-blocked')).toContainText('execution delivery is blocked'); await expect(panel.getByTestId('delivery-blocked')).not.toContainText('AUTHORITY_CHANGED_PRIVATE_DETAIL');
+  await expect(panel.getByRole('status')).toHaveCount(0); expect(await panel.evaluate(el => el.parentElement?.dataset.execution ?? '')).toBe('');
+  await panel.getByRole('button', {name: 'Retry same request'}).click(); await expect.poll(() => assigns.length).toBe(2); expect(assigns[0]).toEqual(assigns[1]);
 });
