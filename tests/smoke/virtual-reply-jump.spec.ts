@@ -6,7 +6,7 @@
 //
 //   1. "scrolls to loaded reply target that is outside mounted
 //      window" — the core R5.4 case. We seed a reply chain where
-//      the original (sm-msg-10) is far from the bottom, the
+//      the original (10) is far from the bottom, the
 //      virtualizer initially mounts only the bottom region, and
 //      clicking the quote on the latest row should pull the
 //      virtualizer to the original AND flash it once it mounts.
@@ -37,8 +37,8 @@ const replyEnvelope = (replyToServerMessageId: string, content: string) => {
 };
 
 async function seedThreadWithDistantReply(page: Page): Promise<void> {
-  // 80 rows, where the LAST row is a reply to sm-msg-10 (deep
-  // history). Initial render parks at the bottom, so sm-msg-10 is
+  // 80 rows, where the LAST row is a reply to 10 (deep
+  // history). Initial render parks at the bottom, so 10 is
   // well outside the rendered virtual window — exactly the
   // loaded-but-not-mounted scenario.
   await page.evaluate(
@@ -49,7 +49,7 @@ async function seedThreadWithDistantReply(page: Page): Promise<void> {
           records.push({
             channel_id: channelId,
             channel_type: 1,
-            server_message_id: `sm-msg-${i}`,
+            server_message_id: String(i),
             from_uid: i % 2 === 0 ? '101' : 'self',
             message_type: '0',
             content: i === 10 ? 'reply target row' : `message ${i}`,
@@ -62,7 +62,7 @@ async function seedThreadWithDistantReply(page: Page): Promise<void> {
           records.push({
             channel_id: channelId,
             channel_type: 1,
-            server_message_id: 'sm-msg-80',
+            server_message_id: '80',
             from_uid: 'self',
             message_type: '0',
             content: 'latest with reply',
@@ -79,7 +79,7 @@ async function seedThreadWithDistantReply(page: Page): Promise<void> {
     },
     {
       channelId: CHANNEL_ID,
-      payload: replyEnvelope('sm-msg-10', 'latest with reply'),
+      payload: replyEnvelope('10', 'latest with reply'),
     },
   );
 }
@@ -97,7 +97,7 @@ async function seedThreadWithMissingReply(page: Page): Promise<void> {
             {
               channel_id: channelId,
               channel_type: 1,
-              server_message_id: 'sm-only',
+              server_message_id: '1',
               from_uid: '101',
               message_type: '0',
               content: 'first message',
@@ -109,7 +109,7 @@ async function seedThreadWithMissingReply(page: Page): Promise<void> {
             {
               channel_id: channelId,
               channel_type: 1,
-              server_message_id: 'sm-reply-missing',
+              server_message_id: '2',
               from_uid: 'self',
               message_type: '0',
               content: 'reply pointing at nothing',
@@ -124,7 +124,7 @@ async function seedThreadWithMissingReply(page: Page): Promise<void> {
     },
     {
       channelId: CHANNEL_ID,
-      payload: replyEnvelope('sm-message-that-does-not-exist', 'reply pointing at nothing'),
+      payload: replyEnvelope('999', 'reply pointing at nothing'),
     },
   );
 }
@@ -148,12 +148,12 @@ test.describe('virtual reply jump (R5.4)', () => {
 
     // Confirm initial render: latest row is mounted, deep target is
     // not. The wrapper for the deep target carries
-    // data-record-key=sm-msg-10 only when mounted, so absence is
+    // data-record-key=10 only when mounted, so absence is
     // the deterministic signal that the virtualizer hasn't rendered
     // it yet.
-    await expect(page.locator('[data-message-id="sm-msg-80"]')).toBeVisible();
+    await expect(page.locator('[data-message-id="80"]')).toBeVisible();
     await expect(
-      page.locator('[data-record-key="sm-msg-10"]'),
+      page.locator('[data-record-key="10"]'),
     ).toHaveCount(0);
 
     // The reply quote on the latest row carries the original's
@@ -166,7 +166,7 @@ test.describe('virtual reply jump (R5.4)', () => {
     // The virtualizer scrolls to index 9, the row mounts, the
     // post-mount layout effect applies the flash class. Both
     // assertions together confirm the case-2 path end-to-end.
-    const target = page.locator('[data-message-id="sm-msg-10"]');
+    const target = page.locator('[data-message-id="10"]');
     await expect(target).toBeVisible();
     await expect(target).toHaveClass(/bg-primary\/15/);
   });

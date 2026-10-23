@@ -11,14 +11,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { gotoAppFresh } from './_helpers';
 
-function fakeBaseUrl(originUrl: string): string {
-  return `${originUrl}/__fake-platform/app`;
-}
-
-async function originOf(page: Page): Promise<string> {
-  return page.evaluate(() => window.location.origin);
-}
-
 interface MockEnvelope<T> {
   code: number;
   message?: string;
@@ -49,11 +41,11 @@ const COMPLETE_PROFILE_ACTION = {
  *  with an active session, then drives onAdd-account → SMS login.
  *  TestApp gate evaluates against Alice's account key when no
  *  fresh-login lands. */
-async function setupPlatform(page: Page): Promise<{ baseUrl: string }> {
-  const origin = await originOf(page);
-  const baseUrl = fakeBaseUrl(origin);
+async function setupPlatform(page: Page): Promise<void> {
   await page.addInitScript(
-    ({ baseUrlInit }) => {
+    () => {
+      // Resolve after navigation: a fresh Playwright page has origin "null".
+      const baseUrlInit = `${window.location.origin}/__fake-platform/app`;
       const w = window as unknown as Record<string, unknown>;
       w.__privchatForcedMode = 'platform';
       w.__privchatForcedPlatformBaseUrl = baseUrlInit;
@@ -88,10 +80,8 @@ async function setupPlatform(page: Page): Promise<{ baseUrl: string }> {
         }),
       );
     },
-    { baseUrlInit: baseUrl },
   );
   await gotoAppFresh(page);
-  return { baseUrl };
 }
 
 /** Most tests need the gate to evaluate immediately. Default Alice has

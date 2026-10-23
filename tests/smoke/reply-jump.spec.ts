@@ -22,10 +22,11 @@ test('clicking a reply quote scrolls + flashes the original row', async ({
   // envelope payload — same shape the SDK builds when a real send
   // includes a reply.
   await page.evaluate(() => {
+    // Reply anchors are numeric snowflakes; keep large IDs lossless as strings.
     const replyEnvelope = JSON.stringify({
       content: 'second',
       mentioned_user_ids: [],
-      reply_to_message_id: 'sm-original',
+      reply_to_message_id: '18446744073709551614',
     });
     const payload = new TextEncoder().encode(replyEnvelope);
     (window as unknown as {
@@ -36,7 +37,7 @@ test('clicking a reply quote scrolls + flashes the original row', async ({
           {
             channel_id: '1001',
             channel_type: 1,
-            server_message_id: 'sm-original',
+            server_message_id: '18446744073709551614',
             from_uid: '101',
             message_type: '0',
             content: 'first message — reply target',
@@ -48,7 +49,7 @@ test('clicking a reply quote scrolls + flashes the original row', async ({
           {
             channel_id: '1001',
             channel_type: 1,
-            server_message_id: 'sm-reply',
+            server_message_id: '18446744073709551615',
             from_uid: 'self',
             message_type: '0',
             content: 'second',
@@ -76,6 +77,6 @@ test('clicking a reply quote scrolls + flashes the original row', async ({
   // The jumpToMessage() helper adds `bg-primary/15` to the target row
   // for 1.5s. Tailwind compiles this to a class containing
   // `bg-primary/15` — the literal string is what Playwright sees.
-  const target = page.locator('[data-message-id="sm-original"]');
+  const target = page.locator('[data-message-id="18446744073709551614"]');
   await expect(target).toHaveClass(/bg-primary\/15/);
 });

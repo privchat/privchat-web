@@ -32,6 +32,8 @@ test('plain timeline stays at the tail when the last row grows asynchronously', 
   }, CHANNEL_ID);
 
   await page.getByText('hello there').first().click();
+  const isVirtual = (await page.locator('[data-virtual-timeline="1"]').count()) > 0;
+  test.skip(isVirtual, 'plain-only spec - disable VITE_PRIVCHAT_VIRTUAL_TIMELINE');
   const timeline = page.locator('[data-plain-timeline="1"]');
   await expect(timeline).toBeVisible();
   await expect(page.locator(`[data-message-id="${LAST_MESSAGE_ID}"]`)).toBeVisible();

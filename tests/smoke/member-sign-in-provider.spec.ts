@@ -78,18 +78,32 @@ test.describe('member sign-in provider', () => {
   });
 
   test('rejects calls without an active token', async ({ page }) => {
+    let hits = 0;
+    await page.route('**/__sign-in/app/member/sign-in/**', async (route) => {
+      hits += 1;
+      await fulfill(route, {});
+    });
     const result = await page.evaluate(async () => {
       const { PlatformMemberSignInProvider } = await import(
         '/src/lib/member-sign-in-provider.ts'
       );
-      const provider = new PlatformMemberSignInProvider('/__sign-in/app', () => null);
+      const provider = new PlatformMemberSignInProvider(
+        `${window.location.origin}/__sign-in/app`,
+        () => null,
+      );
       try {
         await provider.getSummary('1001');
         return null;
       } catch (error) {
-        return error instanceof Error ? error.name : String(error);
+        return error instanceof Error
+          ? { name: error.name, message: error.message }
+          : String(error);
       }
     });
-    expect(result).toBe('PlatformConfigError');
+    expect(result).toEqual({
+      name: 'PlatformConfigError',
+      message: 'PlatformMemberSignInProvider requires an active access token',
+    });
+    expect(hits).toBe(0);
   });
 });
