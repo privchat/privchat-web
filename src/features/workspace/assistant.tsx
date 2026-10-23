@@ -6,7 +6,7 @@ import { matchingEmployeeBindings, ReviewEvidenceFields } from './workflow-targe
 import { ConsoleIntent } from './console-intent';
 import { PlatformHttpError } from '@/lib/platform-errors';
 import { roomFailure } from './room-observer';
-import { assistantErrorLabel, conversationPage, type AssistantActionKind, type AssistantContext, type AssistantIdentity, type AssistantMessage, type AssistantReference, type ConversationSendResult } from './assistant-api';
+import { assistantErrorLabel, assistantReplyText, conversationPage, isAssistantTask, type AssistantActionKind, type AssistantContext, type AssistantIdentity, type AssistantMessage, type AssistantReference, type ConversationSendResult } from './assistant-api';
 
 const field = 'block w-full min-w-0 rounded border bg-background px-3 py-2 text-sm';
 
@@ -33,6 +33,7 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
   const [description, setDescription] = useState('');
   const [targetError, setTargetError] = useState(false);
   const [kind, setKind] = useState<AssistantActionKind>('help');
+  const [advanced, setAdvanced] = useState(false);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -50,9 +51,9 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
   const space = spaces.find(s => s.id === spaceId);
   const candidates = matchingEmployeeBindings(employee, bindings, nodes);
   const workspaceAction = kind === 'assign' || kind === 'review';
-  const valid = !targetError && (kind === 'help' || workspaceAction
+  const valid = !advanced || (!targetError && (kind === 'help' || workspaceAction
     ? kind === 'help' || (!!item && space?.archived === 0 && !['done', 'cancelled'].includes(item.status) && candidates.some(b => b.id === bindingId) && (kind !== 'review' || (!!description.trim() && links.some(l => l.id === source && l.state === 'succeeded' && l.executionId))))
-    : spaceId ? !!source && links.some(l => l.id === source && l.executionId) : !!employeeId && (kind !== 'cancel' || !!executionId));
+    : spaceId ? !!source && links.some(l => l.id === source && l.executionId) : !!employeeId && (kind !== 'cancel' || !!executionId)));
   const locked = busy || intent.current.hasPending;
   const merge = (rows: AssistantMessage[]) => setMessages(old => [...new Map([...old, ...rows].map(m => [m.id, m])).values()].sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0));
   async function refresh() {
@@ -114,15 +115,15 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
   async function send() {
     if (inFlight.current) return;
     if (!intent.current.hasPending && (!valid || !text.trim())) return;
-    if (kind === 'cancel' && !intent.current.hasPending && !window.confirm(label('confirm'))) return;
+    if (advanced && kind === 'cancel' && !intent.current.hasPending && !window.confirm(label('confirm'))) return;
     inFlight.current = true; setBusy(true); setError(''); onLockChange(true);
     try {
-      const context: AssistantContext = kind === 'help' ? {} : workspaceAction ? {
+      const context: AssistantContext = !advanced || kind === 'help' ? {} : workspaceAction ? {
         workspaceId: spaceId, workItemId: itemId, workItemVersion: item!.version, agentId: employeeId, bindingId,
         ...(kind === 'review' ? {workExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description} : {}),
       } : spaceId ? {workspaceId: spaceId, workItemId: itemId, workExecutionId: source}
         : executionId && kind !== 'send_employee' ? {agentId: employeeId, executionId} : {agentId: employeeId};
-      const result = await intent.current.run<ConversationSendResult>(api, '/assistant/conversation/send', {text, action: {kind, context}}, 'requestId', r => r.status === 'pending');
+      const result = await intent.current.run<ConversationSendResult>(api, '/assistant/conversation/send', {text, ...(advanced ? {action: {kind, context}} : {})}, 'requestId', r => r.status === 'pending');
       if (!live.current) return;
       merge(result.messages); setReceipt(result.status);
       if (!intent.current.hasPending) setText('');
@@ -149,17 +150,21 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
         {!loading && !messages.length && <p>{label('empty')}</p>}
         {messages.map(m => <article data-testid="assistant-message" key={m.id} className="min-w-0 space-y-1 rounded border p-3">
           <p className="text-xs text-muted-foreground">{label(m.role === 'user' ? 'messageUser' : 'assistantTitle')} · {new Date(m.createdAt).toLocaleString(i18n.resolvedLanguage)}</p>
-          {m.role === 'user' ? <p className="whitespace-pre-wrap break-words">{m.text}</p> : m.result ? <>
-            <p>{label(['accepted', 'completed', 'rejected', 'unknown'].includes(m.result.outcome) ? `outcome_${m.result.outcome}` : 'unknown')}{m.result.state && ` · ${label(['accepted', 'dispatched', 'waiting_user', 'cancelling', 'queued', 'running', 'succeeded', 'failed', 'cancelled', 'unknown', 'waiting_permission', 'pending'].includes(m.result.state) ? `execution_${m.result.state}` : 'unknown')}`}</p>
-            {!m.result.reference && m.result.outcome === 'completed' && <p>{label('assistantHint')}</p>}
+          {m.role !== 'user' && isAssistantTask(m.result) && typeof m.result?.detail === 'string' && m.result.detail.trim() && <p className="text-xs text-muted-foreground">{label('assistantEmployeeOutput')}</p>}
+          {(m.role === 'user' ? [m.text] : assistantReplyText(m)).map((body, index) => <p key={index} className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{body}</p>)}
+          {m.role !== 'user' && m.result && <>
+            {!['clarification', 'help'].includes(m.result.replyKind ?? '') && <p data-testid="assistant-task-status">{label(['accepted', 'completed', 'rejected', 'unknown'].includes(m.result.outcome) ? `outcome_${m.result.outcome}` : 'unknown')}{m.result.state && ` · ${label(['accepted', 'dispatched', 'waiting_user', 'cancelling', 'queued', 'running', 'succeeded', 'failed', 'cancelled', 'unknown', 'waiting_permission', 'pending'].includes(m.result.state) ? `execution_${m.result.state}` : 'unknown')}`}</p>}
             {m.result.errorCode && <><p>{label(assistantErrorLabel(m.result.errorCode, m.result.outcome))}</p><code className="break-all">{m.result.errorCode}</code></>}
-          </> : <p>{label('assistantHint')}</p>}
+          </>}
           {m.result?.reference && <><p className="break-all text-xs">{Object.entries(m.result.reference).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' · ')}</p><Button variant="outline" disabled={locked} onClick={() => onConsole(m.result!.reference)}>{label('openTarget')}</Button></>}
         </article>)}
       </section>
       {receipt && <p role="status">{label('assistantReceipt')}: {label(receipt === 'settled' ? 'receiptSettled' : 'pending')}</p>}
       <form className="space-y-3" onSubmit={e => {e.preventDefault(); void send();}}>
         <fieldset disabled={locked || !ready} className="min-w-0 space-y-3">
+          <label className="block">{label('assistantGoal')}<textarea className={field} value={text} onChange={e => setText(e.target.value)}/></label>
+          <Button type="button" variant="outline" aria-expanded={advanced} aria-controls="assistant-advanced" onClick={() => setAdvanced(value => !value)}>{label('assistantAdvanced')}</Button>
+          {advanced && <div id="assistant-advanced" className="space-y-3">
           <label className="block">{label('assistantAction')}<select className={field} value={kind} onChange={e => {setKind(e.target.value as AssistantActionKind); setExecutionId(''); setSource(''); if (e.target.value === 'send_employee') setSpaceId('');}}>{(['help', 'status', 'send_employee', 'assign', 'review', 'cancel'] as const).map(k => <option key={k} value={k}>{label(`action_${k}`)}</option>)}</select></label>
           {kind !== 'help' && kind !== 'send_employee' && <>
             <label className="block">{label('spaces')}<select className={field} value={spaceId} onChange={e => setSpaceId(e.target.value)}><option value="">{label('privateTarget')}</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
@@ -172,7 +177,7 @@ export function AssistantPage({api, onBack, onConsole, onLockChange}: {api: Work
             {kind === 'review' && <ReviewEvidenceFields links={links} notes={notes} source={source} onSource={setSource} description={description} onDescription={setDescription} evidence={evidence} onEvidence={setEvidence} maxDescription={2000}/>}
             {!workspaceAction && kind !== 'send_employee' && (spaceId ? <label className="block">{label('executions')}<select className={field} value={source} onChange={e => setSource(e.target.value)}><option value="">{label('executions')}</option>{links.filter(l => l.executionId).map(l => <option key={l.id} value={l.id}>{l.id} · {l.executionId} · {l.state}</option>)}</select></label> : <label className="block">{label('executions')}<select className={field} value={executionId} onChange={e => setExecutionId(e.target.value)}><option value="">{label('managedSession')}</option>{executions.map(e => <option key={e.executionId} value={e.executionId}>{e.executionId} · {e.state}</option>)}</select></label>)}
           </>}
-          <label className="block">{label('assistantGoal')}<textarea className={field} value={text} onChange={e => setText(e.target.value)}/></label>
+          </div>}
         </fieldset>
         {intent.current.hasPending ? <><p role="status">{label('retryRecovery')}</p><Button disabled={busy} type="submit">{label('retrySame')}</Button></> : <Button disabled={busy || !ready || !text.trim() || !valid}>{label('sendEmployee')}</Button>}
       </form>

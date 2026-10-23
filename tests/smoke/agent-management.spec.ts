@@ -93,6 +93,7 @@ test('assistant resends the identical request after lost response and localizes 
     await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: [{id: '11', requestId: body.requestId, role: 'user', text: body.text, kind: 'message', createdAt: 1}, {id: '12', requestId: body.requestId, role: 'assistant', text: 'Execution 9: running', kind: 'reply', createdAt: 2, result: {outcome: 'accepted', summary: 'Execution 9: running', state: 'running', reference: {executionId: '9', agentId: '3'}}}]}}});
   });
   const p = page.getByTestId('assistant-page');
+  await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
   await p.getByLabel('Explicit action').selectOption('send_employee');
   await p.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3');
   await p.getByLabel('Goal or message').fill('Implement only core');
@@ -113,6 +114,7 @@ test('assistant workspace assign and review use version, matching binding and so
   const bodies: any[] = [];
   await assistantRoutes(page, async route => {const body = route.request().postDataJSON(); bodies.push(body); await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: []}}});});
   const p = page.getByTestId('assistant-page');
+  await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
   await p.getByLabel('Explicit action').selectOption('assign');
   await p.getByRole('combobox', {name: /^Workspaces/}).selectOption('4');
   await p.getByRole('combobox', {name: /^Work items/}).selectOption('5');
@@ -214,6 +216,7 @@ test('assistant automatically reads authoritative reports without sending anothe
     await route.fulfill({json: {code: 0, data: {items: [{id: '100', requestId: 'prior-request', role: 'assistant', text: 'Execution 9: succeeded', kind: 'report', createdAt: 1, result: {outcome: 'completed', state: 'succeeded', summary: 'Execution 9: succeeded', reference: {executionId: '9'}}}], nextAfterId: '100', hasMore: false}}});
   });
   await expect(p.getByText('Request completed · Execution succeeded; acceptance still required', {exact: true})).toBeVisible({timeout: 10000});
+  await expect(p).not.toContainText('Execution 9: succeeded');
   expect(reports).toBeGreaterThan(0); expect(sends).toBe(0);
 });
 
@@ -225,6 +228,7 @@ test('assistant refreshes source work executions so a completed assignment becom
     await route.fulfill({json: {code: 0, data: [{...link, state: reads === 1 ? 'running' : 'succeeded'}]}});
   });
   const p = page.getByTestId('assistant-page');
+  await p.getByRole('button', {name: 'Advanced explicit controls (optional)'}).click();
   await p.getByLabel('Explicit action').selectOption('review');
   await p.getByRole('combobox', {name: /^Workspaces/}).selectOption('4');
   await p.getByRole('combobox', {name: /^Work items/}).selectOption('5');
@@ -233,4 +237,157 @@ test('assistant refreshes source work executions so a completed assignment becom
   await expect(source.getByRole('option', {name: '8 · 9 · succeeded', exact: true})).toBeAttached({timeout: 10000});
   await source.selectOption('8');
   expect(reads).toBeGreaterThan(1); expect(sends).toBe(0);
+});
+
+const naturalCommands = [
+  '让「开发」做登录修复',
+  '让「开发」处理「登录修复」任务：修复验证码',
+  '让「评审」评审「登录修复」任务，证据：commit abc123',
+  '查看「开发」的进度',
+  '停止「开发」的任务',
+];
+
+for (const command of naturalCommands) {
+  test(`natural Chinese command sends no action: ${command}`, async ({page}) => {
+    const bodies: any[] = [];
+    const detail = '已处理中文指令；评审证据 commit abc123。\n尚未验收或发布。';
+    await assistantRoutes(page, async route => {
+      const body = route.request().postDataJSON(); bodies.push(body);
+      await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: [
+        {id: '201', requestId: body.requestId, role: 'user', text: body.text, kind: 'message', createdAt: 1},
+        {id: '202', requestId: body.requestId, role: 'assistant', text: 'Execution 9: running', kind: 'reply', createdAt: 2, result: {replyKind: 'task', outcome: 'accepted', summary: 'Execution 9: running', state: 'running', detail, reference: {executionId: '9'}}},
+      ]}}});
+    });
+    const p = page.getByTestId('assistant-page');
+    await expect(p.getByRole('combobox')).toHaveCount(0);
+    await p.getByLabel('Goal or message').fill(command);
+    await p.getByRole('button', {name: 'Send message', exact: true}).click();
+    await expect(p.getByText(command, {exact: true})).toBeVisible();
+    await expect(p.getByText(detail, {exact: true})).toBeVisible();
+    await expect(p.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toBeVisible();
+    await expect(p.getByTestId('assistant-task-status')).toHaveText('Accepted; not completed · Running');
+    await expect(p).not.toContainText('Execution 9: running');
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toEqual({requestId: expect.any(String), text: command});
+    expect(bodies[0].requestId).toHaveLength(36);
+  });
+}
+
+test('natural clarification/help keep text; legacy tasks without replyKind keep localized state and safe detail', async ({page}) => {
+  const bodies: any[] = [];
+  const clarification = '有两位名为「开发」的员工，请明确员工名称。';
+  const help = '支持按名称指派、评审、查看进度和停止任务。';
+  const legacy = '请补充要处理的任务名称。';
+  const literal = '<img src=x onerror="window.__unsafe=true">';
+  const replies = [
+    {text: clarification, result: {outcome: 'completed', summary: clarification, replyKind: 'clarification', state: 'succeeded', detail: null}},
+    {text: '', result: {outcome: 'completed', summary: help, replyKind: 'help', state: 'succeeded', detail: literal}},
+    {text: legacy},
+    {text: '未来回复类型仍可阅读', result: {outcome: 'completed', summary: '未来回复类型仍可阅读', replyKind: 'future', detail: {internal: 'must not stringify'}}},
+    {text: 'Raw legacy state-only reply', result: {outcome: 'accepted', summary: 'Raw legacy state-only summary', state: 'running', detail: '旧服务员工输出：正在修复登录。'}},
+    {text: 'Raw legacy reference-only reply', result: {outcome: 'completed', summary: 'Raw legacy reference-only summary', reference: {executionId: '9'}, detail: '旧服务员工输出：评审发现缺少测试。'}},
+    {text: 'Raw legacy nullable-kind reply', result: {outcome: 'completed', summary: 'Raw legacy nullable-kind summary', replyKind: null, state: 'succeeded', reference: {executionId: '9'}, detail: '旧服务员工输出：等待人工验收。'}},
+  ];
+  await assistantRoutes(page, async route => {
+    const body = route.request().postDataJSON(); bodies.push(body);
+    const reply = replies[bodies.length - 1];
+    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: [{id: String(300 + bodies.length), requestId: body.requestId, role: 'assistant', kind: 'reply', createdAt: 1, ...reply}]}}});
+  });
+  const p = page.getByTestId('assistant-page');
+  for (const [index, command] of ['让「开发」做登录修复', '帮助', '处理任务', '查看进度', '查看「开发」的进度', '查看「评审」的进度', '查看「测试」的进度'].entries()) {
+    await p.getByLabel('Goal or message').fill(command);
+    await p.getByRole('button', {name: 'Send message', exact: true}).click();
+    await expect.poll(() => bodies.length).toBe(index + 1);
+    await expect(p.getByLabel('Goal or message')).toHaveValue('');
+  }
+  for (const text of [clarification, help, legacy, literal, '未来回复类型仍可阅读']) {
+    await expect(p.getByText(text, {exact: true})).toHaveCount(1);
+    await expect(p.getByText(text, {exact: true})).toBeVisible();
+  }
+  for (const text of [clarification, help]) {
+    const reply = p.getByTestId('assistant-message').filter({has: page.getByText(text, {exact: true})});
+    await expect(reply.getByTestId('assistant-task-status')).toHaveCount(0);
+    await expect(reply).not.toContainText(/Accepted|Request completed|Execution succeeded/);
+    await expect(reply.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toHaveCount(0);
+  }
+  for (const [detail, status] of [
+    ['旧服务员工输出：正在修复登录。', 'Accepted; not completed · Running'],
+    ['旧服务员工输出：评审发现缺少测试。', 'Request completed'],
+    ['旧服务员工输出：等待人工验收。', 'Request completed · Execution succeeded; acceptance still required'],
+  ]) {
+    const reply = p.getByTestId('assistant-message').filter({has: page.getByText(detail!, {exact: true})});
+    await expect(reply.getByText(detail!, {exact: true})).toBeVisible();
+    await expect(reply.getByTestId('assistant-task-status')).toHaveText(status!);
+    await expect(reply.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toBeVisible();
+  }
+  await expect(p).not.toContainText('Raw legacy');
+  await expect(p.locator('img')).toHaveCount(0);
+  await expect(p).not.toContainText('must not stringify');
+  for (const body of bodies) expect(Object.keys(body).sort()).toEqual(['requestId', 'text']);
+  expect(new Set(bodies.map(body => body.requestId)).size).toBe(7);
+});
+
+test('natural retries preserve the identical Chinese body and key across ambiguous errors and pending receipt', async ({page}) => {
+  const bodies: any[] = [];
+  await assistantRoutes(page, async route => {
+    const body = route.request().postDataJSON(); bodies.push(body);
+    if (bodies.length === 1) return route.abort();
+    if (bodies.length === 2) return route.fulfill({status: 500, body: 'response lost'});
+    if (bodies.length === 3) return route.fulfill({json: {code: 4, message: 'BUSY'}});
+    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: bodies.length === 4 ? 'pending' : 'settled', messages: [{id: '401', requestId: body.requestId, role: 'assistant', text: '正在查询', kind: 'reply', createdAt: 1, result: {replyKind: 'task', summary: '正在查询', outcome: 'accepted', state: 'running', detail: '开发正在修复登录验证码。'}}]}}});
+  });
+  const p = page.getByTestId('assistant-page');
+  const input = p.getByLabel('Goal or message');
+  await input.fill('查看「开发」的进度');
+  await p.getByRole('button', {name: 'Send message', exact: true}).click();
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    await expect(p.getByRole('button', {name: 'Retry same request'})).toBeEnabled();
+    await expect(input).toBeDisabled();
+    await expect(p.getByRole('button', {name: 'Advanced explicit controls (optional)'})).toBeDisabled();
+    await expect(p.getByRole('button', {name: 'Back', exact: true})).toBeDisabled();
+    await p.getByRole('button', {name: 'Retry same request'}).click();
+    await expect.poll(() => bodies.length).toBe(attempt + 1);
+  }
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue('');
+  await expect(p.getByText('开发正在修复登录验证码。', {exact: true})).toHaveCount(1);
+  for (const body of bodies) expect(body).toEqual(bodies[0]);
+  expect(bodies[0]).toEqual({requestId: expect.any(String), text: '查看「开发」的进度'});
+});
+
+test('closing advanced mode ignores stale explicit target validation and sends natural text', async ({page}) => {
+  const bodies: any[] = [];
+  await assistantRoutes(page, async route => {
+    const body = route.request().postDataJSON(); bodies.push(body);
+    await route.fulfill({json: {code: 0, data: {requestId: body.requestId, status: 'settled', messages: []}}});
+  });
+  const p = page.getByTestId('assistant-page');
+  const toggle = p.getByRole('button', {name: 'Advanced explicit controls (optional)'});
+  await toggle.click();
+  await p.getByLabel('Explicit action').selectOption('assign');
+  await p.getByLabel('Goal or message').fill('让「开发」做登录修复');
+  await expect(p.getByRole('button', {name: 'Send message', exact: true})).toBeDisabled();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await p.getByRole('button', {name: 'Send message', exact: true}).click();
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0]).not.toHaveProperty('action');
+});
+
+test('polled task review report displays employee-provided final detail without another send', async ({page}) => {
+  let sends = 0;
+  await assistantRoutes(page, async route => {sends++; await route.abort();});
+  const p = page.getByTestId('assistant-page');
+  await expect(p.getByLabel('Goal or message')).toBeEnabled();
+  const detail = '评审报告：commit abc123\n发现验证码超时边界未覆盖，请补充测试。\n此评审不代表验收或发布。';
+  await page.route('**/__manage/app/assistant/conversation/list?**', async route => {
+    await route.fulfill({json: {code: 0, data: {items: [{id: '501', requestId: 'earlier-review', role: 'assistant', kind: 'report', text: 'Execution 9: succeeded', createdAt: 1, result: {replyKind: 'task', outcome: 'completed', summary: 'Execution 9: succeeded', state: 'succeeded', detail, reference: {workspaceId: '4', workItemId: '5', executionId: '9'}}}], nextAfterId: '501', hasMore: false}}});
+  });
+  await expect(p.getByText(detail, {exact: true})).toBeVisible({timeout: 10000});
+  await expect(p.getByText('Employee-provided output, not a verified assistant audit or acceptance.', {exact: true})).toBeVisible();
+  await expect(p.getByTestId('assistant-task-status')).toHaveText('Request completed · Execution succeeded; acceptance still required');
+  await expect(p).not.toContainText('Execution 9: succeeded');
+  await p.getByRole('button', {name: 'Open this execution in console'}).click();
+  expect(await p.evaluate(el => el.parentElement?.dataset.reference)).toBe(JSON.stringify({workspaceId: '4', workItemId: '5', executionId: '9'}));
+  expect(sends).toBe(0);
 });
