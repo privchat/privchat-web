@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 const space = (id = 'w', extras = {}) => ({id, name: `Space ${id}`, description: 'One line', archived: 0, myRole: 'owner', employeeCount: 3, availableEmployeeCount: 1, employeeAvailabilityKnown: true, openItemCount: 2, lastActivityAt: null, ...extras});
 const node = {nodeId: 'n', name: 'Mac', state: 'active', granted: ['agent.codex'], capabilities: [{name: 'agent.codex', available: true}], workdirs: [{id: 'dir', label: 'Repository'}]};
 const employee = {id: 'ref', workspaceId: 'w', employeeId: 'emp', name: 'Engineer', nodeId: 'n', capability: 'agent.codex', workdirBindingId: 'dir', available: true, projectTargetIds: ['target']};
-const project = {id: 'p', workspaceId: 'w', name: 'Project', archived: 0, version: 7, targets: [{id: 'target', nodeId: 'n', workdirBindingId: 'dir'}]};
+const project = {id: 'p', ownerUserId: 'owner', writable: true, manageable: true, name: 'Project', archived: 0, version: 7, targets: [{id: 'target', nodeId: 'n', workdirBindingId: 'dir'}]};
 const item = (id: string, status = 'open', version = 1) => ({id, workspaceId: 'w', title: `Task ${id}`, description: '', status, version, createdAt: Number(id), closedAt: ['done', 'cancelled'].includes(status) ? Number(id) : null});
 const row = (id: string, status = 'open', version = 1) => ({item: item(id, status, version), latestExecution: {id: `link-${id}`, executionId: `exec-${id}`, employeeId: 'emp', state: 'succeeded'}, executionCount: 2});
 const feed = (items = [row('21'), row('22')], more = true) => ({items, olderCursor: more ? 'opaque-w' : null, hasOlder: more, refreshRequired: false});
@@ -46,8 +46,127 @@ test('project filter starts fresh tail; readonly keeps employee menu but disable
   const requests = await mock(page, path => path === '/workspace/page' ? {list: [space('w', {archived: 1})], total: 1} : undefined); await mount(page); await page.getByTestId('workspace-card').click(); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await expect.poll(() => requests.filter(r => r.path.endsWith('/activity/page')).at(-1)?.query.searchParams.get('projectId')).toBe('p'); expect(requests.filter(r => r.path.endsWith('/activity/page')).at(-1)?.query.searchParams.has('cursor')).toBe(false);
   await page.getByRole('button', {name: 'Manage', exact: true}).click(); await expect(page.getByRole('menuitem', {name: 'Create work item'})).toBeDisabled(); await expect(page.getByRole('menuitem', {name: 'Manage virtual employees'})).toBeEnabled();
 });
-test('project edit submits version and authorized mappings; workspace is immutable', async ({page}) => {
-  const requests = await mock(page); await mount(page); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Project management'}).click(); await page.getByRole('button', {name: 'Edit', exact: true}).click(); await page.getByLabel('Name', {exact: true}).fill('Renamed'); await expect(page.getByRole('combobox', {name: 'Workspace', exact: true}).last()).toBeDisabled(); await page.getByRole('button', {name: 'Save', exact: true}).click(); await expect.poll(() => requests.filter(r => r.path === '/workspace/project/update').length).toBe(1); expect(requests.find(r => r.path === '/workspace/project/update')).toMatchObject({method: 'PUT', body: {id: 'p', name: 'Renamed', version: 7, targets: [{nodeId: 'n', workdirBindingId: 'dir'}]}});
+test('project edit submits version and authorized mappings without workspace authority', async ({page}) => {
+  const requests = await mock(page); await mount(page); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Project management'}).click(); await page.getByRole('button', {name: 'Edit', exact: true}).click(); await page.getByLabel('Name', {exact: true}).fill('Renamed'); await expect(page.getByRole('combobox', {name: 'Workspace', exact: true})).toHaveCount(0); await page.getByRole('button', {name: 'Save', exact: true}).click(); await expect.poll(() => requests.filter(r => r.path === '/workspace/project/update').length).toBe(1); expect(requests.find(r => r.path === '/workspace/project/update')?.body).toEqual({id: 'p', name: 'Renamed', version: 7, targets: [{nodeId: 'n', workdirBindingId: 'dir'}]}); expect(requests.some(r => r.path === '/workspace/list')).toBe(false);
+});
+
+async function openProjects(page: Page) {
+  await mount(page); await page.getByRole('button', {name: 'Manage', exact: true}).click();
+  await page.getByRole('menuitem', {name: 'Project management', exact: true}).click();
+  await expect(page.getByTestId('project-management')).toBeVisible();
+}
+async function openProjectSettings(page: Page) {
+  await mount(page); await page.getByTestId('workspace-card').first().click();
+  await page.getByRole('button', {name: 'Manage', exact: true}).click();
+  await expect(page.getByRole('menuitem')).toHaveText(['Create work item', 'Manage virtual employees', 'Space settings']);
+  await page.getByRole('menuitem', {name: 'Space settings', exact: true}).click();
+  return page.getByTestId('workspace-project-links');
+}
+
+test('standalone creation has no spaces dropdown, spaces fetch, or reverse links', async ({page}) => {
+  const requests = await mock(page); await openProjects(page);
+  const start = requests.length;
+  await page.getByRole('button', {name: 'Create', exact: true}).click();
+  await expect(page.getByRole('combobox', {name: 'Workspace', exact: true})).toHaveCount(0);
+  await page.getByLabel('Name', {exact: true}).fill('Independent');
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/project/create').length).toBe(1);
+  expect(requests.find(r => r.path === '/workspace/project/create')?.body).toEqual({name: 'Independent', targets: []});
+  expect(requests.slice(start).some(r => r.path === '/workspace/list' || r.path === '/workspace/page' || r.path.includes('/link/'))).toBe(false);
+  expect(requests.filter(r => r.path === '/workspace/project/page').every(r => !r.query.searchParams.has('workspaceId'))).toBe(true);
+});
+
+for (const legacy of [undefined, null, 'foreign-space']) test(`direct project permissions ignore legacy workspace ${legacy}`, async ({page}) => {
+  await mock(page, path => path === '/workspace/project/page' ? {list: [
+    {...project, id: 'writable', name: 'Writable', workspaceId: legacy, writable: true, manageable: false},
+    {...project, id: 'manager', name: 'Manager', workspaceId: legacy, writable: false, manageable: true},
+    {...project, id: 'reader', name: 'Reader', workspaceId: 'w', writable: false, manageable: false},
+  ], total: 3} : undefined);
+  await openProjects(page); const articles = page.getByTestId('project-management').locator('article');
+  await expect(articles.nth(0).getByRole('button', {name: 'Edit', exact: true})).toBeEnabled();
+  await expect(articles.nth(0).getByRole('button', {name: 'Archived', exact: true})).toBeEnabled();
+  await expect(articles.nth(1).getByRole('button', {name: 'Edit', exact: true})).toBeDisabled();
+  await expect(articles.nth(1).getByRole('button', {name: 'Archived', exact: true})).toBeDisabled();
+  await expect(articles.nth(2).getByRole('button', {name: 'Edit', exact: true})).toBeDisabled();
+  await expect(articles.nth(2).getByRole('button', {name: 'Archived', exact: true})).toBeDisabled();
+});
+
+test('fresh project detail permissions can revoke editing; save conflicts require reload', async ({page}) => {
+  let writable = false;
+  const requests = await mock(page, path => path === '/workspace/project/get/p' ? {...project, writable} : path === '/workspace/project/update' ? 'abort' : undefined);
+  await openProjects(page); await page.getByRole('button', {name: 'Edit', exact: true}).click();
+  await expect(page.getByLabel('Name', {exact: true})).toBeDisabled();
+  await expect(page.getByRole('button', {name: 'Save', exact: true})).toBeDisabled();
+  await page.getByRole('button', {name: 'Cancel', exact: true}).click(); writable = true;
+  await page.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(page.getByRole('alert')).toContainText('Reload before editing again');
+  await expect(page.getByLabel('Name', {exact: true})).toBeDisabled();
+  expect(requests.filter(r => r.path === '/workspace/project/update')).toHaveLength(1);
+});
+
+test('Settings pages standalone manageable candidates; linking and unlinking preserve project/history', async ({page}) => {
+  let linked = [project];
+  const candidate = {...project, id: 'p21', name: 'Standalone 21', workspaceId: null};
+  const requests = await mock(page, (path, query, body) => {
+    if (path === '/workspace/project/list' || path === '/workspace/project/link/list') return linked;
+    if (path === '/workspace/project/page') return query.searchParams.get('pageNo') === '2'
+      ? {list: [candidate], total: 21}
+      : {list: Array.from({length: 20}, (_, index) => ({...project, id: `readonly-${index}`, name: `Not owned ${index}`, manageable: false})), total: 21};
+    if (path === '/workspace/project/link/create') {linked = [...linked, candidate]; return {...candidate, id: body.projectId};}
+    if (path === '/workspace/project/link/delete') {linked = linked.filter(p => p.id !== query.searchParams.get('projectId')); return null;}
+  });
+  const panel = await openProjectSettings(page);
+  await expect(panel.getByRole('button', {name: 'Unlink project', exact: true})).toBeEnabled();
+  await expect(panel.getByRole('button', {name: 'Link project', exact: true})).toHaveCount(0);
+  await panel.getByRole('button', {name: 'Load more', exact: true}).click();
+  await expect(panel).toContainText('Standalone 21'); await expect(panel).not.toContainText('Not owned');
+  await panel.getByRole('button', {name: 'Link project', exact: true}).click();
+  await expect(panel.getByRole('button', {name: 'Unlink project', exact: true})).toHaveCount(2);
+  const filter = page.getByRole('combobox', {name: 'Project', exact: true});
+  await expect(filter.getByRole('option', {name: 'Standalone 21'})).toHaveCount(1); await filter.selectOption('p21');
+  await panel.locator('article').filter({hasText: 'Standalone 21'}).getByRole('button', {name: 'Unlink project', exact: true}).click();
+  await expect(filter).toHaveValue(''); await expect(filter.getByRole('option', {name: 'Standalone 21'})).toHaveCount(0);
+  await expect(page.getByTestId('task-card')).toHaveCount(2);
+  expect(requests.filter(r => r.path === '/workspace/project/page').map(r => r.query.searchParams.get('pageNo'))).toEqual(['1', '2']);
+  expect(requests.filter(r => r.path === '/workspace/project/page').every(r => !r.query.searchParams.has('workspaceId'))).toBe(true);
+  const writes = requests.filter(r => r.method !== 'GET');
+  expect(writes.map(r => [r.method, r.path])).toEqual([['POST', '/workspace/project/link/create'], ['DELETE', '/workspace/project/link/delete']]);
+  expect(writes[0]?.body).toEqual({workspaceId: 'w', projectId: 'p21'});
+  expect(Object.fromEntries(writes[1]!.query.searchParams)).toEqual({workspaceId: 'w', projectId: 'p21'});
+  expect(requests.some(r => r.path === '/agent/nodes/grant' || r.path === '/agent/nodes/revoke')).toBe(false);
+});
+
+for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) test(`Settings cannot link without workspace management ${JSON.stringify(extras)}`, async ({page}) => {
+  const requests = await mock(page, path => path === '/workspace/page' ? {list: [space('w', extras)], total: 1} : path === '/workspace/project/link/list' ? [project] : undefined);
+  const panel = await openProjectSettings(page);
+  await expect(panel.getByRole('button', {name: 'Unlink project', exact: true})).toBeDisabled();
+  await expect(panel.getByRole('button', {name: 'Link project', exact: true})).toHaveCount(0);
+  expect(requests.some(r => r.path === '/workspace/project/page' || r.method !== 'GET')).toBe(false);
+});
+
+test('Settings permits unlink without project ownership and fails closed after rejected link', async ({page}) => {
+  let rejected = true;
+  let linked = [{...project, ownerUserId: 'another-owner', writable: false, manageable: false}];
+  const requests = await mock(page, path => {
+    if (path === '/workspace/project/link/list' || path === '/workspace/project/list') return linked;
+    if (path === '/workspace/project/page') return {list: [{...project, id: 'other', name: 'Other'}], total: 1};
+    if (path === '/workspace/project/link/create' && rejected) return 'abort';
+    if (path === '/workspace/project/link/delete') {linked = []; return null;}
+  });
+  const panel = await openProjectSettings(page);
+  await expect(panel.getByRole('button', {name: 'Unlink project', exact: true})).toBeEnabled();
+  await expect(panel.getByRole('button', {name: 'Edit', exact: true})).toHaveCount(0);
+  await panel.getByRole('button', {name: 'Unlink project', exact: true}).click();
+  await expect(panel.getByRole('button', {name: 'Unlink project', exact: true})).toHaveCount(0);
+  expect(requests.some(r => r.path.startsWith('/workspace/project/get/'))).toBe(false);
+  expect(requests.find(r => r.path === '/workspace/project/link/delete')?.method).toBe('DELETE');
+  await panel.getByRole('button', {name: 'Link project', exact: true}).click();
+  await expect(panel.getByRole('alert')).toBeVisible();
+  await expect(panel.getByRole('button', {name: 'Link project', exact: true})).toBeDisabled();
+  expect(requests.filter(r => r.path === '/workspace/project/link/create')).toHaveLength(1);
+  rejected = false; await panel.getByRole('button', {name: 'Reload', exact: true}).click();
+  await expect(panel.getByRole('button', {name: 'Link project', exact: true})).toBeEnabled();
 });
 test('lost assignment retains saved item and original key; candidates come from associations', async ({page}) => {
   let lost = true; const requests = await mock(page, path => {if (path === '/workspace/work-execution/assign') {if (lost) {lost = false; return 'abort';} return {id: 'link', executionId: 'exec', state: 'accepted'};}}); page.on('dialog', dialog => dialog.accept());

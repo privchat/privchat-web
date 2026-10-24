@@ -29,6 +29,7 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
   const [busy, setBusy] = useState(false);
   const [locked, setLocked] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [settings, setSettings] = useState(false);
   const generation = useRef(0);
   const readOnly = !space || space.archived !== 0 || !['owner', 'admin', 'member'].includes(space.myRole);
   function lock(value: boolean) {setLocked(value); onLockChange(value);}
@@ -59,9 +60,10 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
     <Button disabled={busy || !name.trim()} type="submit">{l('save')}</Button><Button variant="ghost" type="button" disabled={busy} onClick={() => setRoute('home')}>{l('cancel')}</Button>
   </form>;
   if (route === 'space' && space) return <section className="space-y-3" data-testid="workspace-detail">
-    <header className="flex items-center justify-between gap-2"><Button variant="ghost" disabled={locked} onClick={() => {setSpace(undefined); setRoute('home'); setDetail(undefined); setProjectId(''); void load();}}>{l('back')}</Button><h2 className="min-w-0 flex-1 truncate font-semibold">{space.name}</h2>
-      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" disabled={locked} aria-label={l('manage')}><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={readOnly} onSelect={() => setRoute('create-item')}>{l('createItem')}</DropdownMenuItem><DropdownMenuItem onSelect={() => setRoute('employees')}>{l('manageEmployees')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+    <header className="flex items-center justify-between gap-2"><Button variant="ghost" disabled={locked} onClick={() => {setSpace(undefined); setRoute('home'); setDetail(undefined); setProjectId(''); setSettings(false); void load();}}>{l('back')}</Button><h2 className="min-w-0 flex-1 truncate font-semibold">{space.name}</h2>
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" disabled={locked} aria-label={l('manage')}><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={readOnly} onSelect={() => setRoute('create-item')}>{l('createItem')}</DropdownMenuItem><DropdownMenuItem onSelect={() => setRoute('employees')}>{l('manageEmployees')}</DropdownMenuItem><DropdownMenuItem onSelect={() => setSettings(value => !value)}>{l('settings')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
     </header>{readOnly && <p>{l('readOnly')}</p>}
+    {settings && <WorkspaceProjectLinks key={space.id} api={api} workspace={space} onLockChange={lock} onChanged={removedId => {if (removedId === projectId) setProjectId(''); setRevision(value => value + 1);}}/>}
     <div hidden={!!detail}>
       <label>{l('project')}<select className={workspaceField} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
       <TaskFeed key={`${space.id}:${projectId}:${revision}`} api={api} client={client} workspaceId={space.id} projectId={projectId || undefined} onOpen={setDetail}/>
@@ -80,6 +82,61 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
       {s.lastActivityAt != null && <p className="text-xs text-muted-foreground">{l('activity')}: {new Date(s.lastActivityAt).toLocaleString()}</p>}
     </button>)}</div>
     {spaces.length < total && <Button disabled={busy} onClick={() => void load(page + 1)}>{l('more')}</Button>}
+  </section>;
+}
+
+function WorkspaceProjectLinks({api, workspace, onLockChange, onChanged}: {api: WorkspaceApi; workspace: WorkspaceSummary; onLockChange: (locked: boolean) => void; onChanged: (removedId?: string) => void}) {
+  const l = usePageLabels();
+  const manager = workspace.archived === 0 && ['owner', 'admin'].includes(workspace.myRole);
+  const [linked, setLinked] = useState<Project[]>([]);
+  const [candidates, setCandidates] = useState<Project[]>([]);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const live = useRef(false);
+  const running = useRef(false);
+  async function load(next = 1) {
+    if (running.current) return;
+    running.current = true; setBusy(true); setError(false);
+    try {
+      const [links, result] = await Promise.all([
+        api.projectLinks(workspace.id),
+        manager ? api.projectPage(next) : Promise.resolve({list: [], total: 0}),
+      ]);
+      if (!live.current) return;
+      setLinked(links);
+      setCandidates(old => next === 1 ? result.list : [...old, ...result.list]);
+      setPage(next); setHasMore(next * 20 < result.total); setReady(true);
+    } catch {if (live.current) {setError(true); setReady(false);}}
+    finally {running.current = false; if (live.current) setBusy(false);}
+  }
+  useEffect(() => {live.current = true; void load(); return () => {live.current = false;};}, [api, workspace.id, manager]);
+  async function change(project: Project, unlink: boolean) {
+    if (running.current || !ready || !manager || (!unlink && !project.manageable)) return;
+    running.current = true; setBusy(true); setError(false); onLockChange(true);
+    try {
+      if (unlink) await api.unlinkProject(workspace.id, project.id);
+      else await api.linkProject(workspace.id, project.id);
+      if (live.current) onChanged(unlink ? project.id : undefined);
+      const links = await api.projectLinks(workspace.id);
+      if (live.current) setLinked(links);
+    } catch {if (live.current) {setError(true); setReady(false);}}
+    finally {running.current = false; onLockChange(false); if (live.current) setBusy(false);}
+  }
+  return <section data-testid="workspace-project-links" className="space-y-3 rounded border p-3" aria-label={l('settings')}>
+    <h3>{l('settings')}</h3><p>{l('unlinkProjectHint')}</p>
+    {error && <p role="alert">{l('error')}</p>}
+    {busy && <p role="status">{l('loading')}</p>}
+    <Button variant="outline" disabled={busy} onClick={() => void load()}>{l('reload')}</Button>
+    <h4>{l('linkedProjects')}</h4>
+    {ready && !linked.length && <p>{l('empty')}</p>}
+    {linked.map(project => <article key={project.id} className="flex flex-wrap items-center justify-between gap-2"><span className="min-w-0 flex-1 break-words">{project.name}</span><Button disabled={busy || !ready || !manager} onClick={() => void change(project, true)}>{l('unlinkProject')}</Button></article>)}
+    {manager && <><h4>{l('projectCandidates')}</h4>
+      {candidates.filter(project => project.manageable && project.archived === 0 && !linked.some(link => link.id === project.id)).map(project => <article key={project.id} className="flex flex-wrap items-center justify-between gap-2"><span className="min-w-0 flex-1 break-words">{project.name}</span><Button disabled={busy || !ready} onClick={() => void change(project, false)}>{l('linkProject')}</Button></article>)}
+      {hasMore && <Button disabled={busy || !ready} onClick={() => void load(page + 1)}>{l('more')}</Button>}
+    </>}
   </section>;
 }
 

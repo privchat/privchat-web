@@ -28,7 +28,13 @@ export interface WorkspaceActivityPage { items: WorkspaceActivity[]; nextCursor:
 export interface Page<T> { list: T[]; total: number }
 export interface WorkspaceSummary extends Workspace { employeeCount: number; availableEmployeeCount?: number | null; employeeAvailabilityKnown?: boolean; openItemCount: number; lastActivityAt: number | null }
 export interface ProjectTarget { id?: string; nodeId: string; workdirBindingId: string }
-export interface Project { id: string; workspaceId: string; name: string; archived: number; version: number; targets: ProjectTarget[] }
+export interface Project {
+  id: string;
+  /** @deprecated Legacy metadata only; never use for ownership or permissions. */
+  workspaceId?: string | null;
+  ownerUserId: string; writable: boolean; manageable: boolean;
+  name: string; archived: number; version: number; targets: ProjectTarget[];
+}
 export interface WorkspaceEmployee { id: string; workspaceId: string; employeeId: string; name?: string | null; nodeId?: string | null; capability?: string | null; workdirBindingId?: string | null; available: boolean; unavailableReason?: string | null; projectTargetIds: string[]; roleDescription?: string; model?: string; workspaceSessionKnown?: boolean; workspaceExecutionId?: string | null; workspaceNativeSessionId?: string | null }
 export interface WorkspaceEmployeePage { items: WorkspaceEmployee[]; nextCursor: string | null; hasMore: boolean }
 export interface TaskFeedPage { items: WorkspaceActivity[]; olderCursor: string | null; hasOlder: boolean; refreshRequired: boolean }
@@ -63,13 +69,18 @@ export class WorkspaceApi {
   list() { return this.get<Workspace[]>('/workspace/list'); }
   spaces(pageNo = 1) { return this.get<Page<WorkspaceSummary>>(`/workspace/page?pageNo=${pageNo}&pageSize=20`); }
   projects(workspaceId?: string) { return this.get<Project[]>(`/workspace/project/list${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`); }
-  projectPage(pageNo = 1, workspaceId?: string) { return this.get<Page<Project>>(`/workspace/project/page?pageNo=${pageNo}&pageSize=20${workspaceId ? `&workspaceId=${encodeURIComponent(workspaceId)}` : ''}`); }
+  projectPage(pageNo = 1) { return this.get<Page<Project>>(`/workspace/project/page?pageNo=${pageNo}&pageSize=20`); }
   project(id: string) { return this.get<Project>(`/workspace/project/get/${encodeURIComponent(id)}`); }
-  saveProject(body: {id?: string; workspaceId: string; name: string; version?: number; targets?: ProjectTarget[]}) {
+  projectLinks(workspaceId: string) { return this.get<Project[]>(`/workspace/project/link/list?${new URLSearchParams({workspaceId})}`); }
+  linkProject(workspaceId: string, projectId: string) { return this.post<Project>('/workspace/project/link/create', {workspaceId, projectId}); }
+  async unlinkProject(workspaceId: string, projectId: string) {
+    await deleteAuthedEnvelope<unknown>(`${this.base}/workspace/project/link/delete?${new URLSearchParams({workspaceId, projectId})}`, this.access());
+  }
+  saveProject(body: {id?: string; name: string; version?: number; targets?: ProjectTarget[]}) {
     const targets = body.targets === undefined ? {} : {targets: body.targets.map(({nodeId, workdirBindingId}) => ({nodeId, workdirBindingId}))};
     return body.id
       ? this.put<Project>('/workspace/project/update', {id: body.id, name: body.name, version: body.version, ...targets})
-      : this.post<Project>('/workspace/project/create', {workspaceId: body.workspaceId, name: body.name, ...targets});
+      : this.post<Project>('/workspace/project/create', {name: body.name, targets: targets.targets ?? []});
   }
   projectStatus(id: string, archived: number, version: number) { return this.put<Project>('/workspace/project/update-status', {id, archived, version}); }
   workspaceEmployees(workspaceId: string, projectId?: string) { return this.get<WorkspaceEmployee[]>(`/workspace/employee/list?workspaceId=${encodeURIComponent(workspaceId)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); }

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 const en = {
+  settings: 'Space settings', linkedProjects: 'Linked projects', projectCandidates: 'Existing projects', linkProject: 'Link project', unlinkProject: 'Unlink project', unlinkProjectHint: 'Unlinking keeps the project and all work history. Workspace managers can unlink; linking also requires project ownership.',
   home: 'Workspaces', manage: 'Manage', projects: 'Project management', devices: 'Device management', createSpace: 'Create workspace',
   back: 'Back', name: 'Name', description: 'Description', save: 'Save', cancel: 'Cancel', retry: 'Retry', more: 'Load more',
   employees: 'Employees', available: 'Available', unavailable: 'Temporarily unavailable', open: 'Unfinished work items', archived: 'Archived', activity: 'Last activity',
@@ -24,6 +25,7 @@ const en = {
 };
 type Labels = typeof en;
 const zh: Labels = {
+  settings: '空间设置', linkedProjects: '已关联项目', projectCandidates: '现有项目', linkProject: '关联项目', unlinkProject: '解除项目关联', unlinkProjectHint: '解除关联会保留项目和全部工作历史。空间管理员可以解除关联；关联项目还需要项目所有权。',
   home: '工作空间', manage: '管理', projects: '项目管理', devices: '设备管理', createSpace: '创建空间',
   back: '返回', name: '名称', description: '说明', save: '保存', cancel: '取消', retry: '重试', more: '加载更多',
   employees: '员工', available: '当前可用', unavailable: '暂不可用', open: '未完成事项', archived: '已归档', activity: '最近业务活动',
@@ -47,6 +49,7 @@ const zh: Labels = {
   catalogLimit: '员工目录超过此操作上限，未返回完整目录，请缩小选择范围。',
 };
 const zhTW: Labels = {
+  settings: '空間設定', linkedProjects: '已關聯專案', projectCandidates: '現有專案', linkProject: '關聯專案', unlinkProject: '解除專案關聯', unlinkProjectHint: '解除關聯會保留專案及全部工作歷史。空間管理員可以解除關聯；關聯專案還需要專案擁有權。',
   home: '工作空間', manage: '管理', projects: '專案管理', devices: '裝置管理', createSpace: '建立空間',
   back: '返回', name: '名稱', description: '說明', save: '儲存', cancel: '取消', retry: '重試', more: '載入更多',
   employees: '員工', available: '目前可用', unavailable: '暫不可用', open: '未完成事項', archived: '已封存', activity: '最近業務活動',
@@ -70,6 +73,7 @@ const zhTW: Labels = {
   catalogLimit: '員工目錄超過此操作上限，未傳回完整目錄，請縮小選擇範圍。',
 };
 const vi: Labels = {
+  settings: 'Cài đặt không gian', linkedProjects: 'Dự án đã liên kết', projectCandidates: 'Dự án hiện có', linkProject: 'Liên kết dự án', unlinkProject: 'Bỏ liên kết dự án', unlinkProjectHint: 'Bỏ liên kết vẫn giữ dự án và toàn bộ lịch sử công việc. Người quản lý không gian có thể bỏ liên kết; liên kết còn yêu cầu quyền sở hữu dự án.',
   home: 'Không gian làm việc', manage: 'Quản lý', projects: 'Quản lý dự án', devices: 'Quản lý thiết bị', createSpace: 'Tạo không gian',
   back: 'Quay lại', name: 'Tên', description: 'Mô tả', save: 'Lưu', cancel: 'Hủy', retry: 'Thử lại', more: 'Tải thêm',
   employees: 'Nhân viên', available: 'Khả dụng', unavailable: 'Tạm thời không khả dụng', open: 'Công việc chưa hoàn thành', archived: 'Đã lưu trữ', activity: 'Hoạt động gần nhất',
