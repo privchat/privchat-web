@@ -20,6 +20,7 @@ import {
   useConversation,
   useFriendship,
   useGroupOps,
+  useConnectionState,
   useGroupProfile,
   usePresence,
   usePrivchatClient,
@@ -234,18 +235,19 @@ export function ConversationPanel({
   // 服务端约 1s，只为回答「我是不是管理员」和几个发言人的名字。发言人昵称由
   // 本地 user store 提供（SenderNameLabel 已有该回落），群名片 alias 目前
   // 全站为空且无任何端可设置。见 CHANNEL_SPEC §9.2.2。失败时降级为只读。
+  const pinConnectionState = useConnectionState();
+  useEffect(() => { setPinnedItems([]); }, [groupId, selfUid]);
   useEffect(() => {
     setIsManager(false);
     setRoleByUid(new Map());
-    setPinnedItems([]);
-    if (groupId === undefined) {
+    if (groupId === undefined || pinConnectionState !== 'authenticated' || hydrationAdapter.connectionState() !== 'authenticated') {
       return;
     }
     let cancelled = false;
     void groupOps
       .groupInfo(groupId)
       .then((resp) => {
-        if (cancelled) return;
+        if (cancelled || hydrationAdapter.connectionState() !== 'authenticated') return;
         const info = resp.group_info;
         const myRole = info.my_role ?? '';
         setIsManager(myRole === 'owner' || myRole === 'admin');
@@ -260,7 +262,7 @@ export function ConversationPanel({
     return () => {
       cancelled = true;
     };
-  }, [groupId, groupOps]);
+  }, [groupId, groupOps, hydrationAdapter, pinConnectionState, selfUid]);
 
   // Refreshable pinned-message list. Wrapped so both the initial load
   // effect and the pin/unpin toggle can re-pull and keep the bar + the

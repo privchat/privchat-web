@@ -1,4 +1,4 @@
-import { useGroupProjectionRefresh } from '@privchat/react';
+import { useConnectionState, useGroupProjectionRefresh } from '@privchat/react';
 // Group Info dialog. Mounts from the conversation header for group
 // chats. Pulls the member roster on open via `useGroupOps().listMembers`
 // (no local cache for group members in the SDK today; one fetch per
@@ -88,12 +88,17 @@ export function GroupInfoDialog({
   // Per-row busy state so multiple concurrent admin clicks queue cleanly.
   const [busyUid, setBusyUid] = useState<number | null>(null);
   const [myRole, setMyRole] = useState('');
+  const connectionState = useConnectionState();
   useEffect(() => {
     let alive = true;
     setMyRole('');
-    if (open) void ops.groupInfo(groupId).then(r => { if (alive) setMyRole(r.group_info.my_role ?? ''); }).catch(() => {});
+    if (open && connectionState === 'authenticated' && adapter.connectionState() === 'authenticated') {
+      void ops.groupInfo(groupId).then(r => {
+        if (alive && adapter.connectionState() === 'authenticated') setMyRole(r.group_info.my_role ?? '');
+      }).catch(() => {});
+    }
     return () => { alive = false; };
-  }, [open, groupId, ops]);
+  }, [open, groupId, ops, adapter, connectionState, selfUid]);
   const [addOpen, setAddOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   // Owner/admin-only join-request approvals (P6-3-4). Lazy — the child
@@ -171,7 +176,7 @@ export function GroupInfoDialog({
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || connectionState !== 'authenticated' || adapter.connectionState() !== 'authenticated') return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -179,14 +184,14 @@ export function GroupInfoDialog({
     // 首次打开或缓存被清过时本地是空的，此时退化成"等网络"，与从前一致。
     void (async () => {
       const local = await ops.cachedMembers(groupId, { limit: MEMBER_PAGE_SIZE });
-      if (cancelled) return;
+      if (cancelled || adapter.connectionState() !== 'authenticated') return;
       if (local.length > 0) {
         setMembers((prev) => (prev.length === 0 ? local : prev));
         setLoading(false);
       }
       // 增量：只取变更（含退群 tombstone），不是再拉一遍全量。
       const applied = await ops.syncMembers(groupId).catch(() => 0);
-      if (cancelled || applied === 0) return;
+      if (cancelled || adapter.connectionState() !== 'authenticated' || applied === 0) return;
       const fresh = await ops.cachedMembers(groupId, { limit: MEMBER_PAGE_SIZE });
       if (!cancelled && fresh.length > 0) setMembers(fresh);
     })();
@@ -216,7 +221,7 @@ export function GroupInfoDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, ops, groupId, t]);
+  }, [open, ops, groupId, t, adapter, connectionState]);
 
   // Self's role drives the admin-action gate. Server uses string roles
   // ("owner" | "admin" | "member"); we derive canManage here so UI
