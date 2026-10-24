@@ -44,6 +44,7 @@ import { MessageList } from './message-list';
 import { ForwardDialog } from './forward-dialog';
 import { BotMenuButton } from './bot-menu-button';
 import { PinnedBar } from './pinned-bar';
+import { mayUnpinGroupMessage } from './pin-policy';
 import { useMoneyUi } from '@/features/money/money-ui';
 import { RedPacketLiveStatusContext, MoneyPeerNameContext } from '@/features/money/money-card';
 import { getConfiguredAccountMode } from '@/lib/account-mode';
@@ -265,19 +266,23 @@ export function ConversationPanel({
   // effect and the pin/unpin toggle can re-pull and keep the bar + the
   // row-menu labels in sync.
   const pinnedScope = useRef(groupId);
+  const pinnedRead = useRef(0);
   pinnedScope.current = groupId;
   const refreshPinned = useCallback(async () => {
     if (groupId === undefined) {
       setPinnedItems([]);
       return;
     }
+    // Do not race metadata RPCs against reconnect authentication replay.
+    if (hydrationAdapter.connectionState() !== 'authenticated') return;
     try {
+      const request = ++pinnedRead.current;
       const resp = await groupOps.pinnedMessages(groupId);
-      if (pinnedScope.current === groupId) setPinnedItems(resp.items);
+      if (hydrationAdapter.connectionState() === 'authenticated' && pinnedScope.current === groupId && pinnedRead.current === request) setPinnedItems(resp.items);
     } catch {
       // Non-fatal: leave the last-known list; a later toggle retries.
     }
-  }, [groupId, groupOps]);
+  }, [hydrationAdapter, groupId, groupOps]);
 
   useGroupProjectionRefresh(groupId, 'pinned_messages_changed', refreshPinned);
 
@@ -285,11 +290,19 @@ export function ConversationPanel({
     () => new Set(pinnedItems.map((i) => String(i.message_id))),
     [pinnedItems],
   );
+  const canUnpinMessage = useCallback((id: string) => {
+    const pin = pinnedItems.find(item => String(item.message_id) === id);
+    const ownerId = [...roleByUid].find(([, role]) => role === 'owner')?.[0];
+    return !!pin && mayUnpinGroupMessage(isManager, selfUid, ownerId, String(pin.pinned_by));
+  }, [pinnedItems, roleByUid, isManager, selfUid]);
+  const canTogglePinMessage = useCallback((id: string) => isManager && (!pinnedIds.has(id) || canUnpinMessage(id)), [isManager, pinnedIds, canUnpinMessage]);
 
   const onTogglePin = useCallback(
     async (vm: MessageItemVM) => {
       if (groupId === undefined || vm.server_message_id === undefined) return;
+      if (hydrationAdapter.connectionState() !== 'authenticated') throw new Error(t('server_error.service_unavailable'));
       const alreadyPinned = pinnedIds.has(vm.server_message_id);
+      if (!isManager || (alreadyPinned && !canUnpinMessage(vm.server_message_id))) throw new Error(t('server_error.permission_denied'));
       // Group invariant: channel_id == group_id, so we pass groupId twice.
       await groupOps.pinMessage(
         groupId,
@@ -299,16 +312,18 @@ export function ConversationPanel({
       );
       await refreshPinned();
     },
-    [groupId, groupOps, pinnedIds, refreshPinned],
+    [hydrationAdapter, groupId, groupOps, pinnedIds, refreshPinned, isManager, canUnpinMessage, t],
   );
 
   const onUnpinFromBar = useCallback(
     async (messageId: string) => {
       if (groupId === undefined) return;
+      if (hydrationAdapter.connectionState() !== 'authenticated') throw new Error(t('server_error.service_unavailable'));
+      if (!canUnpinMessage(messageId)) throw new Error(t('server_error.permission_denied'));
       await groupOps.pinMessage(groupId, groupId, messageId, false);
       await refreshPinned();
     },
-    [groupId, groupOps, refreshPinned],
+    [hydrationAdapter, groupId, groupOps, refreshPinned, canUnpinMessage, t],
   );
 
   // Voice playback is a single-active controller across the whole app.
@@ -628,6 +643,7 @@ export function ConversationPanel({
           items={pinnedItems}
           messages={timelineMessages}
           canManage={isManager}
+          canUnpinMessage={canUnpinMessage}
           onUnpin={onUnpinFromBar}
         />
       )}
@@ -652,7 +668,7 @@ export function ConversationPanel({
         onReply={(m) => setReplyTo(m)}
         onForward={(m) => setForwardSource(m)}
         isGroup={!isDirect}
-        canPin={!isDirect && groupId !== undefined ? isManager : undefined}
+        canPin={!isDirect && groupId !== undefined ? canTogglePinMessage : undefined}
         canRevokeOthers={!isDirect && groupId !== undefined ? isManager : undefined}
         roleByUid={!isDirect && groupId !== undefined ? roleByUid : undefined}
         pinnedIds={!isDirect && groupId !== undefined ? pinnedIds : undefined}

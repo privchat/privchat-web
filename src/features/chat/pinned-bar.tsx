@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MessageItemVM } from '@privchat/react';
 import type { PinnedMessageItem } from '@privchat/sdk';
+import { errorText } from './error-text';
 
 export interface PinnedBarProps {
   /** Pinned items as returned by `useGroupOps().pinnedMessages`. */
@@ -23,6 +24,7 @@ export interface PinnedBarProps {
   messages: MessageItemVM[];
   /** Owner/admin gate. When true each row shows an unpin button. */
   canManage: boolean;
+  canUnpinMessage?: (messageId: string) => boolean;
   /** Unpin a single message (owner/admin only). */
   onUnpin: (messageId: string) => Promise<void>;
   onOpen: (messageId: string) => void;
@@ -32,16 +34,21 @@ export function PinnedBar({
   items,
   messages,
   canManage,
+  canUnpinMessage,
   onUnpin,
   onOpen,
 }: PinnedBarProps) {
   const { t } = useTranslation();
   const [hidden, setHidden] = useState(false);
-  if (items.length === 0 || hidden) return null;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (items.length === 0) return null;
+  if (hidden) return <button type="button" data-testid="pinned-show" className="shrink-0 border-b px-3 py-1 text-left text-xs" onClick={() => setHidden(false)}>{t('groups.pinned_bar_title')} ({items.length})</button>;
 
   return (
     <div className="shrink-0 border-b bg-muted/30">
-      <button type="button" className="float-right px-3 py-1" aria-label={t('groups.pinned_bar_title')} onClick={() => setHidden(true)}>×</button>
+      <button type="button" data-testid="pinned-hide" className="float-right px-3 py-1" aria-label={t('channel_actions.hide')} onClick={() => setHidden(true)}>×</button>
+      {error && <div role="alert" className="px-3 text-xs text-destructive">{error}</div>}
       {items.map((item) => {
         const messageId = String(item.message_id);
         const vm = messages.find((m) => m.server_message_id === messageId);
@@ -54,6 +61,7 @@ export function PinnedBar({
         return (
           <div
             key={messageId}
+            data-pinned-message-id={messageId}
             className="flex items-center gap-2 px-3 py-1.5 text-xs"
           >
             <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onOpen(messageId)}>
@@ -65,10 +73,14 @@ export function PinnedBar({
                 <div className="truncate text-muted-foreground">{preview}</div>
               )}
             </button>
-            {canManage && (
+            {canManage && (canUnpinMessage?.(messageId) ?? true) && (
               <button
                 type="button"
-                onClick={() => void onUnpin(messageId)}
+                disabled={busy !== null}
+                onClick={() => {
+                  setBusy(messageId); setError(null);
+                  void onUnpin(messageId).catch(cause => setError(errorText(cause))).finally(() => setBusy(null));
+                }}
                 className="shrink-0 rounded p-1 hover:bg-accent"
                 aria-label={t('message_actions.unpin')}
                 title={t('message_actions.unpin')}

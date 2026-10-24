@@ -5,6 +5,7 @@ import { AppProviders } from '@/app/providers';
 import { MoneyDialogsProvider } from '@/features/money/money-ui';
 import { LoginPage } from '@/features/auth/login-page';
 import { ChatWorkspace } from '@/features/chat/chat-workspace';
+import { retainChatWorkspace } from '@/features/chat/reconnect-policy';
 import { RequiredActionsGate } from '@/features/onboarding/required-actions-gate';
 import { SessionExpiredDialog } from '@/features/auth/session-expired-dialog';
 import type { PrivchatHandle } from '@/lib/privchat-client';
@@ -487,7 +488,7 @@ function PostClientRoot({
   clearSwitchError: () => void;
 }) {
   const state = useConnectionState();
-  if (state === 'authenticated') {
+  if (retainChatWorkspace(state, handle.client.sessionSnapshot().user_id)) {
     return (
       <>
         <ActiveAccountDisplayNameSync activeAccountKey={activeAccountKey} />
@@ -504,9 +505,8 @@ function PostClientRoot({
       </>
     );
   }
-  // Connection broke after auto-login (server kicked us, network dropped).
-  // Easiest recovery is to wipe the bad session and let the user log in
-  // again — handle.client is in a bad state and not worth salvaging.
+  // A new/terminal session has no workspace to retain. Transient reconnects
+  // keep the existing channel hooks mounted; the SDK still owns authentication.
   return <RestoringSplash />;
 }
 

@@ -75,7 +75,7 @@ export function MessageRow({
   onJumpToReply: (serverMessageId: string) => void;
   /** Group-only: whether the current user (owner/admin) may pin. When
    *  falsy the Pin/Unpin menu item is hidden (direct chats, members). */
-  canPin?: boolean;
+  canPin?: boolean | ((messageId: string) => boolean);
   /** Group-only: owner/admin may revoke OTHERS' messages (Telegram
    *  "delete for everyone" semantics; server enforces the same gate). */
   canRevokeOthers?: boolean;
@@ -582,7 +582,7 @@ function MessageActionsMenu({
   onReply: () => void;
   /** Opens the forward picker; the menu item is hidden when absent. */
   onForward?: () => void;
-  canPin?: boolean;
+  canPin?: boolean | ((messageId: string) => boolean);
   canRevokeOthers?: boolean;
   pinnedIds?: Set<string>;
   onTogglePin?: (vm: MessageItemVM) => Promise<void>;
@@ -614,7 +614,7 @@ function MessageActionsMenu({
   // Pin is group-only (canPin gates owner/admin) and needs a server id
   // plus a toggle handler. Members / direct chats never see it.
   const showPin =
-    canPin === true &&
+    (typeof canPin === 'function' ? canPin(vm.server_message_id ?? '') : canPin === true) &&
     onTogglePin !== undefined &&
     vm.server_message_id !== undefined;
   const isPinned =

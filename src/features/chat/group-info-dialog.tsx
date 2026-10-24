@@ -111,13 +111,22 @@ export function GroupInfoDialog({
   // `groupInfo` returns name/avatar; the dialog displays them but the
   // editor here intentionally does NOT include either field.
   const [settings, setSettings] = useState<GroupSettingsData | null>(null);
+  const profileScope = useRef('');
+  profileScope.current = `${selfUid}:${groupId}:${open}`;
+  const profileRead = useRef(0);
   useGroupProjectionRefresh(open ? groupId : undefined, 'group_profile_changed', async () => {
+    if (adapter.connectionState() !== 'authenticated') return;
+    const scope = profileScope.current;
+    const request = ++profileRead.current;
     const response = await ops.getSettings(groupId);
-    setSettings(response.settings);
+    if (adapter.connectionState() === 'authenticated' && profileScope.current === scope && profileRead.current === request) setSettings(response.settings);
   });
   const [editOpen, setEditOpen] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  useEffect(() => {
+    setSettings(null); setEditOpen(false); setProfileSaveError(null); setSavingSettings(false);
+  }, [open, groupId, selfUid]);
   const [toggleMuteAllBusy, setToggleMuteAllBusy] = useState(false);
   // Per-flag busy guards for the owner/admin-editable boolean toggles
   // (allow_member_add_friend / allow_search). Keyed by the patch field
@@ -186,9 +195,8 @@ export function GroupInfoDialog({
     // and both feed the dialog body, no point serializing.
     Promise.allSettled([
       ops.listMembers(groupId, { limit: MEMBER_PAGE_SIZE }),
-      ops.getSettings(groupId),
     ])
-      .then(([rosterRes, settingsRes]) => {
+      .then(([rosterRes]) => {
         if (cancelled) return;
         if (rosterRes.status === 'fulfilled') {
           setMembers(rosterRes.value.members);
@@ -197,9 +205,6 @@ export function GroupInfoDialog({
           setError(
             `${t('groups.members_failed')}: ${errorText(rosterRes.reason)}`,
           );
-        }
-        if (settingsRes.status === 'fulfilled') {
-          setSettings(settingsRes.value.settings);
         }
         // Settings fetch failure is non-fatal — the roster is the
         // primary content. Owner editing affordances simply stay
@@ -424,11 +429,18 @@ export function GroupInfoDialog({
   const onSaveSettings = async (patch: {
     description?: string;
   }) => {
-    if (settings === null || savingSettings) return;
+    if (!canManage || settings === null || savingSettings) return;
+    if (adapter.connectionState() !== 'authenticated') {
+      setProfileSaveError(t('server_error.service_unavailable'));
+      return;
+    }
+    const scope = profileScope.current;
     setSavingSettings(true);
     setProfileSaveError(null);
     try {
       await ops.updateProfile(groupId, patch);
+      if (profileScope.current !== scope) return;
+      ++profileRead.current;
       setSettings((prev) =>
         prev !== null
           ? {
@@ -442,9 +454,9 @@ export function GroupInfoDialog({
       );
       setEditOpen(false);
     } catch (e) {
-      setProfileSaveError(groupIntroductionErrorText(e, t));
+      if (profileScope.current === scope) setProfileSaveError(groupIntroductionErrorText(e, t));
     } finally {
-      setSavingSettings(false);
+      if (profileScope.current === scope) setSavingSettings(false);
     }
   };
 
@@ -551,7 +563,7 @@ export function GroupInfoDialog({
                       <div className="text-[10px] uppercase text-muted-foreground">
                         {t('groups.settings_description')}
                       </div>
-                      <div className="whitespace-pre-wrap break-words">
+                      <div data-testid="group-introduction" className="whitespace-pre-wrap break-words">
                         {settings.description || '—'}
                       </div>
                     </div>
@@ -927,8 +939,10 @@ function EditSettingsDialog({
             <Label htmlFor="group-settings-description">
               {t('groups.settings_description')}
             </Label>
-            <Input
+            <textarea
               id="group-settings-description"
+              className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              rows={4}
               value={description}
               onChange={(e) => setDescription(e.currentTarget.value)}
               disabled={saving}
