@@ -15,6 +15,20 @@ test.beforeEach(() => {
 test.afterEach(() => {globalThis.fetch = originalFetch;});
 const api = () => new WorkspaceApi('https://platform.example/app', () => 'token');
 
+test('default review employee is a single optional reference; omission preserves and null clears', async () => {
+  await api().saveProject({name: 'New', defaultReviewerEmployeeId: 'reviewer'});
+  await api().saveProject({id: 'p', name: 'Existing', version: 2});
+  await api().saveProject({id: 'p', name: 'Existing', version: 2, defaultReviewerEmployeeId: 'another'});
+  await api().saveProject({id: 'p', name: 'Existing', version: 2, defaultReviewerEmployeeId: null});
+  expect(calls.map(call => call.body)).toEqual([
+    {name: 'New', targets: [], defaultReviewerEmployeeId: 'reviewer'},
+    {id: 'p', name: 'Existing', version: 2},
+    {id: 'p', name: 'Existing', version: 2, updateDefaultReviewer: true, defaultReviewerEmployeeId: 'another'},
+    {id: 'p', name: 'Existing', version: 2, updateDefaultReviewer: true, defaultReviewerEmployeeId: null},
+  ]);
+  expect(calls.every(call => !call.url.pathname.includes('/work-execution/') && !call.url.pathname.includes('/work-note/'))).toBe(true);
+});
+
 test('canonical standalone create strips legacy ownership and target IDs; empty targets are explicit', async () => {
   const legacy = {workspaceId: 'legacy', ownerUserId: 'ignored', writable: false, name: 'Standalone', targets: [{id: 'old', nodeId: 'n', workdirBindingId: 'd'}]};
   expect(await api().saveProject(legacy)).toEqual(project);

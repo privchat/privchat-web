@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import {TaskHistory} from './task-history';
 import { Button } from '@/components/ui/button';
 import { WorkspaceApi, type Employee, type EmployeeConfig, type Execution, type Node } from './api';
 import { ConsoleIntent } from './console-intent';
@@ -48,6 +49,7 @@ export function bindingCandidates(rows: Execution[], nodeId: string, executor: s
 }
 
 export function EmployeePanel({api, nodes, refreshNodes, renderSession, onRequestLockChange, workspaceMode = false}: {api: WorkspaceApi; nodes: Node[]; refreshNodes: () => Promise<void>; renderSession: (id: string) => ReactNode; onRequestLockChange: (locked: boolean) => void; workspaceMode?: boolean}) {
+  const [historyEmployee, setHistoryEmployee] = useState<string>();
   const pageLabel = usePageLabels();
   const {t} = useTranslation();
   const label = (key: string) => t(`agentWorkspace.${key}`);
@@ -129,7 +131,9 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
     setSelected(result.agentId); setEditing(false); setExecutionId(result.executionId ?? ''); setSaved(true);
     setConfig({...emptyConfig}); setConfirmed(false);
   }
+  if (historyEmployee) return <TaskHistory api={api} scope={{employeeId: historyEmployee}} renderSession={renderSession} onBack={() => setHistoryEmployee(undefined)}/>;
   return <section data-testid="employee-panel" className="min-w-0 space-y-3 border-t pt-4">
+    {employee && <Button variant="outline" disabled={locked} onClick={() => setHistoryEmployee(employee.agentId)}>{pageLabel('taskRecords')}</Button>}
     <h3 className="font-semibold">{label('employees')}</h3>
     <p className="text-sm text-muted-foreground">{label('employeeHint')}</p>
     <p className="text-sm" data-testid="external-discovery-unsupported">{label('externalUnsupported')}</p>

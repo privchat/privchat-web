@@ -1,5 +1,9 @@
 import { useTranslation } from 'react-i18next';
 const en = {
+  activeEmpty: 'No ongoing work', accessDenied: 'You no longer have access to these tasks.',
+  developer: 'Development employee', reviewer: 'Review employee', stage: 'Latest stage', unassigned: 'Not assigned', pendingAssignment: 'Pending assignment', needsAttention: 'Needs attention', employeeFilter: 'Employee ID',
+  defaultReviewer: 'Default review employee', defaultReviewerHint: 'Optional reference only. Review requests still require explicit confirmation, current access and fixed evidence; existing reviews do not change.',
+  taskViews: 'Task views', taskRecords: 'Task records', ungrouped: 'No project',
   settings: 'Space settings', linkedProjects: 'Linked projects', projectCandidates: 'Existing projects', linkProject: 'Link project', unlinkProject: 'Unlink project', unlinkProjectHint: 'Unlinking keeps the project and all work history. Workspace managers can unlink; linking also requires project ownership.',
   home: 'Workspaces', manage: 'Manage', projects: 'Project management', devices: 'Device management', createSpace: 'Create workspace',
   back: 'Back', name: 'Name', description: 'Description', save: 'Save', cancel: 'Cancel', retry: 'Retry', more: 'Load more',
@@ -25,6 +29,10 @@ const en = {
 };
 type Labels = typeof en;
 const zh: Labels = {
+  activeEmpty: '暂无进行中的工作', accessDenied: '你已无权读取这些任务。',
+  developer: '开发员工', reviewer: '评审员工', stage: '最新阶段', unassigned: '未分配', pendingAssignment: '待分配', needsAttention: '需要处理', employeeFilter: '员工 ID',
+  defaultReviewer: '默认评审员工', defaultReviewerHint: '可选引用，不授予权限。评审仍需明确确认、当前授权及固定证据，不改变已有评审。',
+  taskViews: '任务视图', taskRecords: '任务记录', ungrouped: '无项目',
   settings: '空间设置', linkedProjects: '已关联项目', projectCandidates: '现有项目', linkProject: '关联项目', unlinkProject: '解除项目关联', unlinkProjectHint: '解除关联会保留项目和全部工作历史。空间管理员可以解除关联；关联项目还需要项目所有权。',
   home: '工作空间', manage: '管理', projects: '项目管理', devices: '设备管理', createSpace: '创建空间',
   back: '返回', name: '名称', description: '说明', save: '保存', cancel: '取消', retry: '重试', more: '加载更多',
@@ -49,6 +57,10 @@ const zh: Labels = {
   catalogLimit: '员工目录超过此操作上限，未返回完整目录，请缩小选择范围。',
 };
 const zhTW: Labels = {
+  activeEmpty: '暫無進行中的工作', accessDenied: '你已無權讀取這些任務。',
+  developer: '開發員工', reviewer: '評審員工', stage: '最新階段', unassigned: '未分配', pendingAssignment: '待分配', needsAttention: '需要處理', employeeFilter: '員工 ID',
+  defaultReviewer: '預設評審員工', defaultReviewerHint: '選填引用，不授予權限。評審仍須明確確認、目前授權及固定證據，不改變既有評審。',
+  taskViews: '任務檢視', taskRecords: '任務紀錄', ungrouped: '無專案',
   settings: '空間設定', linkedProjects: '已關聯專案', projectCandidates: '現有專案', linkProject: '關聯專案', unlinkProject: '解除專案關聯', unlinkProjectHint: '解除關聯會保留專案及全部工作歷史。空間管理員可以解除關聯；關聯專案還需要專案擁有權。',
   home: '工作空間', manage: '管理', projects: '專案管理', devices: '裝置管理', createSpace: '建立空間',
   back: '返回', name: '名稱', description: '說明', save: '儲存', cancel: '取消', retry: '重試', more: '載入更多',
@@ -73,6 +85,10 @@ const zhTW: Labels = {
   catalogLimit: '員工目錄超過此操作上限，未傳回完整目錄，請縮小選擇範圍。',
 };
 const vi: Labels = {
+  activeEmpty: 'Không có công việc đang tiến hành', accessDenied: 'Bạn không còn quyền đọc các công việc này.',
+  developer: 'Nhân viên phát triển', reviewer: 'Nhân viên đánh giá', stage: 'Giai đoạn mới nhất', unassigned: 'Chưa phân công', pendingAssignment: 'Chờ phân công', needsAttention: 'Cần xử lý', employeeFilter: 'ID nhân viên',
+  defaultReviewer: 'Nhân viên đánh giá mặc định', defaultReviewerHint: 'Tham chiếu tùy chọn, không cấp quyền. Yêu cầu đánh giá vẫn cần xác nhận, quyền hiện tại và bằng chứng cố định; đánh giá cũ không thay đổi.',
+  taskViews: 'Chế độ công việc', taskRecords: 'Lịch sử công việc', ungrouped: 'Không có dự án',
   settings: 'Cài đặt không gian', linkedProjects: 'Dự án đã liên kết', projectCandidates: 'Dự án hiện có', linkProject: 'Liên kết dự án', unlinkProject: 'Bỏ liên kết dự án', unlinkProjectHint: 'Bỏ liên kết vẫn giữ dự án và toàn bộ lịch sử công việc. Người quản lý không gian có thể bỏ liên kết; liên kết còn yêu cầu quyền sở hữu dự án.',
   home: 'Không gian làm việc', manage: 'Quản lý', projects: 'Quản lý dự án', devices: 'Quản lý thiết bị', createSpace: 'Tạo không gian',
   back: 'Quay lại', name: 'Tên', description: 'Mô tả', save: 'Lưu', cancel: 'Hủy', retry: 'Thử lại', more: 'Tải thêm',

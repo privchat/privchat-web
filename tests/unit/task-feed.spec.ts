@@ -1,8 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { historical, mergeTaskFeed, validateTaskFeed } from '../../src/features/workspace/task-feed';
+import { historical, mergeTaskFeed, mergeActivityPage, unfinishedTaskFeed, validateTaskFeed } from '../../src/features/workspace/task-feed';
 import { CreateItemIntent } from '../../src/features/workspace/create-item-intent';
 import type { WorkspaceActivity, WorkspaceApi } from '../../src/features/workspace/api';
 const row = (id: string, status = 'open', createdAt = 10, closedAt: number | null = null, version = 1): WorkspaceActivity => ({item: {id, workspaceId: 'w', title: id, description: '', status, createdAt, closedAt, version}, latestExecution: {id: `e-${id}`, executionId: `e-${id}`, state: 'succeeded'}, executionCount: 2});
+test('home excludes only business-ended tasks, not approval, failure or successful executions', () => {
+  const rows = [row('1', 'done'), row('2', 'cancelled'), row('3', 'awaiting_approval'), row('4', 'blocked'), row('5', 'in_progress'), row('6')];
+  rows[3]!.latestExecution!.state = 'failed';
+  expect(unfinishedTaskFeed(rows).map(r => r.item.id)).toEqual(['3', '4', '5', '6']);
+  expect(rows.map(r => r.item.id)).toEqual(['1', '2', '3', '4', '5', '6']);
+});
+test('home closes tasks after version merge and server order is preserved without attention or timestamp sorting', () => {
+  const rows = mergeTaskFeed([row('2'), row('3', 'open', 30)], [row('2', 'done', 10, 40, 2), row('1', 'open', 20)]);
+  expect(unfinishedTaskFeed(mergeActivityPage([], [row('3'), row('1', 'open', 50)] )).map(r => r.item.id)).toEqual(['3', '1']);
+  expect(rows.find(r => r.item.id === '2')?.item.status).toBe('done');
+});
 test('groups by business closing time, then unfinished creation time and numeric ID; success is not acceptance', () => {
   expect(mergeTaskFeed([], [row('10'), row('2'), row('4', 'cancelled', 500, 60), row('3', 'done', 800, 40), row('1', 'done'), row('5', 'in_progress', 20)]).map(r => r.item.id)).toEqual(['1', '3', '4', '2', '10', '5']);
   expect(historical(row('2'))).toBe(false);

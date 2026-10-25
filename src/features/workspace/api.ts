@@ -23,7 +23,8 @@ export interface Command { commandId: string; executionId: string; kind: string;
 export interface Permission { permissionId: string; requestDigest: string; summary: string; expiresAt: number; status: string }
 export interface NodeEvent { seq: number; kind: string; payload: Record<string, unknown> }
 export interface ArchivedNodeEvent extends NodeEvent { protocolVersion: 1; executionId: string; eventId: string }
-export interface WorkspaceActivity { item: WorkItem; latestExecution: WorkExecution | null; executionCount: number }
+export interface WorkspaceActivity { item: WorkItem; latestExecution: WorkExecution | null; executionCount: number; developerEmployeeId?: string | null; reviewerEmployeeId?: string | null; stage?: string | null; lastActivityAt?: number | null; needsAttention?: boolean; reviewNoteId?: string | null }
+export interface TaskScope { workspaceId?: string; projectId?: string; employeeId?: string; unprojected?: boolean }
 export interface WorkspaceActivityPage { items: WorkspaceActivity[]; nextCursor: string | null }
 export interface Page<T> { list: T[]; total: number }
 export interface WorkspaceSummary extends Workspace { employeeCount: number; availableEmployeeCount?: number | null; employeeAvailabilityKnown?: boolean; openItemCount: number; lastActivityAt: number | null }
@@ -34,6 +35,7 @@ export interface Project {
   workspaceId?: string | null;
   ownerUserId: string; writable: boolean; manageable: boolean;
   name: string; archived: number; version: number; targets: ProjectTarget[];
+  defaultReviewerEmployeeId?: string | null;
 }
 export interface WorkspaceEmployee { id: string; workspaceId: string; employeeId: string; name?: string | null; nodeId?: string | null; capability?: string | null; workdirBindingId?: string | null; available: boolean; unavailableReason?: string | null; projectTargetIds: string[]; roleDescription?: string; model?: string; workspaceSessionKnown?: boolean; workspaceExecutionId?: string | null; workspaceNativeSessionId?: string | null }
 export interface WorkspaceEmployeePage { items: WorkspaceEmployee[]; nextCursor: string | null; hasMore: boolean }
@@ -76,11 +78,12 @@ export class WorkspaceApi {
   async unlinkProject(workspaceId: string, projectId: string) {
     await deleteAuthedEnvelope<unknown>(`${this.base}/workspace/project/link/delete?${new URLSearchParams({workspaceId, projectId})}`, this.access());
   }
-  saveProject(body: {id?: string; name: string; version?: number; targets?: ProjectTarget[]}) {
+  saveProject(body: {id?: string; name: string; version?: number; targets?: ProjectTarget[]; defaultReviewerEmployeeId?: string | null}) {
     const targets = body.targets === undefined ? {} : {targets: body.targets.map(({nodeId, workdirBindingId}) => ({nodeId, workdirBindingId}))};
+    const reviewer = body.defaultReviewerEmployeeId === undefined ? {} : {defaultReviewerEmployeeId: body.defaultReviewerEmployeeId, ...(body.id ? {updateDefaultReviewer: true} : {})};
     return body.id
-      ? this.put<Project>('/workspace/project/update', {id: body.id, name: body.name, version: body.version, ...targets})
-      : this.post<Project>('/workspace/project/create', {name: body.name, targets: targets.targets ?? []});
+      ? this.put<Project>('/workspace/project/update', {id: body.id, name: body.name, version: body.version, ...targets, ...reviewer})
+      : this.post<Project>('/workspace/project/create', {name: body.name, targets: targets.targets ?? [], ...reviewer});
   }
   projectStatus(id: string, archived: number, version: number) { return this.put<Project>('/workspace/project/update-status', {id, archived, version}); }
   workspaceEmployees(workspaceId: string, projectId?: string) { return this.get<WorkspaceEmployee[]>(`/workspace/employee/list?workspaceId=${encodeURIComponent(workspaceId)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); }
@@ -99,7 +102,19 @@ export class WorkspaceApi {
     if (cursor) query.set('cursor', cursor);
     return this.get<TaskFeedPage>(`/workspace/activity/page?${query}`);
   }
+  async tasks(view: 'active_tasks_v1' | 'history_tasks_v1', scope: TaskScope, cursor?: string): Promise<TaskFeedPage> {
+    if (view === 'active_tasks_v1' && !scope.workspaceId) throw new Error('Active tasks require a workspace');
+    if (scope.projectId && scope.unprojected) throw new Error('Conflicting project filters');
+    const query = new URLSearchParams({view, limit: '20'});
+    for (const key of ['workspaceId', 'projectId', 'employeeId'] as const) if (scope[key]) query.set(key, scope[key]);
+    if (scope.unprojected) query.set('unprojected', 'true');
+    if (cursor) query.set('cursor', cursor);
+    const page = await this.get<TaskFeedPage & {nextCursor?: string | null}>(`/workspace/activity/page?${query}`);
+    const olderCursor = page.nextCursor === undefined ? page.olderCursor : page.nextCursor;
+    return {...page, olderCursor, hasOlder: page.hasOlder ?? !!olderCursor, refreshRequired: page.refreshRequired ?? false};
+  }
   items(id: string) { return this.get<WorkItem[]>(`/workspace/work-item/list?workspaceId=${encodeURIComponent(id)}`); }
+  item(id: string) { return this.get<WorkItem>(`/workspace/work-item/get/${encodeURIComponent(id)}`); }
   activity(workspaceId: string, beforeId?: string) {
     return this.get<WorkspaceActivityPage>(`/workspace/activity/page?workspaceId=${encodeURIComponent(workspaceId)}${beforeId === undefined ? '' : `&beforeId=${encodeURIComponent(beforeId)}`}&limit=20`);
   }

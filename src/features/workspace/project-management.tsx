@@ -1,16 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import type { Node, Project, ProjectTarget, WorkspaceApi } from './api';
+import type { Employee, Node, Project, ProjectTarget, WorkspaceApi } from './api';
+import {TaskHistory} from './task-history';
 import { usePageLabels } from './page-labels';
 export const workspaceField = 'block w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm';
 
-export function ProjectManagement({api, onBack}: {api: WorkspaceApi; onBack: () => void}) {
+export function ProjectManagement({api, onBack, renderSession}: {api: WorkspaceApi; renderSession?: (id: string) => ReactNode; onBack: () => void}) {
   const l = usePageLabels();
+  const [history, setHistory] = useState<Project>();
   const [nodes, setNodes] = useState<Node[]>([]);
+  const [reviewers, setReviewers] = useState<Employee[]>([]);
+  const [reviewersReady, setReviewersReady] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [edit, setEdit] = useState<{id?: string; writable: boolean; name: string; version?: number; targets: ProjectTarget[]}>();
+  const [edit, setEdit] = useState<{id?: string; writable: boolean; name: string; version?: number; targets: ProjectTarget[]; defaultReviewerEmployeeId?: string | null}>();
+  const [reviewerChanged, setReviewerChanged] = useState(false);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stale, setStale] = useState(false);
@@ -25,16 +30,32 @@ export function ProjectManagement({api, onBack}: {api: WorkspaceApi; onBack: () 
     finally {if (generation.current === current) setBusy(false);}
   }
   useEffect(() => {if (!edit) return; let live = true; void api.nodes().then(rows => {if (live) setNodes(rows);}).catch(() => {if (live) setError(true);}); return () => {live = false;};}, [api, !!edit]);
+  useEffect(() => {
+    if (!edit) return;
+    let live = true; setReviewers([]); setReviewersReady(false); setReviewerChanged(false);
+    void api.employees().then(rows => {
+      if (!Array.isArray(rows)) throw new Error('Invalid employee catalog');
+      if (live) {setReviewers(rows); setReviewersReady(true);}
+    }).catch(() => {if (live) setError(true);});
+    return () => {live = false;};
+  }, [api, edit?.id, !!edit]);
   useEffect(() => {void load(); return () => {generation.current++;};}, [api]);
+  if (history) return <TaskHistory api={api} scope={{projectId: history.id}} projects={[history]} renderSession={renderSession} onBack={() => setHistory(undefined)}/>;
   return <section data-testid="project-management" className="space-y-3">
     <header className="flex items-center justify-between"><Button variant="ghost" disabled={busy} onClick={onBack}>{l('back')}</Button><h2>{l('projects')}</h2><Button disabled={busy} onClick={() => {setEdit({writable: true, name: '', targets: []}); setStale(false);}}>{l('create')}</Button></header>
     {error && <p role="alert">{l(stale ? 'conflict' : 'error')}</p>}
     <Button variant="outline" disabled={busy} onClick={() => {setEdit(undefined); setStale(false); void load();}}>{l('reload')}</Button>
-    {!edit && projects.map(project => <article key={project.id} className="space-y-2 rounded border p-3"><h3>{project.name} {project.archived !== 0 && l('archived')}</h3><p>v{project.version}</p>{!project.targets.length && <p>{l('noTargets')}</p>}<Button disabled={busy || !project.writable || project.archived !== 0} onClick={async () => {setBusy(true); try {const p = await api.project(project.id); setEdit({...p}); setStale(false);} catch {setError(true);} finally {setBusy(false);}}}>{l('edit')}</Button><Button disabled={busy || !project.writable} onClick={async () => {setBusy(true); try {await api.projectStatus(project.id, project.archived ? 0 : 1, project.version); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>{l('archived')}</Button></article>)}
+    {!edit && projects.map(project => <article key={project.id} className="space-y-2 rounded border p-3"><h3>{project.name} {project.archived !== 0 && l('archived')}</h3><p>v{project.version}</p><Button variant="outline" disabled={busy} onClick={() => setHistory(project)}>{l('taskRecords')}</Button>{!project.targets.length && <p>{l('noTargets')}</p>}<Button disabled={busy || !project.writable || project.archived !== 0} onClick={async () => {setBusy(true); try {const p = await api.project(project.id); setEdit({...p}); setStale(false);} catch {setError(true);} finally {setBusy(false);}}}>{l('edit')}</Button><Button disabled={busy || !project.writable} onClick={async () => {setBusy(true); try {await api.projectStatus(project.id, project.archived ? 0 : 1, project.version); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>{l('archived')}</Button></article>)}
     {!edit && projects.length < total && <Button disabled={busy} onClick={() => void load(page + 1)}>{l('more')}</Button>}
-    {edit && <form className="space-y-3 rounded border p-3" onSubmit={async e => {e.preventDefault(); if (busy || stale || !edit.writable) return; setBusy(true); try {await api.saveProject({id: edit.id, name: edit.name, version: edit.version, targets: edit.targets.map(({nodeId, workdirBindingId}) => ({nodeId, workdirBindingId}))}); setEdit(undefined); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>
+    {edit && <form className="space-y-3 rounded border p-3" onSubmit={async e => {e.preventDefault(); if (busy || stale || !edit.writable) return; setBusy(true); try {await api.saveProject({id: edit.id, name: edit.name, version: edit.version, targets: edit.targets.map(({nodeId, workdirBindingId}) => ({nodeId, workdirBindingId})), ...(reviewerChanged ? {defaultReviewerEmployeeId: edit.defaultReviewerEmployeeId ?? null} : {})}); setEdit(undefined); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>
       <fieldset disabled={busy || stale || !edit.writable} className="space-y-3">
         <label>{l('name')}<input required maxLength={64} className={workspaceField} value={edit.name} onChange={e => setEdit({...edit, name: e.target.value})}/></label>
+        <label>{l('defaultReviewer')}<select aria-label={l('defaultReviewer')} className={workspaceField} disabled={!reviewersReady} value={edit.defaultReviewerEmployeeId ?? ''} onChange={e => {setEdit({...edit, defaultReviewerEmployeeId: e.target.value || null}); setReviewerChanged(true);}}>
+          <option value="">{l('none')}</option>
+          {edit.defaultReviewerEmployeeId && !reviewers.some(row => row.agentId === edit.defaultReviewerEmployeeId) && <option value={edit.defaultReviewerEmployeeId} disabled>{edit.defaultReviewerEmployeeId} · {l('unavailable')}</option>}
+          {reviewers.map(row => <option key={row.agentId} value={row.agentId}>{row.name}</option>)}
+        </select></label>
+        <p className="text-sm text-muted-foreground">{l('defaultReviewerHint')}</p>
         <h3>{l('targets')}</h3>{edit.targets.length === 0 && <p>{l('noTargets')}</p>}
         {edit.targets.map((target, index) => <div key={index} className="flex flex-wrap gap-2 rounded border p-2">
           <label className="min-w-40 flex-1">{l('node')}<select required className={workspaceField} value={target.nodeId} onChange={e => setEdit({...edit, targets: edit.targets.map((t, i) => i === index ? {nodeId: e.target.value, workdirBindingId: ''} : t)})}><option value="">{l('node')}</option>{!nodes.some(n => n.nodeId === target.nodeId) && target.nodeId && <option value={target.nodeId}>{l('unavailable')}</option>}{nodes.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select></label>

@@ -3,15 +3,14 @@ import { MoreHorizontal } from 'lucide-react';
 import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import type { Binding, Node, Project, WorkNote, WorkspaceActivity, WorkspaceApi, WorkspaceSummary } from './api';
+import type { Project, WorkspaceActivity, WorkspaceApi, WorkspaceSummary } from './api';
 import { usePageLabels } from './page-labels';
 import { ProjectManagement, workspaceField } from './project-management';
 import { DevicePage } from './devices';
 import { TaskFeed } from './task-feed-view';
 import { CreateItem } from './create-item';
 import { SpaceEmployees } from './space-employees';
-import { WorkItemPanel } from './work-item';
-import { WorkflowPanel } from './workflow';
+import { WorkDetails } from './work-details';
 
 export function WorkspacePage({api, client, renderSession, onLockChange}: {api: WorkspaceApi; client?: PrivchatClient; renderSession: (id: string) => ReactNode; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
@@ -22,6 +21,10 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
   const [space, setSpace] = useState<WorkspaceSummary>();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
+  const [historyEmployee, setHistoryEmployee] = useState('');
+  const [unprojected, setUnprojected] = useState(false);
+  const [records, setRecords] = useState(false);
+  const [recordsVisited, setRecordsVisited] = useState(false);
   const [detail, setDetail] = useState<WorkspaceActivity>();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -49,10 +52,10 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
     if (space) void api.projects(space.id).then(rows => {if (active) setProjects(rows);}).catch(() => {if (active) setError(true);});
     return () => {active = false;};
   }, [api, space?.id, revision]);
-  if (route === 'projects') return <ProjectManagement api={api} onBack={() => {setRoute('home'); void load();}}/>;
+  if (route === 'projects') return <ProjectManagement api={api} renderSession={renderSession} onBack={() => {setRoute('home'); void load();}}/>;
   if (route === 'devices') return <DevicePage api={api} onBack={() => {setRoute('home'); void load();}}/>;
   if (route === 'create-item' && space) return <CreateItem api={api} workspaceId={space.id} onBack={() => setRoute('space')} onCreated={() => {setRevision(r => r + 1); setRoute('space');}} onLockChange={lock}/>;
-  if (route === 'employees' && space) return <SpaceEmployees api={api} workspaceId={space.id} readOnly={readOnly} onBack={() => {setRoute('space'); setRevision(r => r + 1);}} onLockChange={lock}/>;
+  if (route === 'employees' && space) return <SpaceEmployees api={api} renderSession={renderSession} workspaceId={space.id} readOnly={readOnly} onBack={() => {setRoute('space'); setRevision(r => r + 1);}} onLockChange={lock}/>;
   if (route === 'create-space') return <form className="space-y-3" onSubmit={async e => {e.preventDefault(); if (busy) return; setBusy(true); try {await api.post('/workspace/create', {name, description}); setName(''); setDescription(''); setRoute('home'); await load();} catch {setError(true);} finally {setBusy(false);}}}>
     <h2>{l('createSpace')}</h2>{error && <p role="alert">{l('error')}</p>}
     <label>{l('name')}<input className={workspaceField} required maxLength={120} value={name} onChange={e => setName(e.target.value)}/></label>
@@ -61,12 +64,18 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
   </form>;
   if (route === 'space' && space) return <section className="space-y-3" data-testid="workspace-detail">
     <header className="flex items-center justify-between gap-2"><Button variant="ghost" disabled={locked} onClick={() => {setSpace(undefined); setRoute('home'); setDetail(undefined); setProjectId(''); setSettings(false); void load();}}>{l('back')}</Button><h2 className="min-w-0 flex-1 truncate font-semibold">{space.name}</h2>
-      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" disabled={locked} aria-label={l('manage')}><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={readOnly} onSelect={() => setRoute('create-item')}>{l('createItem')}</DropdownMenuItem><DropdownMenuItem onSelect={() => setRoute('employees')}>{l('manageEmployees')}</DropdownMenuItem><DropdownMenuItem onSelect={() => setSettings(value => !value)}>{l('settings')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" disabled={locked} aria-label={l('manage')}><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={readOnly} onSelect={() => setRoute('create-item')}>{l('createItem')}</DropdownMenuItem><DropdownMenuItem onSelect={() => setRoute('employees')}>{l('manageEmployees')}</DropdownMenuItem><DropdownMenuItem onSelect={() => setSettings(value => !value)}>{l('settings')}</DropdownMenuItem><DropdownMenuItem onSelect={() => {setRecords(true); setRecordsVisited(true); setDetail(undefined);}}>{l('taskRecords')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
     </header>{readOnly && <p>{l('readOnly')}</p>}
     {settings && <WorkspaceProjectLinks key={space.id} api={api} workspace={space} onLockChange={lock} onChanged={removedId => {if (removedId === projectId) setProjectId(''); setRevision(value => value + 1);}}/>}
     <div hidden={!!detail}>
-      <label>{l('project')}<select className={workspaceField} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-      <TaskFeed key={`${space.id}:${projectId}:${revision}`} api={api} client={client} workspaceId={space.id} projectId={projectId || undefined} onOpen={setDetail}/>
+      <div className="flex gap-2" role="group" aria-label={l('taskViews')}>
+        <Button variant="outline" aria-pressed={!records} onClick={() => setRecords(false)}>{l('unfinished')}</Button>
+        <Button variant="outline" aria-pressed={records} onClick={() => {setRecords(true); setRecordsVisited(true);}}>{l('taskRecords')}</Button>
+      </div>
+      <label>{l('project')}<select className={workspaceField} value={projectId} onChange={e => {setProjectId(e.target.value); setUnprojected(false);}}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+      {records && <div className="flex flex-wrap gap-2"><label>{l('employeeFilter')}<input className={workspaceField} value={historyEmployee} onChange={e => setHistoryEmployee(e.target.value)}/></label><label><input type="checkbox" checked={unprojected} onChange={e => {setUnprojected(e.target.checked); setProjectId('');}}/>{l('ungrouped')}</label></div>}
+      <div hidden={records}><TaskFeed key={`active:${space.id}:${projectId}:${revision}`} api={api} client={client} workspaceId={space.id} projectId={projectId || undefined} view="active" enabled={!records && !detail} projects={projects} onOpen={setDetail}/></div>
+      {recordsVisited && <div hidden={!records}><TaskFeed key={`records:${space.id}:${projectId}:${historyEmployee}:${unprojected}:${revision}`} api={api} client={client} workspaceId={space.id} projectId={unprojected ? undefined : projectId || undefined} employeeId={historyEmployee || undefined} unprojected={unprojected} view="history" enabled={records && !detail} projects={projects} onOpen={setDetail}/></div>}
     </div>
     {detail && <WorkDetails key={detail.item.id} api={api} row={detail} readOnly={readOnly} onBack={() => setDetail(undefined)} renderSession={renderSession} onLockChange={lock}/>}
   </section>;
@@ -75,7 +84,7 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
     {error && <p role="alert">{l('error')}</p>}
     <Button variant="outline" disabled={busy} onClick={() => void load()}>{l('reload')}</Button>
     {!spaces.length && <p role="status">{l(busy ? 'loading' : 'empty')}</p>}
-    <div className="grid gap-3 sm:grid-cols-2">{spaces.map(s => <button key={s.id} type="button" data-testid="workspace-card" className="min-w-0 space-y-3 rounded-xl border bg-card p-5 text-left transition-colors hover:bg-accent focus-visible:outline focus-visible:outline-2" onClick={() => {setSpace(s); setProjectId(''); setRoute('space');}}>
+    <div className="grid gap-3 sm:grid-cols-2">{spaces.map(s => <button key={s.id} type="button" data-testid="workspace-card" className="min-w-0 space-y-3 rounded-xl border bg-card p-5 text-left transition-colors hover:bg-accent focus-visible:outline focus-visible:outline-2" onClick={() => {setSpace(s); setProjectId(''); setRecords(false); setRecordsVisited(false); setHistoryEmployee(''); setUnprojected(false); setRoute('space');}}>
       <h3 className="truncate font-semibold">{s.name} {s.archived !== 0 && <span className="text-xs text-muted-foreground">{l('archived')}</span>}</h3>
       {s.description && <p className="truncate text-sm text-muted-foreground">{s.description}</p>}
       <div className="flex flex-wrap gap-3 text-sm"><span>{l('employees')}: {s.employeeCount}</span><span>{l('available')}: {s.employeeAvailabilityKnown && s.availableEmployeeCount != null ? s.availableEmployeeCount : l('unavailable')}</span><span>{l('open')}: {s.openItemCount}</span></div>
@@ -137,30 +146,5 @@ function WorkspaceProjectLinks({api, workspace, onLockChange, onChanged}: {api: 
       {candidates.filter(project => project.manageable && project.archived === 0 && !linked.some(link => link.id === project.id)).map(project => <article key={project.id} className="flex flex-wrap items-center justify-between gap-2"><span className="min-w-0 flex-1 break-words">{project.name}</span><Button disabled={busy || !ready} onClick={() => void change(project, false)}>{l('linkProject')}</Button></article>)}
       {hasMore && <Button disabled={busy || !ready} onClick={() => void load(page + 1)}>{l('more')}</Button>}
     </>}
-  </section>;
-}
-
-function WorkDetails({api, row, readOnly, onBack, renderSession, onLockChange}: {api: WorkspaceApi; row: WorkspaceActivity; readOnly: boolean; onBack: () => void; renderSession: (id: string) => ReactNode; onLockChange: (locked: boolean) => void}) {
-  const l = usePageLabels();
-  const [item, setItem] = useState(row.item);
-  const [notes, setNotes] = useState<WorkNote[]>([]);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [bindings, setBindings] = useState<Binding[]>([]);
-  const [execution, setExecution] = useState(row.latestExecution?.executionId ?? '');
-  const [locked, setLocked] = useState(false);
-  const [error, setError] = useState(false);
-  const live = useRef(true);
-  async function refresh() {
-    const [items, n, b, w] = await Promise.all([api.items(item.workspaceId), api.nodes(), api.bindings(item.workspaceId), api.get<WorkNote[]>(`/workspace/work-note/list?workItemId=${encodeURIComponent(item.id)}`)]);
-    if (!live.current) return;
-    const current = items.find(i => i.id === item.id);
-    if (!current) throw new Error('Work item unavailable');
-    setItem(current); setNotes(w); setNodes(n); setBindings(b);
-  }
-  useEffect(() => {live.current = true; void refresh().catch(() => {if (live.current) setError(true);}); return () => {live.current = false;};}, [api, item.id]);
-  return <section className="space-y-3"><Button variant="ghost" disabled={locked} onClick={onBack}>{l('back')}</Button>{error && <p role="alert">{l('error')}</p>}
-    <WorkItemPanel api={api} item={item} notes={notes} readOnly={readOnly || error} refresh={refresh}/>
-    <WorkflowPanel api={api} item={item} nodes={nodes} bindings={bindings} notes={notes} readOnly={readOnly || error} onLockChange={value => {setLocked(value); onLockChange(value);}} onExecution={setExecution}/>
-    {execution && renderSession(execution)}
   </section>;
 }

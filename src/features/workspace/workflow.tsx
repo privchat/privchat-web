@@ -21,6 +21,7 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
   const [links, setLinks] = useState<WorkExecution[]>([]);
   const [reviews, setReviews] = useState<WorkReview[]>([]);
   const [employeeId, setEmployeeId] = useState('');
+  const [defaultReviewer, setDefaultReviewer] = useState<string>();
   const [bindingId, setBindingId] = useState('');
   const [text, setText] = useState('');
   const [source, setSource] = useState('');
@@ -48,6 +49,13 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
   const disabled = locked || readOnly || !ready || !employeePages.ready || employeePages.error;
   const selectedReview = reviews.find(r => r.noteId === reviewId);
   const canRecord = !!selectedReview && !selectedReview.conclusion && ['succeeded', 'failed', 'cancelled'].includes(selectedReview.reviewerExecution.state ?? '');
+  useEffect(() => {
+    let active = true; setDefaultReviewer(undefined);
+    if (item.projectId) void api.project(item.projectId).then(project => {
+      if (active) setDefaultReviewer(project.defaultReviewerEmployeeId ?? undefined);
+    }).catch(() => {});
+    return () => {active = false;};
+  }, [api, item.projectId]);
   async function refresh() {
     const [, l, r] = await Promise.all([employeePages.refresh(), api.get<WorkExecution[]>(`/workspace/work-execution/list?workItemId=${encodeURIComponent(item.id)}`), api.get<WorkReview[]>(`/workspace/work-note/review-list?workItemId=${encodeURIComponent(item.id)}`)]);
     if (live.current) {setLinks(l); setReviews(r); setReady(true);}
@@ -91,6 +99,7 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
       <label className="block">{label('assignmentText')}<textarea className={field} maxLength={16000} value={text} onChange={e => setText(e.target.value)}/></label>
       <Button disabled={!text.trim() || !authorizedEmployee || (!!item.projectId && !selectedTarget) || !candidates.some(b => b.id === bindingId) || ['done', 'cancelled'].includes(item.status)} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-execution/assign', {workItemId: item.id, version: item.version, bindingId, employeeId, text, ...(selectedTarget ? {projectTargetId: selectedTarget} : {})});}}>{label('assignEmployee')}</Button>
       <h4>{label('requestReview')}</h4>
+      {defaultReviewer && <Button type="button" variant="outline" disabled={!authorized.some(row => row.employeeId === defaultReviewer && row.available)} onClick={() => {setEmployeeId(defaultReviewer); setBindingId(''); setProjectTargetId('');}}>{pageLabel('defaultReviewer')}: {defaultReviewer}</Button>}
       <ReviewEvidenceFields links={links} notes={notes} source={source} onSource={setSource} description={description} onDescription={setDescription} evidence={evidence} onEvidence={setEvidence}/>
       <label className="block">{label('reviewInstructions')}<textarea className={field} maxLength={4000} value={instructions} onChange={e => setInstructions(e.target.value)}/></label>
       <Button disabled={!links.some(l => l.id === source && l.state === 'succeeded' && l.executionId) || !description.trim() || !candidates.some(b => b.id === bindingId) || ['done', 'cancelled'].includes(item.status) || !authorizedEmployee || (!!item.projectId && !selectedTarget)} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-note/request-review', {workItemId: item.id, version: item.version, sourceWorkExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description, reviewerEmployeeId: employeeId, reviewerBindingId: bindingId, instructions, ...(selectedTarget ? {reviewerProjectTargetId: selectedTarget} : {})});}}>{label('requestReview')}</Button>
