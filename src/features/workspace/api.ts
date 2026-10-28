@@ -27,6 +27,14 @@ export interface WorkspaceActivity { item: WorkItem; latestExecution: WorkExecut
 export interface TaskScope { workspaceId?: string; projectId?: string; employeeId?: string; unprojected?: boolean }
 export interface WorkspaceActivityPage { items: WorkspaceActivity[]; nextCursor: string | null }
 export interface Page<T> { list: T[]; total: number }
+export interface WorkspaceInboxEntry {
+  /** `kind:id:version`; the same waiting fact keeps its key, a newer version is a new entry. */
+  key: string; kind: 'decision' | 'review_cycle' | 'approval' | 'failure'; workspaceId: string; workItemId: string; workItemTitle: string;
+  summary: string; createdAt: number; actionable: boolean;
+  decisionId?: string | null; workExecutionId?: string | null; executionId?: string | null;
+  permissionId?: string | null; requestDigest?: string | null; expiresAt?: number | null; state?: string | null; employeeId?: string | null;
+  options: {id: string; label: string; description: string}[]; recommendedOptionId?: string | null;
+}
 export interface WorkspaceSummary extends Workspace { employeeCount: number; availableEmployeeCount?: number | null; employeeAvailabilityKnown?: boolean; openItemCount: number; lastActivityAt: number | null }
 export interface ProjectTarget { id?: string; nodeId: string; workdirBindingId: string }
 export interface Project {
@@ -122,6 +130,11 @@ export class WorkspaceApi {
     return this.get<SessionRecordsPage>(`/agent/sessions/records?executionId=${encodeURIComponent(executionId)}&afterSeq=${encodeURIComponent(afterSeq)}&limit=50`);
   }
   bindings(id: string) { return this.get<Binding[]>(`/workspace/agent-binding/list?workspaceId=${encodeURIComponent(id)}`); }
+  inbox(workspaceId: string) { return this.get<{entries: WorkspaceInboxEntry[]}>(`/workspace/inbox/list?workspaceId=${encodeURIComponent(workspaceId)}`); }
+  answerDecision(decisionId: string, requestId: string, optionId: string) { return this.post<unknown>('/workspace/work-decision/answer', {decisionId, requestId, optionId}); }
+  resolvePermission(executionId: string, commandId: string, permissionId: string, requestDigest: string, decision: 'allow_once' | 'deny') {
+    return this.post<Command>('/agent/permissions/resolve', {executionId, commandId, permissionId, requestDigest, decision});
+  }
   join(workspaceId: string) { return this.post<RoomTicket>('/workspace/room/join', { workspaceId }); }
   nodes() { return this.get<Node[]>('/agent/nodes'); }
   employees() { return this.get<Employee[]>('/agent/agents'); }

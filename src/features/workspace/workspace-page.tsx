@@ -11,6 +11,7 @@ import { TaskFeed } from './task-feed-view';
 import { CreateItem } from './create-item';
 import { SpaceEmployees } from './space-employees';
 import { WorkDetails } from './work-details';
+import { WorkspaceInbox } from './inbox';
 
 export function WorkspacePage({api, client, renderSession, onLockChange}: {api: WorkspaceApi; client?: PrivchatClient; renderSession: (id: string) => ReactNode; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
@@ -68,6 +69,7 @@ export function WorkspacePage({api, client, renderSession, onLockChange}: {api: 
     </header>{readOnly && <p>{l('readOnly')}</p>}
     {settings && <WorkspaceProjectLinks key={space.id} api={api} workspace={space} onLockChange={lock} onChanged={removedId => {if (removedId === projectId) setProjectId(''); setRevision(value => value + 1);}}/>}
     <div hidden={!!detail}>
+      <WorkspaceInbox key={`inbox:${space.id}:${revision}`} api={api} workspaceId={space.id}/>
       <div className="flex gap-2" role="group" aria-label={l('taskViews')}>
         <Button variant="outline" aria-pressed={!records} onClick={() => setRecords(false)}>{l('unfinished')}</Button>
         <Button variant="outline" aria-pressed={records} onClick={() => {setRecords(true); setRecordsVisited(true);}}>{l('taskRecords')}</Button>
