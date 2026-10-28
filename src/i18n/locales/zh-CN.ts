@@ -12,6 +12,7 @@ export const zhCN: LocaleSchema = {
   },
   system_template: {
     member_invited: '{0} 邀请 {1+} 加入了群聊',
+    group_name_changed: '{0} 将群名称修改为“{1}”',
     group_mute_all_on: '{0} 开启了全员禁言',
     group_mute_all_off: '{0} 解除了全员禁言',
   },

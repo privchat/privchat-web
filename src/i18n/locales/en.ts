@@ -16,6 +16,7 @@ export const en: LocaleSchema = {
   },
   system_template: {
     member_invited: '{0} invited {1+} to the group',
+    group_name_changed: '{0} renamed the group to "{1}"',
     group_mute_all_on: '{0} muted all members',
     group_mute_all_off: '{0} unmuted all members',
   },
@@ -764,6 +765,7 @@ export interface LocaleSchema {
   };
   system_template: {
     member_invited: string;
+    group_name_changed: string;
     group_mute_all_on: string;
     group_mute_all_off: string;
   };
