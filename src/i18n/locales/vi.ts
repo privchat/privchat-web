@@ -17,6 +17,7 @@ export const vi: LocaleSchema = {
   },
   system_template: {
     member_invited: '{0} đã mời {1+} vào nhóm',
+    group_name_changed: '{0} đã đổi tên nhóm thành “{1}”',
     group_mute_all_on: '{0} đã bật cấm chat toàn nhóm',
     group_mute_all_off: '{0} đã tắt cấm chat toàn nhóm',
   },
