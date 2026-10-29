@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePrivchatClient } from '@privchat/react';
 import type { LocationMetadataVM } from '@privchat/react';
 import { encodeMessagePayloadEnvelope } from '@privchat/sdk';
 import { openLocationDialog, providerFactories, MapError } from '@privchat/location-web';
-import type { Crs, Preference, Selection } from '@privchat/location-web';
+import type { Crs, Preference, Selection, ComponentConfig } from '@privchat/location-web';
 import { loadSession } from '../../lib/session-storage';
+import { locationComponents } from './location-components';
 
 const labels = {
   title: '位置', close: '关闭', search: '搜索地点', locate: '我的位置', send: '发送位置',
@@ -22,36 +23,62 @@ const errors: Record<string, string> = {
 
 export function useLocationDialog(channelId?: string, channelType?: number) {
   const adapter = usePrivchatClient();
+  const [available, setAvailable] = useState(false);
+  const operation = useRef(0);
   const close = useRef<(() => void) | undefined>(undefined);
-  useEffect(() => () => close.current?.(), [adapter, channelId]);
-  const open = (metadata?: LocationMetadataVM) => {
+  useEffect(() => {
+    let disposed = false;
+    let revision: string | undefined;
+    const refresh = async () => {
+      try {
+        const config = await locationComponents.load();
+        if (disposed) return;
+        const maps = config.components.maps;
+        const enabled = maps.enabled && Object.keys(providerFactories).length > 0;
+        setAvailable(enabled);
+        if (!enabled || (revision !== undefined && revision !== config.revision)) close.current?.();
+        revision = config.revision;
+      } catch { if (!disposed) { setAvailable(false); close.current?.(); } }
+    };
+    void refresh();
+    const timer = setInterval(() => { void refresh(); }, 5000);
+    return () => { disposed = true; operation.current++; clearInterval(timer); close.current?.(); };
+  }, [adapter, channelId]);
+  const open = async (metadata?: LocationMetadataVM) => {
     close.current?.();
     const session = loadSession();
     if (!session) return;
-    const identity = JSON.stringify([session.url, session.user_id]);
-    const preferenceKey = `privchat.location.preference:${identity}`;
+    const ticket = ++operation.current;
+    const identity = JSON.stringify([session.url, session.user_id, session.saved_at]);
+    let componentConfig: ComponentConfig;
+    try { componentConfig = await locationComponents.load(); }
+    catch { setAvailable(false); return; }
+    const active = loadSession();
+    if (ticket !== operation.current || !active || JSON.stringify([active.url, active.user_id, active.saved_at]) !== identity) return;
+    const maps = componentConfig.components.maps;
+    if (!maps.enabled) { setAvailable(false); return; }
+    const preferenceKey = `privchat.location.preference:${JSON.stringify([session.url, session.user_id])}`;
     let preference: Preference = 'AUTO';
     try {
       const value = localStorage.getItem(preferenceKey);
       if (value === 'AUTO' || value === 'GOOGLE' || value === 'AMAP') preference = value;
     } catch { /* Storage denied: preference remains session-only. */ }
-    const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {};
+    const securityProxy = (import.meta as unknown as { env: Record<string, string | undefined> }).env?.VITE_AMAP_SECURITY_PROXY;
     const initial: Selection | undefined = metadata && {
       point: { latitude: metadata.latitude, longitude: metadata.longitude, crs: (metadata.coordinate_system || 'wgs84') as Crs },
       pointSource: 'unknown', name: metadata.name, nameSource: 'unknown', address: metadata.address, addressSource: 'unknown',
     };
     close.current = openLocationDialog({
-      factories: providerFactories,
-      config: {
-        GOOGLE: { key: env.VITE_GOOGLE_MAPS_KEY ?? '', consent: false },
-        AMAP: { key: env.VITE_AMAP_MAPS_KEY ?? '', consent: false, securityProxy: env.VITE_AMAP_SECURITY_PROXY },
-      },
-      preference, region: 'unknown', unknownDefault: 'GOOGLE', initial, labels,
+      factories: Object.fromEntries(Object.entries(providerFactories).filter(([id]) => id in maps.providers)),
+      config: Object.fromEntries(Object.entries(maps.providers).map(([id, config]) =>
+        [id, { key: config!.sdkKey, consent: false, ...(id === 'AMAP' ? { securityProxy } : {}) }])),
+      preference, defaultPreference: maps.defaultProvider,
+      region: navigator.language.toLowerCase() === 'zh-cn' ? 'mainland' : 'other', initial, labels,
       onPreference(value) { try { localStorage.setItem(preferenceKey, value); } catch { /* no persistence available */ } },
       error: code => errors[code] ?? errors.NETWORK!,
       onSend: metadata || channelId === undefined || channelType === undefined ? undefined : async message => {
         const active = loadSession();
-        if (!active || JSON.stringify([active.url, active.user_id]) !== identity) throw new MapError('CANCELLED');
+        if (!active || JSON.stringify([active.url, active.user_id, active.saved_at]) !== identity) throw new MapError('CANCELLED');
         const content = message.name ?? `${message.latitude}, ${message.longitude}`;
         await adapter.sendTextMessage({ channel_id: channelId, channel_type: channelType, from_uid: session.user_id,
           message_type: 8, content, payload_encoding: 'message_envelope',
@@ -60,5 +87,5 @@ export function useLocationDialog(channelId?: string, channelType?: number) {
       },
     });
   };
-  return { open, enabled: Object.keys(providerFactories).length > 0 };
+  return { open, enabled: available };
 }
