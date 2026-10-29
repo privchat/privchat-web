@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConnectionState, useUserProfile } from '@privchat/react';
+import { AccountLanguageSync } from '@/features/workspace/account-language-sync';
 import { AppProviders } from '@/app/providers';
 import { MoneyDialogsProvider } from '@/features/money/money-ui';
 import { LoginPage } from '@/features/auth/login-page';
@@ -492,6 +493,7 @@ function PostClientRoot({
     return (
       <>
         <ActiveAccountDisplayNameSync activeAccountKey={activeAccountKey} />
+        <AccountLanguageSync client={handle.client} />
         <ChatWorkspace
           handle={handle}
           onLogout={onLogout}
