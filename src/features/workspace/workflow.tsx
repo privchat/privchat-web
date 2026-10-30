@@ -7,7 +7,7 @@ import { ConsoleIntent } from './console-intent';
 import { roomFailure } from './room-observer';
 import { useEmployeePages } from './use-employee-pages';
 import { usePageLabels } from './page-labels';
-import { deliveryReceipt, retainBlockedDelivery } from './delivery-receipt';
+import { deliveryReceipt, retainBlockedDelivery, isBlocked } from './delivery-receipt';
 
 const field = 'block w-full min-w-0 rounded border bg-background px-3 py-2 text-sm';
 export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLockChange, onExecution}: {api: WorkspaceApi; item: WorkItem; nodes: Node[]; bindings: Binding[]; notes: WorkNote[]; readOnly: boolean; onLockChange: (locked: boolean) => void; onExecution: (id: string) => void}) {
@@ -76,7 +76,7 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
       const result = await intent.current.run<WorkExecution | WorkReview>(api, op.path, op.body, 'requestId', retainBlockedDelivery);
       if (!live.current) return;
       const receipt = deliveryReceipt(result);
-      if (receipt.deliveryBlockedReason) {setBlocked(receipt); return;}
+      if (isBlocked(receipt)) {setBlocked(receipt); return;}
       setBlocked(undefined);
       setSaved(true);
       const execution = receipt.executionId;

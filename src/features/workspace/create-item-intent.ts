@@ -1,6 +1,6 @@
 import type { WorkExecution, WorkItem, WorkspaceApi } from './api';
 import { ConsoleIntent, type PendingConsoleRequest } from './console-intent';
-import { retainBlockedDelivery } from './delivery-receipt';
+import { retainBlockedDelivery, isBlocked } from './delivery-receipt';
 
 export interface NewItemInput { workspaceId: string; title: string; description: string; acceptance: string; projectId: string | null }
 export interface NewAssignment { bindingId: string; employeeId: string; text: string; projectTargetId?: string }
@@ -57,7 +57,7 @@ export class CreateItemIntent {
         const blocked = retainBlockedDelivery(receipt);
         this.state.completed = !blocked; this.persist(); return blocked;
       });
-      if (this.state.assignmentReceipt?.deliveryBlockedReason) return this.state.item;
+      if (isBlocked(this.state.assignmentReceipt)) return this.state.item;
     }
     const item = this.state.item;
     this.journal?.save(undefined);

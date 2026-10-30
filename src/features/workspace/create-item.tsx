@@ -1,3 +1,4 @@
+import { isBlocked } from './delivery-receipt';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { Binding, Project, WorkspaceApi } from './api';
@@ -44,7 +45,7 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
     try {
       if (intent.locked) await intent.retry(api);
       else await intent.run(api, {workspaceId, title, description, acceptance, projectId: projectId || null}, assign ? {employeeId, bindingId: selectedBinding!, text: [description || title, acceptance].filter(Boolean).join('\n\n'), ...(selectedTarget ? {projectTargetId: selectedTarget} : {})} : undefined);
-      if (intent.assignmentReceipt?.deliveryBlockedReason) return;
+      if (isBlocked(intent.assignmentReceipt)) return;
       completed = true;
       if (live.current) {onLockChange(false); onCreated();}
     } catch {if (live.current) setError(true);}
@@ -53,7 +54,7 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
   return <section className="space-y-3" data-testid="create-work-item">
     <header className="flex justify-between"><Button variant="ghost" disabled={locked} onClick={onBack}>{l('back')}</Button><h2>{l('createItem')}</h2></header>
     {error && <p role="alert">{l(intent.item ? 'savedNotAssigned' : 'error')}</p>}
-    {intent.assignmentReceipt?.deliveryBlockedReason && <div role="alert" data-testid="delivery-blocked" className="space-y-1"><p>{l('deliveryBlocked')}</p><p>{l('deliveryBlockedHint')}</p><p>{l('requestIdentity')}: {String(intent.assign.pendingRequest?.body.requestId ?? '')}</p>{intent.assignmentReceipt.executionId && <p>{l('acceptedExecution')}: {intent.assignmentReceipt.executionId}</p>}</div>}
+    {isBlocked(intent.assignmentReceipt) && intent.assignmentReceipt && <div role="alert" data-testid="delivery-blocked" className="space-y-1"><p>{l('deliveryBlocked')}</p><p>{l('deliveryBlockedHint')}</p><p>{l('requestIdentity')}: {String(intent.assign.pendingRequest?.body.requestId ?? '')}</p>{intent.assignmentReceipt.executionId && <p>{l('acceptedExecution')}: {intent.assignmentReceipt.executionId}</p>}</div>}
     {employeePages.error && <p role="alert">{l(employeePages.errorCode ?? 'error')}</p>}
     <fieldset disabled={locked} className="space-y-3">
       <label>{l('title')}<input className={workspaceField} maxLength={200} value={title} onChange={e => setTitle(e.target.value)}/></label>
