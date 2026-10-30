@@ -52,10 +52,12 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
   useEffect(() => {
     let active = true; setDefaultReviewer(undefined);
     if (item.projectId) void api.project(item.projectId).then(project => {
-      if (active) setDefaultReviewer(project.defaultReviewerEmployeeId ?? undefined);
+      // The default reviewer works where this turn works: the selected directory's reviewer.
+      if (active) setDefaultReviewer(project.targets.find(t => t.id === selectedTarget)?.reviewerEmployeeId
+        ?? (project.targets.length === 1 ? project.targets[0]?.reviewerEmployeeId : undefined) ?? undefined);
     }).catch(() => {});
     return () => {active = false;};
-  }, [api, item.projectId]);
+  }, [api, item.projectId, selectedTarget]);
   async function refresh() {
     const [, l, r] = await Promise.all([employeePages.refresh(), api.get<WorkExecution[]>(`/workspace/work-execution/list?workItemId=${encodeURIComponent(item.id)}`), api.get<WorkReview[]>(`/workspace/work-note/review-list?workItemId=${encodeURIComponent(item.id)}`)]);
     if (live.current) {setLinks(l); setReviews(r); setReady(true);}

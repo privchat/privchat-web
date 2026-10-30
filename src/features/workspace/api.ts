@@ -36,14 +36,16 @@ export interface WorkspaceInboxEntry {
   options: {id: string; label: string; description: string}[]; recommendedOptionId?: string | null;
 }
 export interface WorkspaceSummary extends Workspace { employeeCount: number; availableEmployeeCount?: number | null; employeeAvailabilityKnown?: boolean; openItemCount: number; lastActivityAt: number | null }
-export interface ProjectTarget { id?: string; nodeId: string; workdirBindingId: string }
+/** A computer holding the project's source: its directory and the default reviewer working there. */
+export interface ProjectTarget { id?: string; nodeId: string; workdirBindingId: string; reviewerEmployeeId?: string | null }
 export interface Project {
   id: string;
   /** @deprecated Legacy metadata only; never use for ownership or permissions. */
   workspaceId?: string | null;
   ownerUserId: string; writable: boolean; manageable: boolean;
   name: string; archived: number; version: number; targets: ProjectTarget[];
-  defaultReviewerEmployeeId?: string | null;
+  /** Project files reviews judge against, relative to the project directory. */
+  reviewBasis: string[];
 }
 export interface WorkspaceEmployee { id: string; workspaceId: string; employeeId: string; name?: string | null; nodeId?: string | null; capability?: string | null; workdirBindingId?: string | null; available: boolean; unavailableReason?: string | null; projectTargetIds: string[]; roleDescription?: string; model?: string; workspaceSessionKnown?: boolean; workspaceExecutionId?: string | null; workspaceNativeSessionId?: string | null }
 export interface WorkspaceEmployeePage { items: WorkspaceEmployee[]; nextCursor: string | null; hasMore: boolean }
@@ -86,12 +88,13 @@ export class WorkspaceApi {
   async unlinkProject(workspaceId: string, projectId: string) {
     await deleteAuthedEnvelope<unknown>(`${this.base}/workspace/project/link/delete?${new URLSearchParams({workspaceId, projectId})}`, this.access());
   }
-  saveProject(body: {id?: string; name: string; version?: number; targets?: ProjectTarget[]; defaultReviewerEmployeeId?: string | null}) {
-    const targets = body.targets === undefined ? {} : {targets: body.targets.map(({nodeId, workdirBindingId}) => ({nodeId, workdirBindingId}))};
-    const reviewer = body.defaultReviewerEmployeeId === undefined ? {} : {defaultReviewerEmployeeId: body.defaultReviewerEmployeeId, ...(body.id ? {updateDefaultReviewer: true} : {})};
+  saveProject(body: {id?: string; name: string; version?: number; targets?: ProjectTarget[]; reviewBasis?: string[]}) {
+    const targets = body.targets === undefined ? {} : {targets: body.targets.map(({nodeId, workdirBindingId, reviewerEmployeeId}) =>
+      ({nodeId, workdirBindingId, ...(reviewerEmployeeId ? {reviewerEmployeeId} : {})}))};
+    const basis = body.reviewBasis === undefined ? {} : {reviewBasis: body.reviewBasis.map(p => p.trim()).filter(Boolean)};
     return body.id
-      ? this.put<Project>('/workspace/project/update', {id: body.id, name: body.name, version: body.version, ...targets, ...reviewer})
-      : this.post<Project>('/workspace/project/create', {name: body.name, targets: targets.targets ?? [], ...reviewer});
+      ? this.put<Project>('/workspace/project/update', {id: body.id, name: body.name, version: body.version, ...targets, ...basis})
+      : this.post<Project>('/workspace/project/create', {name: body.name, targets: targets.targets ?? [], ...basis});
   }
   projectStatus(id: string, archived: number, version: number) { return this.put<Project>('/workspace/project/update-status', {id, archived, version}); }
   workspaceEmployees(workspaceId: string, projectId?: string) { return this.get<WorkspaceEmployee[]>(`/workspace/employee/list?workspaceId=${encodeURIComponent(workspaceId)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); }

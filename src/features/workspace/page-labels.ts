@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 const en = {
   activeEmpty: 'No ongoing work', accessDenied: 'You no longer have access to these tasks.',
   developer: 'Development employee', reviewer: 'Review employee', stage: 'Latest stage', unassigned: 'Not assigned', pendingAssignment: 'Pending assignment', needsAttention: 'Needs attention', employeeFilter: 'Employee ID',
-  defaultReviewer: 'Default review employee', defaultReviewerHint: 'Optional reference only. Review requests still require explicit confirmation, current access and fixed evidence; existing reviews do not change.',
+  reviewBasis: 'Review basis', reviewBasisHint: 'Project file paths, one per line, e.g. SPEC.md. Reviewers read each one and judge against it.', targetReviewer: 'Reviewer for this directory', targetReviewerHint: 'Only employees working in this directory can be chosen.', defaultReviewer: 'Default review employee', defaultReviewerHint: 'Optional reference only. Review requests still require explicit confirmation, current access and fixed evidence; existing reviews do not change.',
   taskViews: 'Task views', taskRecords: 'Task records', ungrouped: 'No project',
   settings: 'Space settings', linkedProjects: 'Linked projects', projectCandidates: 'Existing projects', linkProject: 'Link project', unlinkProject: 'Unlink project', unlinkProjectHint: 'Unlinking keeps the project and all work history. Workspace managers can unlink; linking also requires project ownership.',
   home: 'Workspaces', manage: 'Manage', projects: 'Project management', devices: 'Device management', createSpace: 'Create workspace',
@@ -31,7 +31,7 @@ type Labels = typeof en;
 const zh: Labels = {
   activeEmpty: '暂无进行中的工作', accessDenied: '你已无权读取这些任务。',
   developer: '开发员工', reviewer: '评审员工', stage: '最新阶段', unassigned: '未分配', pendingAssignment: '待分配', needsAttention: '需要处理', employeeFilter: '员工 ID',
-  defaultReviewer: '默认评审员工', defaultReviewerHint: '可选引用，不授予权限。评审仍需明确确认、当前授权及固定证据，不改变已有评审。',
+  reviewBasis: '评审依据', reviewBasisHint: '项目内的文件路径，每行一个，例如 SPEC.md。评审会逐一读取并据此判断。', targetReviewer: '此目录的评审员', targetReviewerHint: '只能选择在这个目录工作的员工。', defaultReviewer: '默认评审员工', defaultReviewerHint: '可选引用，不授予权限。评审仍需明确确认、当前授权及固定证据，不改变已有评审。',
   taskViews: '任务视图', taskRecords: '任务记录', ungrouped: '无项目',
   settings: '空间设置', linkedProjects: '已关联项目', projectCandidates: '现有项目', linkProject: '关联项目', unlinkProject: '解除项目关联', unlinkProjectHint: '解除关联会保留项目和全部工作历史。空间管理员可以解除关联；关联项目还需要项目所有权。',
   home: '工作空间', manage: '管理', projects: '项目管理', devices: '设备管理', createSpace: '创建空间',
@@ -59,7 +59,7 @@ const zh: Labels = {
 const zhTW: Labels = {
   activeEmpty: '暫無進行中的工作', accessDenied: '你已無權讀取這些任務。',
   developer: '開發員工', reviewer: '評審員工', stage: '最新階段', unassigned: '未分配', pendingAssignment: '待分配', needsAttention: '需要處理', employeeFilter: '員工 ID',
-  defaultReviewer: '預設評審員工', defaultReviewerHint: '選填引用，不授予權限。評審仍須明確確認、目前授權及固定證據，不改變既有評審。',
+  reviewBasis: '評審依據', reviewBasisHint: '專案內的檔案路徑，每行一個，例如 SPEC.md。評審會逐一讀取並據此判斷。', targetReviewer: '此目錄的評審員', targetReviewerHint: '只能選擇在這個目錄工作的員工。', defaultReviewer: '預設評審員工', defaultReviewerHint: '選填引用，不授予權限。評審仍須明確確認、目前授權及固定證據，不改變既有評審。',
   taskViews: '任務檢視', taskRecords: '任務紀錄', ungrouped: '無專案',
   settings: '空間設定', linkedProjects: '已關聯專案', projectCandidates: '現有專案', linkProject: '關聯專案', unlinkProject: '解除專案關聯', unlinkProjectHint: '解除關聯會保留專案及全部工作歷史。空間管理員可以解除關聯；關聯專案還需要專案擁有權。',
   home: '工作空間', manage: '管理', projects: '專案管理', devices: '裝置管理', createSpace: '建立空間',
@@ -87,7 +87,7 @@ const zhTW: Labels = {
 const vi: Labels = {
   activeEmpty: 'Không có công việc đang tiến hành', accessDenied: 'Bạn không còn quyền đọc các công việc này.',
   developer: 'Nhân viên phát triển', reviewer: 'Nhân viên đánh giá', stage: 'Giai đoạn mới nhất', unassigned: 'Chưa phân công', pendingAssignment: 'Chờ phân công', needsAttention: 'Cần xử lý', employeeFilter: 'ID nhân viên',
-  defaultReviewer: 'Nhân viên đánh giá mặc định', defaultReviewerHint: 'Tham chiếu tùy chọn, không cấp quyền. Yêu cầu đánh giá vẫn cần xác nhận, quyền hiện tại và bằng chứng cố định; đánh giá cũ không thay đổi.',
+  reviewBasis: 'Căn cứ đánh giá', reviewBasisHint: 'Đường dẫn tệp trong dự án, mỗi dòng một tệp, ví dụ SPEC.md. Người đánh giá đọc từng tệp để đánh giá.', targetReviewer: 'Người đánh giá của thư mục này', targetReviewerHint: 'Chỉ chọn được nhân viên làm việc trong thư mục này.', defaultReviewer: 'Nhân viên đánh giá mặc định', defaultReviewerHint: 'Tham chiếu tùy chọn, không cấp quyền. Yêu cầu đánh giá vẫn cần xác nhận, quyền hiện tại và bằng chứng cố định; đánh giá cũ không thay đổi.',
   taskViews: 'Chế độ công việc', taskRecords: 'Lịch sử công việc', ungrouped: 'Không có dự án',
   settings: 'Cài đặt không gian', linkedProjects: 'Dự án đã liên kết', projectCandidates: 'Dự án hiện có', linkProject: 'Liên kết dự án', unlinkProject: 'Bỏ liên kết dự án', unlinkProjectHint: 'Bỏ liên kết vẫn giữ dự án và toàn bộ lịch sử công việc. Người quản lý không gian có thể bỏ liên kết; liên kết còn yêu cầu quyền sở hữu dự án.',
   home: 'Không gian làm việc', manage: 'Quản lý', projects: 'Quản lý dự án', devices: 'Quản lý thiết bị', createSpace: 'Tạo không gian',

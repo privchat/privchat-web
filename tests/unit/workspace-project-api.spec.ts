@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { WorkspaceApi, type Project } from '../../src/features/workspace/api';
 
-const project: Project = {id: 'p', ownerUserId: 'owner', writable: true, manageable: true, name: 'Standalone', archived: 0, version: 2, targets: []};
+const project: Project = {id: 'p', ownerUserId: 'owner', writable: true, manageable: true, name: 'Standalone', archived: 0, version: 2, targets: [], reviewBasis: []};
 const originalFetch = globalThis.fetch;
 const calls: {url: URL; method: string; body: unknown; authorization: string | null}[] = [];
 let response: unknown;
@@ -15,16 +15,14 @@ test.beforeEach(() => {
 test.afterEach(() => {globalThis.fetch = originalFetch;});
 const api = () => new WorkspaceApi('https://platform.example/app', () => 'token');
 
-test('default review employee is a single optional reference; omission preserves and null clears', async () => {
-  await api().saveProject({name: 'New', defaultReviewerEmployeeId: 'reviewer'});
+test('each target carries its reviewer; review basis is sent clean and omission preserves it', async () => {
+  await api().saveProject({name: 'New', targets: [{nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: 'reviewer'}], reviewBasis: [' SPEC.md ', '', 'docs/CODING.md']});
   await api().saveProject({id: 'p', name: 'Existing', version: 2});
-  await api().saveProject({id: 'p', name: 'Existing', version: 2, defaultReviewerEmployeeId: 'another'});
-  await api().saveProject({id: 'p', name: 'Existing', version: 2, defaultReviewerEmployeeId: null});
+  await api().saveProject({id: 'p', name: 'Existing', version: 2, targets: [{id: 't', nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: null}], reviewBasis: []});
   expect(calls.map(call => call.body)).toEqual([
-    {name: 'New', targets: [], defaultReviewerEmployeeId: 'reviewer'},
+    {name: 'New', targets: [{nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: 'reviewer'}], reviewBasis: ['SPEC.md', 'docs/CODING.md']},
     {id: 'p', name: 'Existing', version: 2},
-    {id: 'p', name: 'Existing', version: 2, updateDefaultReviewer: true, defaultReviewerEmployeeId: 'another'},
-    {id: 'p', name: 'Existing', version: 2, updateDefaultReviewer: true, defaultReviewerEmployeeId: null},
+    {id: 'p', name: 'Existing', version: 2, targets: [{nodeId: 'n', workdirBindingId: 'd'}], reviewBasis: []},
   ]);
   expect(calls.every(call => !call.url.pathname.includes('/work-execution/') && !call.url.pathname.includes('/work-note/'))).toBe(true);
 });
@@ -44,7 +42,7 @@ test('versioned project updates exclude workspace and permission metadata', asyn
   await api().saveProject(legacy);
   await api().projectStatus('p', 1, 2);
   expect(calls.map(call => [call.method, call.body])).toEqual([
-    ['PUT', {id: 'p', name: 'Standalone', version: 2, targets: []}],
+    ['PUT', {id: 'p', name: 'Standalone', version: 2, targets: [], reviewBasis: []}],
     ['PUT', {id: 'p', archived: 1, version: 2}],
   ]);
 });

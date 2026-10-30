@@ -318,25 +318,20 @@ test('normal room event buffers changes while reading history, preserves anchor 
   expect(requests.filter(request => request.path === '/workspace/activity/page').every(request => ['active_tasks_v1', 'history_tasks_v1'].includes(request.query.searchParams.get('view')!) && request.query.searchParams.get('limit') === '20')).toBe(true);
 });
 
-test('project default reviewer can be set and cleared with versioned explicit flag; rename preserves it', async ({page}) => {
-  let reviewer: string | null = 'reviewer';
-  const requests = await mock(page, (path, _query, body) => {
-    if (path === '/workspace/project/get/p') return {...project, defaultReviewerEmployeeId: reviewer};
-    if (path === '/workspace/project/update' && body.updateDefaultReviewer) reviewer = body.defaultReviewerEmployeeId;
+test('project review basis and per-directory reviewer save with the targets; rename preserves them', async ({page}) => {
+  const target = {id: 't', nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: 'reviewer'};
+  const requests = await mock(page, path => {
+    if (path === '/workspace/project/get/p') return {...project, targets: [target], reviewBasis: ['SPEC.md']};
   });
   await openProjects(page);
   await page.getByRole('button', {name: 'Edit', exact: true}).click();
-  await expect(page.getByLabel('Default review employee', {exact: true})).toHaveValue('reviewer');
-  await page.getByLabel('Name', {exact: true}).fill('Renamed'); await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(page.getByLabel('Review basis', {exact: true})).toHaveValue('SPEC.md');
+  await page.getByLabel('Name', {exact: true}).fill('Renamed');
+  await page.getByLabel('Review basis', {exact: true}).fill('SPEC.md\ndocs/CODING.md');
+  await page.getByRole('button', {name: 'Save', exact: true}).click();
   await expect(page.getByRole('button', {name: 'Edit', exact: true})).toBeVisible();
-  expect(requests.filter(r => r.path === '/workspace/project/update').at(-1)?.body).not.toHaveProperty('updateDefaultReviewer');
-  for (const value of ['other-reviewer', '']) {
-    await page.getByRole('button', {name: 'Edit', exact: true}).click();
-    await page.getByLabel('Default review employee', {exact: true}).selectOption(value);
-    await page.getByRole('button', {name: 'Save', exact: true}).click();
-    await expect(page.getByRole('button', {name: 'Edit', exact: true})).toBeVisible();
-    expect(requests.filter(r => r.path === '/workspace/project/update').at(-1)?.body).toMatchObject({id: 'p', version: 7, updateDefaultReviewer: true, defaultReviewerEmployeeId: value || null});
-  }
+  expect(requests.filter(r => r.path === '/workspace/project/update').at(-1)?.body).toMatchObject({id: 'p', version: 7,
+    targets: [{nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: 'reviewer'}], reviewBasis: ['SPEC.md', 'docs/CODING.md']});
   expect(requests.some(r => r.path.includes('/work-note/') || r.path.includes('/work-execution/'))).toBe(false);
 });
 
@@ -427,7 +422,7 @@ for (const authorized of [true, false]) test(`default review selection uses exis
   const requests = await mock(page, path => {
     if (path === '/workspace/activity/page') return feed([{...row('21'), item: {...item('21'), projectId: 'p'}, reviewerEmployeeId: 'reviewer'}], false);
     if (path === '/workspace/work-item/get/21') return {...item('21'), projectId: 'p'};
-    if (path === '/workspace/project/get/p') return {...project, defaultReviewerEmployeeId: 'reviewer'};
+    if (path === '/workspace/project/get/p') return {...project, targets: [{id: 't', nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: 'reviewer'}]};
     if (path === '/workspace/employee/page') return {items: authorized ? [employee, {...employee, id: 'review-ref', employeeId: 'reviewer', name: 'Reviewer'}] : [employee], nextCursor: null, hasMore: false};
   });
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Task 21', exact: true}).click();
