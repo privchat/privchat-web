@@ -12,34 +12,38 @@
 
 const DEVICE_ID_KEY = 'privchat.web.device_id';
 
-function generateUuid(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  // RFC4122-ish fallback for older browsers / non-secure contexts.
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+/** The device id every PrivChat / Weey client and server uses: a random UUID v4, lowercase, hyphenated. */
+const CANONICAL_DEVICE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export function isCanonicalDeviceId(id: string): boolean {
+  return CANONICAL_DEVICE_ID.test(id);
+}
+
+/** A secure random v4; `getRandomValues` exists even where `randomUUID` does not (non-secure contexts). */
+export function newDeviceId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6]! & 0x0f) | 0x40;
+  b[8] = (b[8]! & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 /**
  * Returns the persisted Web device_id, creating and storing one on first use.
  * Reused across page reloads, reconnects and token refresh so the server
  * recognizes the same device and does not re-notify a "new device login".
+ * A stored value in any other form is a corrupt store and fails loudly.
  */
 export function getOrCreateDeviceId(): string {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    // SSR / storage unavailable: best-effort fresh id (cannot persist).
-    return generateUuid();
-  }
-  const existing = window.localStorage.getItem(DEVICE_ID_KEY);
-  if (existing != null && existing.length > 0) {
+  const storage = window.localStorage;
+  const existing = storage.getItem(DEVICE_ID_KEY);
+  if (existing != null) {
+    if (!isCanonicalDeviceId(existing)) throw new Error('The stored device id is not a canonical UUID v4');
     return existing;
   }
-  const id = generateUuid();
-  window.localStorage.setItem(DEVICE_ID_KEY, id);
+  const id = newDeviceId();
+  storage.setItem(DEVICE_ID_KEY, id);
   return id;
 }
 
