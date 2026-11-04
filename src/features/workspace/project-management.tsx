@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import type { Employee, Node, Project, ProjectTarget, WorkspaceApi } from './api';
+import { ROUND_END_LIMIT } from './api';
 import {TaskHistory} from './task-history';
 import { usePageLabels } from './page-labels';
 export const workspaceField = 'block w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm';
@@ -14,7 +15,7 @@ export function ProjectManagement({api, onBack, renderSession}: {api: WorkspaceA
   const [projects, setProjects] = useState<Project[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [edit, setEdit] = useState<{id?: string; writable: boolean; name: string; version?: number; targets: ProjectTarget[]; basis: string}>();
+  const [edit, setEdit] = useState<{id?: string; writable: boolean; name: string; version?: number; targets: ProjectTarget[]; basis: string; roundEnd: string}>();
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stale, setStale] = useState(false);
@@ -41,16 +42,18 @@ export function ProjectManagement({api, onBack, renderSession}: {api: WorkspaceA
   useEffect(() => {void load(); return () => {generation.current++;};}, [api]);
   if (history) return <TaskHistory api={api} scope={{projectId: history.id}} projects={[history]} renderSession={renderSession} onBack={() => setHistory(undefined)}/>;
   return <section data-testid="project-management" className="space-y-3">
-    <header className="flex items-center justify-between"><Button variant="ghost" disabled={busy} onClick={onBack}>{l('back')}</Button><h2>{l('projects')}</h2><Button disabled={busy} onClick={() => {setEdit({writable: true, name: '', targets: [], basis: ''}); setStale(false);}}>{l('create')}</Button></header>
+    <header className="flex items-center justify-between"><Button variant="ghost" disabled={busy} onClick={onBack}>{l('back')}</Button><h2>{l('projects')}</h2><Button disabled={busy} onClick={() => {setEdit({writable: true, name: '', targets: [], basis: '', roundEnd: ''}); setStale(false);}}>{l('create')}</Button></header>
     {error && <p role="alert">{l(stale ? 'conflict' : 'error')}</p>}
     <Button variant="outline" disabled={busy} onClick={() => {setEdit(undefined); setStale(false); void load();}}>{l('reload')}</Button>
-    {!edit && projects.map(project => <article key={project.id} className="space-y-2 rounded border p-3"><h3>{project.name} {project.archived !== 0 && l('archived')}</h3><p>v{project.version}</p><Button variant="outline" disabled={busy} onClick={() => setHistory(project)}>{l('taskRecords')}</Button>{!project.targets.length && <p>{l('noTargets')}</p>}<Button disabled={busy || !project.writable || project.archived !== 0} onClick={async () => {setBusy(true); try {const p = await api.project(project.id); setEdit({...p, basis: (p.reviewBasis ?? []).join('\n')}); setStale(false);} catch {setError(true);} finally {setBusy(false);}}}>{l('edit')}</Button><Button disabled={busy || !project.writable} onClick={async () => {setBusy(true); try {await api.projectStatus(project.id, project.archived ? 0 : 1, project.version); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>{l('archived')}</Button></article>)}
+    {!edit && projects.map(project => <article key={project.id} className="space-y-2 rounded border p-3"><h3>{project.name} {project.archived !== 0 && l('archived')}</h3><p>v{project.version}</p><Button variant="outline" disabled={busy} onClick={() => setHistory(project)}>{l('taskRecords')}</Button>{!project.targets.length && <p>{l('noTargets')}</p>}<Button disabled={busy || !project.writable || project.archived !== 0} onClick={async () => {setBusy(true); try {const p = await api.project(project.id); setEdit({...p, basis: (p.reviewBasis ?? []).join('\n'), roundEnd: p.roundEnd ?? ''}); setStale(false);} catch {setError(true);} finally {setBusy(false);}}}>{l('edit')}</Button><Button disabled={busy || !project.writable} onClick={async () => {setBusy(true); try {await api.projectStatus(project.id, project.archived ? 0 : 1, project.version); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>{l('archived')}</Button></article>)}
     {!edit && projects.length < total && <Button disabled={busy} onClick={() => void load(page + 1)}>{l('more')}</Button>}
-    {edit && <form className="space-y-3 rounded border p-3" onSubmit={async e => {e.preventDefault(); if (busy || stale || !edit.writable) return; setBusy(true); try {await api.saveProject({id: edit.id, name: edit.name, version: edit.version, targets: edit.targets.map(({nodeId, workdirBindingId, reviewerEmployeeId}) => ({nodeId, workdirBindingId, reviewerEmployeeId})), reviewBasis: edit.basis.split('\n')}); setEdit(undefined); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>
+    {edit && <form className="space-y-3 rounded border p-3" onSubmit={async e => {e.preventDefault(); if (busy || stale || !edit.writable) return; setBusy(true); try {await api.saveProject({id: edit.id, name: edit.name, version: edit.version, targets: edit.targets.map(({nodeId, workdirBindingId, reviewerEmployeeId}) => ({nodeId, workdirBindingId, reviewerEmployeeId})), reviewBasis: edit.basis.split('\n'), roundEnd: edit.roundEnd}); setEdit(undefined); await load();} catch {setError(true); setStale(true);} finally {setBusy(false);}}}>
       <fieldset disabled={busy || stale || !edit.writable} className="space-y-3">
         <label>{l('name')}<input required maxLength={64} className={workspaceField} value={edit.name} onChange={e => setEdit({...edit, name: e.target.value})}/></label>
         <label>{l('reviewBasis')}<textarea aria-label={l('reviewBasis')} className={workspaceField} rows={3} placeholder="SPEC.md" value={edit.basis} onChange={e => setEdit({...edit, basis: e.target.value.slice(0, 5000)})}/></label>
         <p className="text-sm text-muted-foreground">{l('reviewBasisHint')}</p>
+        <label>{l('roundEnd')}<textarea aria-label={l('roundEnd')} className={workspaceField} rows={3} placeholder={l('roundEndDefault')} value={edit.roundEnd} onChange={e => setEdit({...edit, roundEnd: e.target.value.slice(0, ROUND_END_LIMIT)})}/></label>
+        <p className="text-sm text-muted-foreground">{l('roundEndHint')}</p>
         <h3>{l('targets')}</h3>{edit.targets.length === 0 && <p>{l('noTargets')}</p>}
         {edit.targets.map((target, index) => <div key={index} className="flex flex-wrap gap-2 rounded border p-2">
           <label className="min-w-40 flex-1">{l('node')}<select required className={workspaceField} value={target.nodeId} onChange={e => setEdit({...edit, targets: edit.targets.map((t, i) => i === index ? {nodeId: e.target.value, workdirBindingId: ''} : t)})}><option value="">{l('node')}</option>{!nodes.some(n => n.nodeId === target.nodeId) && target.nodeId && <option value={target.nodeId}>{l('unavailable')}</option>}{nodes.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select></label>

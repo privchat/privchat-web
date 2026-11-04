@@ -37,6 +37,8 @@ export interface WorkspaceInboxEntry {
 }
 export interface WorkspaceSummary extends Workspace { employeeCount: number; availableEmployeeCount?: number | null; employeeAvailabilityKnown?: boolean; openItemCount: number; lastActivityAt: number | null }
 /** A computer holding the project's source: its directory and the default reviewer working there. */
+/** What the server accepts for a project's round-end rules. */
+export const ROUND_END_LIMIT = 1000;
 export interface ProjectTarget { id?: string; nodeId: string; workdirBindingId: string; reviewerEmployeeId?: string | null }
 export interface Project {
   id: string;
@@ -46,6 +48,8 @@ export interface Project {
   name: string; archived: number; version: number; targets: ProjectTarget[];
   /** Project files reviews judge against, relative to the project directory. */
   reviewBasis: string[];
+  /** How a developer finishes every round (commit, push, clean up); blank: the platform default. */
+  roundEnd?: string;
 }
 export interface WorkspaceEmployee { id: string; workspaceId: string; employeeId: string; name?: string | null; nodeId?: string | null; capability?: string | null; workdirBindingId?: string | null; available: boolean; unavailableReason?: string | null; projectTargetIds: string[]; roleDescription?: string; model?: string; workspaceSessionKnown?: boolean; workspaceExecutionId?: string | null; workspaceNativeSessionId?: string | null }
 export interface WorkspaceEmployeePage { items: WorkspaceEmployee[]; nextCursor: string | null; hasMore: boolean }
@@ -88,10 +92,13 @@ export class WorkspaceApi {
   async unlinkProject(workspaceId: string, projectId: string) {
     await deleteAuthedEnvelope<unknown>(`${this.base}/workspace/project/link/delete?${new URLSearchParams({workspaceId, projectId})}`, this.access());
   }
-  saveProject(body: {id?: string; name: string; version?: number; targets?: ProjectTarget[]; reviewBasis?: string[]}) {
+  saveProject(body: {id?: string; name: string; version?: number; targets?: ProjectTarget[]; reviewBasis?: string[]; roundEnd?: string}) {
     const targets = body.targets === undefined ? {} : {targets: body.targets.map(({nodeId, workdirBindingId, reviewerEmployeeId}) =>
       ({nodeId, workdirBindingId, ...(reviewerEmployeeId ? {reviewerEmployeeId} : {})}))};
-    const basis = body.reviewBasis === undefined ? {} : {reviewBasis: body.reviewBasis.map(p => p.trim()).filter(Boolean)};
+    const basis = {
+      ...(body.reviewBasis === undefined ? {} : {reviewBasis: body.reviewBasis.map(p => p.trim()).filter(Boolean)}),
+      ...(body.roundEnd === undefined ? {} : {roundEnd: body.roundEnd.trim().slice(0, ROUND_END_LIMIT)}),
+    };
     return body.id
       ? this.put<Project>('/workspace/project/update', {id: body.id, name: body.name, version: body.version, ...targets, ...basis})
       : this.post<Project>('/workspace/project/create', {name: body.name, targets: targets.targets ?? [], ...basis});
