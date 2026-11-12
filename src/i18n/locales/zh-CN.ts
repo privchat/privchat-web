@@ -372,6 +372,7 @@ export const zhCN: LocaleSchema = {
     chats: '会话',
     contacts: '联系人',
     groups: '群聊',
+    workspace: '工作空间',
   },
   accounts: {
     switcher_title: '账号',

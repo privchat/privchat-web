@@ -33,6 +33,7 @@ import {
   Bell,
   BellOff,
   FileText,
+  LayoutGrid,
   LogOut,
   QrCode,
   ScanLine,
@@ -53,6 +54,7 @@ import type { AccountKey } from '@/lib/account-key';
 import type { SwitchError } from '@/App';
 import { AccountSwitcher } from '@/features/auth/account-switcher';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LangSwitcher } from '@/components/lang-switcher';
 import { ConversationList } from './conversation-list';
@@ -74,12 +76,10 @@ import { QrcodeScanDialog } from './qrcode-scan-dialog';
 import { captureException } from '@/lib/error-reporter';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { cn } from '@/lib/utils';
-import { WorkspaceConsole } from '@/features/workspace/console';
-import { DevicePage } from '@/features/workspace/devices';
+import { SessionConsole } from '@/features/workspace/console';
 import { useWorkspaceApi } from '@/features/workspace/account-api';
-import { AssistantPage } from '@/features/workspace/assistant';
-import type { AssistantReference } from '@/features/workspace/assistant-api';
-import type { SelectPersonalChat } from '@/features/workspace/personal-chat';
+import { WorkspacePage } from '@/features/workspace/workspace-page';
+import { isWorkspaceHash } from '@/features/workspace/routes';
 
 // Lazy-loaded — log viewer is dev-only-ish, not in the first-paint
 // path. Splitting it shaves the console-buffer + dialog plumbing
@@ -137,9 +137,6 @@ export function ChatWorkspace({
   switchError,
   clearSwitchError,
 }: ChatWorkspaceProps) {
-  const { t: workspaceT } = useTranslation();
-  const [workspaceOpen, setWorkspaceOpen] = useState(false);
-  const [workspaceFocus, setWorkspaceFocus] = useState<AssistantReference>();
   const [workRoute, setWorkRoute] = useState(location.hash);
   useEffect(() => {
     const change = () => {
@@ -242,19 +239,11 @@ export function ChatWorkspace({
 
   const activeId = active === null ? null : `${active.channelId}:${active.channelType}`;
 
-  const onAssistantChat = useCallback<SelectPersonalChat>((channelId, channelType, peer) => {
-    onSelect(channelId, channelType, peer);
-    setTab('chats');
-    location.hash = '';
-    setWorkRoute('');
-  }, [onSelect]);
-
-  if (getConfiguredAccountMode() === 'platform' && workRoute === '#/agent/devices') {
-    return <DeviceScreen client={_handle.client} />;
-  }
-  if (getConfiguredAccountMode() === 'platform' && workRoute === '#/assistant') {
-    return <AssistantScreen client={_handle.client} onSelect={onAssistantChat} />;
-  }
+  const platform = getConfiguredAccountMode() === 'platform';
+  const workspaceActive = platform && isWorkspaceHash(workRoute);
+  const onTabChange = (next: SidebarTab) => setTab(next);
+  const openWorkspace = useCallback(() => {location.hash = '/workspace';}, []);
+  const closeWorkspace = useCallback(() => {location.hash = ''; setWorkRoute('');}, []);
 
   return (
     <div className="flex h-dvh flex-col bg-muted">
@@ -271,14 +260,10 @@ export function ChatWorkspace({
         clearSwitchError={clearSwitchError}
         onOpenDirectByUserId={onOpenContact}
         onOpenGroupChannel={onOpenGroup}
+        onOpenWorkspace={openWorkspace}
       />
       <LazyLogsDialog open={logsOpen} onOpenChange={setLogsOpen} />
-      {getConfiguredAccountMode() === 'platform' && <>
-        <Button variant="ghost" onClick={() => {setWorkspaceFocus(undefined); setWorkspaceOpen(true);}} data-testid="workspace-entry">{workspaceT('agentWorkspace.title')}</Button>
-        <Button variant="ghost" onClick={() => {location.hash = '/agent/devices';}} data-testid="devices-entry">{workspaceT('agentWorkspace.deviceManagement')}</Button>
-        <Button variant="ghost" onClick={() => {location.hash = '/assistant';}} data-testid="assistant-entry">{workspaceT('agentWorkspace.assistantTitle')}</Button>
-        <WorkspaceConsole client={_handle.client} open={workspaceOpen} onOpenChange={setWorkspaceOpen} focus={workspaceFocus} />
-      </>}
+      <WorkspaceDialog open={workspaceActive} onClose={closeWorkspace} client={_handle.client} accountKey={activeAccountKey ?? null} />
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row">
         {/* List pane */}
@@ -295,7 +280,7 @@ export function ChatWorkspace({
             active === null ? 'flex-1 md:flex-none' : 'hidden md:flex',
           )}
         >
-          <SidebarTabs active={tab} onChange={setTab} />
+          <SidebarTabs active={tab} onChange={onTabChange} />
 
           <div
             data-testid="pane-chats"
@@ -344,14 +329,25 @@ export function ChatWorkspace({
   );
 }
 
-function DeviceScreen({client}: {client: PrivchatHandle['client']}) {
-  const api = useWorkspaceApi(client);
-  return <DevicePage api={api} onBack={() => {location.hash = '';}} />;
+function WorkspaceDialog({open, onClose, client, accountKey}: {open: boolean; onClose: () => void; client: PrivchatHandle['client']; accountKey: AccountKey | null}) {
+  const { t } = useTranslation();
+  return (
+    <Dialog open={open} onOpenChange={(next) => {if (!next) onClose();}}>
+      <DialogContent className="flex h-[90vh] w-[95vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-4 py-3 text-left">
+          <DialogTitle>{t('tabs.workspace')}</DialogTitle>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">
+          {open && <WorkspaceScreen client={client} accountKey={accountKey} />}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-function AssistantScreen({client, onSelect}: {client: PrivchatHandle['client']; onSelect: SelectPersonalChat}) {
+function WorkspaceScreen({client, accountKey}: {client: PrivchatHandle['client']; accountKey: AccountKey | null}) {
   const api = useWorkspaceApi(client);
-  return <AssistantPage api={api} client={client} onBack={() => {location.hash = '';}} onSelect={onSelect} />;
+  return <WorkspacePage api={api} client={client} accountKey={accountKey} renderSession={id => <SessionConsole key={id} api={api} executionId={id}/>} onLockChange={() => {}}/>;
 }
 
 /** Lazy wrapper for the logs dialog. Mounts on first open, stays
@@ -386,6 +382,7 @@ function TopBar({
   clearSwitchError,
   onOpenDirectByUserId,
   onOpenGroupChannel,
+  onOpenWorkspace,
 }: {
   uid: string | undefined;
   onLogout: () => void;
@@ -407,6 +404,8 @@ function TopBar({
    *  into the group's channel. channel_id == group_id by server
    *  invariant; channel_type is 2 for groups. */
   onOpenGroupChannel: (channelId: string, channelType: number) => void;
+  /** Opens the workspace panel in a large modal dialog (platform only). */
+  onOpenWorkspace: () => void;
 }) {
   const { t } = useTranslation();
   // Self profile drives the top-bar identity display. It may be empty
@@ -456,6 +455,18 @@ function TopBar({
             errorI18nKey={switchError?.i18nKey ?? null}
             onDismissError={clearSwitchError}
           />
+        )}
+        {getConfiguredAccountMode() === 'platform' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenWorkspace}
+            aria-label={t('tabs.workspace')}
+            title={t('tabs.workspace')}
+            data-testid="topbar-workspace"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
         )}
         {getConfiguredAccountMode() === 'platform' && (
           <Button

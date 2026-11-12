@@ -27,11 +27,12 @@ async function mount(page: Page, initial: unknown[] = [], sessions: unknown[] = 
   });
   await page.evaluate(async () => {
     const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage('en');
-    const {mountWorkspaceConsole} = await import('/src/test-harness/workspace-console.tsx');
-    mountWorkspaceConsole(`${location.origin}/__employees/app`);
+    const {mountEmployeePanel} = await import('/src/test-harness/workspace-console.tsx');
+    mountEmployeePanel(`${location.origin}/__employees/app`);
   });
   const panel = page.getByTestId('employee-panel');
   await expect(panel.getByRole('button', {name: 'Refresh', exact: true})).toBeEnabled();
+  await expect(panel.getByRole('combobox', {name: /^Devices/}).locator('option')).toHaveCount(3);
   return {panel, posts};
 }
 
@@ -172,20 +173,20 @@ test('definite validation rejection allows correction with a new request key', a
   expect(posts[1].body.name).toBe('Corrected');
 });
 
-test('unknown send followed by auth rejection retains recovery key and blocks dialog close', async ({page}) => {
+test('unknown send followed by auth rejection retains recovery key and keeps the panel locked', async ({page}) => {
   const {panel, posts} = await mount(page, [employee], [], (_path, _body, attempt) => attempt === 1 ? 'abort' : attempt === 2 ? {errorCode: 401} : execution);
   await panel.getByRole('combobox', {name: /^Virtual employees/}).selectOption('employee-1');
   await panel.getByRole('textbox', {name: 'Message to employee', exact: true}).fill('Keep original text');
   await panel.getByRole('button', {name: 'Send message', exact: true}).click();
   await expect(panel.getByRole('alert')).toContainText('Outcome unknown');
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(panel.locator('..')).toHaveAttribute('data-locked', 'true');
   await panel.getByRole('button', {name: 'Retry same request'}).click();
   await expect(panel.getByRole('button', {name: 'Retry same request'})).toBeEnabled();
+  await expect(panel.locator('..')).toHaveAttribute('data-locked', 'true');
   await panel.getByRole('button', {name: 'Retry same request'}).click();
   await expect(panel.getByRole('textbox', {name: 'Message to employee', exact: true})).toHaveValue('');
   expect(posts).toHaveLength(3); expect(posts[0]).toEqual(posts[1]); expect(posts[1]).toEqual(posts[2]);
-  await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(panel.locator('..')).toHaveAttribute('data-locked', 'false');
 });
 
 test('binding confirmation resets when model or workdir changes and submits no raw native identifier', async ({page}) => {

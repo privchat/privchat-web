@@ -21,9 +21,8 @@ export function mountRecordsConsole(baseUrl: string) {
   return select;
 }
 
-import { ConsoleBody, WorkspaceConsole } from '@/features/workspace/console';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { WorkspacePage } from '@/features/workspace/workspace-page';
+import { EmployeePanel } from '@/features/workspace/employees';
 import type { PrivchatClient } from '@privchat/sdk';
 import { DevicePage } from '@/features/workspace/devices';
 import { AssistantPage } from '@/features/workspace/assistant';
@@ -31,26 +30,26 @@ import { WorkItemPanel } from '@/features/workspace/work-item';
 import { WorkflowPanel } from '@/features/workspace/workflow';
 import type { Binding, Node, WorkItem, WorkNote } from '@/features/workspace/api';
 
-export const workspaceSubscriptions: string[] = [];
-export function mountWorkspaceConsole(baseUrl: string) {
-  const host=document.createElement('div');document.body.append(host);
-  const client={
-    sessionSnapshot:()=>({user_id:'fixture'}),
-    observeEvents:()=>()=>{},
-    subscribeChannel:async(id:string)=>{workspaceSubscriptions.push(`join:${id}`);},
-    unsubscribeChannel:async(id:string)=>{workspaceSubscriptions.push(`leave:${id}`);},
-  } as unknown as PrivchatClient;
-  const root=createRoot(host);
-  // Mirror production WorkspaceConsole (console.tsx): block dialog close while an employee request is pending.
-  let employeeRequestLocked = false;
-  root.render(<Dialog open onOpenChange={value => {if (value || !employeeRequestLocked) {root.unmount();host.remove();}}}><DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl"><DialogTitle>Workspace legacy controls</DialogTitle><ConsoleBody client={client} providedApi={new WorkspaceApi(baseUrl,()=> 'test')} onEmployeeRequestLockChange={locked => {employeeRequestLocked = locked;}}/></DialogContent></Dialog>);
-}
-
-export function mountWorkspacePage(baseUrl: string) {
+/** Full module fixture. The hash is set before render, exactly like a deep link or refresh. */
+export function mountWorkspacePage(baseUrl: string, hash = '#/workspace', client?: PrivchatClient, accountKey?: string | null) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
   host.className = 'mx-auto max-w-3xl p-3';
+  location.hash = hash;
   const root = createRoot(host);
-  root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
+  root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} client={client} accountKey={accountKey} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
+  return () => {root.unmount(); host.remove();};
+}
+
+/** Standalone employee panel fixture with the production node refresh and managed session console. */
+export function mountEmployeePanel(baseUrl: string) {
+  const host = document.createElement('div'); document.body.replaceChildren(host);
+  host.className = 'mx-auto max-w-3xl p-3';
+  const api = new WorkspaceApi(baseUrl, () => 'test');
+  const root = createRoot(host);
+  const render = (nodes: Node[]) => root.render(<EmployeePanel api={api} nodes={nodes} refreshNodes={async () => {render(await api.nodes());}} renderSession={id => <SessionConsole key={id} api={api} executionId={id} employeeManaged/>} onRequestLockChange={locked => {host.dataset.locked = String(locked);}}/>);
+  render([]);
+  void api.nodes().then(render).catch(() => {});
+  return () => {root.unmount(); host.remove();};
 }
 
 export const normalRoomCalls: string[] = [];
@@ -58,10 +57,9 @@ let normalRoomListener: Parameters<PrivchatClient['observeEvents']>[0] | undefin
 let normalRoomUnmount: (() => void) | undefined;
 export function emitNormalRoomEvent(event: unknown) {normalRoomListener?.({event} as never);}
 export function unmountNormalWorkspaceConsole() {normalRoomUnmount?.(); normalRoomUnmount = undefined;}
+/** The production page with a recording room transport, so tests observe real subscribe/snapshot ordering. */
 export function mountNormalWorkspaceConsole(baseUrl: string) {
   unmountNormalWorkspaceConsole(); normalRoomCalls.length = 0;
-  const host = document.createElement('div'); document.body.replaceChildren(host);
-  const root = createRoot(host);
   const client = {
     sessionSnapshot: () => ({user_id: 'fixture'}),
     subscribeChannel: async (id: string) => {normalRoomCalls.push(`subscribe:${id}`);},
@@ -71,8 +69,7 @@ export function mountNormalWorkspaceConsole(baseUrl: string) {
       return () => {normalRoomCalls.push('off'); if (normalRoomListener === listener) normalRoomListener = undefined;};
     },
   } as unknown as PrivchatClient;
-  normalRoomUnmount = () => {root.unmount(); host.remove();};
-  root.render(<WorkspaceConsole client={client} api={new WorkspaceApi(baseUrl, () => 'test')} open onOpenChange={open => {if (!open) unmountNormalWorkspaceConsole();}}/>);
+  normalRoomUnmount = mountWorkspacePage(baseUrl, '#/workspace', client);
 }
 
 export function mountDevicePage(baseUrl: string) {

@@ -59,12 +59,13 @@ export function TestApp() {
   const handle = useMemo(() => {
     installTestControls();
     const adapter = createTestAdapter();
-    // ChatWorkspace no longer reads `handle.client`, so a typed-cast
-    // empty stub is enough. We only need the `adapter` field to be a
-    // real adapter so the provider works.
+    // ChatWorkspace reads `handle.client` only for the workspace panel
+    // (useWorkspaceApi → client.sessionSnapshot). Mirror that one method
+    // so the workspace dialog can mount in mock mode; all chat data still
+    // flows through the real adapter below.
     const fakeHandle: PrivchatHandle = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      client: {} as any,
+      client: { sessionSnapshot: () => ({ user_id: '900001' }) } as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       adapter: adapter as any,
     };

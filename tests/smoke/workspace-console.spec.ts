@@ -134,49 +134,29 @@ test('network failure during subscribe never becomes live without a successful r
  expect(result.first).not.toContain('snapshot');expect(result.second).toEqual(['join','subscribe','snapshot']);expect(result.states).toEqual(['stale','live']);
 });
 
-test('workspace component joins before authorized snapshot and fits a phone viewport',async({page})=>{
+test('workspace page joins before authorized snapshot and fits a phone viewport',async({page})=>{
  await page.setViewportSize({width:390,height:844});
  const paths:string[]=[];
- const starts:Record<string,unknown>[]=[];
  await page.route('**/__workspace/app/**',async route=>{
   const path=new URL(route.request().url()).pathname;paths.push(path);
   let data:unknown=[];
-  if(path.endsWith('/workspace/list'))data=[{id:'21',name:'Example workspace',description:'',archived:0,myRole:'owner'}];
-  if(path.endsWith('/agent/nodes'))data=[{nodeId:'8',name:'Work laptop',state:'active',granted:['agent.codex']},{nodeId:'10',name:'Unbound laptop',state:'active',granted:['agent.codex']}];
+  if(path.endsWith('/workspace/page'))data={list:[{id:'21',name:'Example workspace',description:'',archived:0,myRole:'owner',employeeCount:0,availableEmployeeCount:0,employeeAvailabilityKnown:true,openItemCount:1,lastActivityAt:null}],total:1};
+  if(path.endsWith('/workspace/get/21'))data={id:'21',name:'Example workspace',description:'',archived:0,myRole:'owner'};
+  if(path.endsWith('/workspace/inbox/list'))data={entries:[]};
   if(path.endsWith('/room/join'))data={channelId:'400',channelType:3,ticket:'fixture',expiresAt:Date.now()+60000,eventProtocolVersion:1};
-  if(path.endsWith('/work-item/list'))data=[{id:'31',workspaceId:'21',title:'Review change',description:'',status:'open',version:2}];
-  if(path.endsWith('/work-note/list'))data=[{id:'71',workItemId:'31',kind:'artifact',body:'Authorized artifact record',artifactRef:'repo@commit:report.md'}];
-  if(path.endsWith('/agent-binding/list'))data=[{id:'41',nodeId:'8',capability:'agent.codex',revoked:0},{id:'42',nodeId:'9',capability:'agent.claude',revoked:0},{id:'43',nodeId:'11',capability:'agent.codex',revoked:1}];
-  if(path.endsWith('/work-execution/create')){starts.push(route.request().postDataJSON());data={id:'51',executionId:null,state:null};}
+  if(path.endsWith('/activity/page'))data={items:[{item:{id:'31',workspaceId:'21',title:'Review change',description:'',status:'open',version:2},latestExecution:null,executionCount:0}],olderCursor:null,hasOlder:false,refreshRequired:false};
   await route.fulfill({json:{code:0,data}});
  });
- await page.evaluate(async()=>{const {mountWorkspaceConsole}=await import('/src/test-harness/workspace-console.tsx');mountWorkspaceConsole(`${location.origin}/__workspace/app`);});
- const c=page.getByTestId('workspace-console');
- await c.locator('select').first().selectOption('21');
- await expect(c.getByRole('option',{name:'Review change · open'})).toBeAttached();
- await expect(c.getByRole('status')).toHaveText(/Up to date|已对账|Đã cập nhật/);
- await c.getByLabel(/Work items|工作事项|Công việc/).selectOption('31');
- await c.locator('label').filter({hasText:/Authorized capability|已授权能力|Năng lực/}).locator('select').last().selectOption('41');
- await c.getByRole('textbox',{name:/Request|工作要求|Yêu cầu/,exact:true}).fill('Review this change');
- await c.getByRole('textbox',{name:/Work directory binding|工作目录绑定|Thư mục/}).fill('repo');
- const run=c.getByRole('button',{name:/Start work|开始执行|Bắt đầu/});
- await expect(run).toBeDisabled();
- await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).first().fill('   ');
- await expect(run).toBeDisabled();
- await c.getByRole('textbox',{name:/Model|模型|Mô hình/,exact:true}).first().fill('configured-model');
- await expect(run).toBeEnabled();
- await expect(c.getByText('Authorized artifact record')).toBeVisible();
- await expect(c.getByRole('group',{name:/Optional delegation|可选委托|Thiết bị được/}).getByRole('checkbox')).toHaveCount(2);
- await expect(c.getByRole('group',{name:/Optional delegation|可选委托|Thiết bị được/}).getByRole('checkbox').first()).not.toBeChecked();
- await expect(c.getByRole('group',{name:/Optional delegation|可选委托|Thiết bị được/}).getByRole('checkbox').last()).not.toBeChecked();
- expect(paths.findIndex(p=>p.endsWith('/room/join'))).toBeLessThan(paths.findIndex(p=>p.endsWith('/work-item/list')));
- await expect.poll(async()=>{const box=await page.getByRole('dialog').boundingBox();return !!box&&box.x>=0&&box.x+box.width<=390;}).toBe(true);
- await page.screenshot({path:'/tmp/weey-workspace-console.png'});
- await run.click();await expect.poll(()=>starts.length).toBe(1);
- expect(starts[0].delegationTargets).toEqual([]);
- await c.getByRole('button',{name:/New request|新请求|Yêu cầu mới/}).click();
- await c.getByRole('textbox',{name:/Request|工作要求|Yêu cầu/,exact:true}).fill('Review again');
- await c.getByRole('checkbox',{name:'9 · agent.claude'}).check();
- await run.click();await expect.poll(()=>starts.length).toBe(2);
- expect(starts[1].delegationTargets).toEqual([{nodeId:'9',capability:'agent.claude'}]);
+ await page.evaluate(async()=>{
+  const {default:i18n}=await import('/src/i18n/index.ts');await i18n.changeLanguage('en');
+  const {mountNormalWorkspaceConsole}=await import('/src/test-harness/workspace-console.tsx');mountNormalWorkspaceConsole(`${location.origin}/__workspace/app`);
+ });
+ await page.getByTestId('workspace-card').click();
+ const feed=page.getByTestId('task-feed');
+ await expect(feed.getByTestId('task-card')).toHaveCount(1);
+ await expect(feed).toContainText('Review change');
+ expect(paths.findIndex(p=>p.endsWith('/room/join'))).toBeLessThan(paths.findIndex(p=>p.endsWith('/activity/page')));
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ expect(await feed.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await page.screenshot({path:'/tmp/weey-workspace-page.png'});
 });

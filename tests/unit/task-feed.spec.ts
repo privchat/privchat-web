@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { historical, mergeTaskFeed, mergeActivityPage, unfinishedTaskFeed, validateTaskFeed } from '../../src/features/workspace/task-feed';
+import { historical, mergeActivityPage, unfinishedTaskFeed, validateTaskFeed } from '../../src/features/workspace/task-feed';
 import { CreateItemIntent } from '../../src/features/workspace/create-item-intent';
 import type { WorkspaceActivity, WorkspaceApi } from '../../src/features/workspace/api';
 const row = (id: string, status = 'open', createdAt = 10, closedAt: number | null = null, version = 1): WorkspaceActivity => ({item: {id, workspaceId: 'w', title: id, description: '', status, createdAt, closedAt, version}, latestExecution: {id: `e-${id}`, executionId: `e-${id}`, state: 'succeeded'}, executionCount: 2});
@@ -9,17 +9,22 @@ test('home excludes only business-ended tasks, not approval, failure or successf
   expect(unfinishedTaskFeed(rows).map(r => r.item.id)).toEqual(['3', '4', '5', '6']);
   expect(rows.map(r => r.item.id)).toEqual(['1', '2', '3', '4', '5', '6']);
 });
-test('home closes tasks after version merge and server order is preserved without attention or timestamp sorting', () => {
-  const rows = mergeTaskFeed([row('2'), row('3', 'open', 30)], [row('2', 'done', 10, 40, 2), row('1', 'open', 20)]);
-  expect(unfinishedTaskFeed(mergeActivityPage([], [row('3'), row('1', 'open', 50)] )).map(r => r.item.id)).toEqual(['3', '1']);
-  expect(rows.find(r => r.item.id === '2')?.item.status).toBe('done');
+test('merge keeps server order, replaces by highest business version and never sorts by attention or timestamps', () => {
+  const merged = mergeActivityPage([row('2'), row('3', 'open', 30)], [row('2', 'done', 10, 40, 2), row('1', 'open', 20)]);
+  expect(merged.map(r => r.item.id)).toEqual(['2', '3', '1']);
+  expect(merged.find(r => r.item.id === '2')?.item.status).toBe('done');
+  expect(unfinishedTaskFeed(mergeActivityPage([], [row('3'), row('1', 'open', 50)])).map(r => r.item.id)).toEqual(['3', '1']);
 });
-test('groups by business closing time, then unfinished creation time and numeric ID; success is not acceptance', () => {
-  expect(mergeTaskFeed([], [row('10'), row('2'), row('4', 'cancelled', 500, 60), row('3', 'done', 800, 40), row('1', 'done'), row('5', 'in_progress', 20)]).map(r => r.item.id)).toEqual(['1', '3', '4', '2', '10', '5']);
+test('success is not acceptance; only business closing ends a task', () => {
   expect(historical(row('2'))).toBe(false);
+  expect(historical({...row('2'), latestExecution: {id: 'e', executionId: 'e', state: 'succeeded'}})).toBe(false);
+  expect(historical(row('2', 'done'))).toBe(true);
+  expect(historical(row('2', 'cancelled'))).toBe(true);
 });
-test('paging merges highest business version and completion moves one card', () => {
-  expect(mergeTaskFeed([row('2'), row('3')], [row('2', 'done', 10, 90, 2), row('3', 'done', 10, 30, 0)]).map(r => [r.item.id, r.item.status, r.item.version])).toEqual([['2', 'done', 2], ['3', 'open', 1]]);
+test('paging keeps the newer version when an older page overlaps; completion moves one card out of home', () => {
+  const merged = mergeActivityPage([row('2'), row('3')], [row('2', 'done', 10, 90, 2), row('3', 'done', 10, 30, 0)]);
+  expect(merged.map(r => [r.item.id, r.item.status, r.item.version])).toEqual([['2', 'done', 2], ['3', 'open', 1]]);
+  expect(unfinishedTaskFeed(merged).map(r => r.item.id)).toEqual(['3']);
 });
 test('rejects foreign workspace/project and unusable older cursor', () => {
   const page = {items: [row('1')], olderCursor: null, hasOlder: false, refreshRequired: false};
@@ -58,16 +63,7 @@ test('corrupt journal fails closed and sends nothing', async () => {
   expect(intent.locked).toBe(true); await expect(intent.run(api, input)).rejects.toThrow('corrupt'); expect(sent).toBe(false);
 });
 
-import { spaceSession } from '../../src/features/workspace/space-session';
-import type { WorkspaceEmployee } from '../../src/features/workspace/api';
 import { workspacePageLocales } from '../../src/features/workspace/page-labels';
-test('private bindings cannot become a workspace continuation or a claim of first session', () => {
-  const employee: WorkspaceEmployee & {executionId: string; nativeSessionId: string} = {id: 'ref', workspaceId: 'w', employeeId: 'emp', available: true, projectTargetIds: [], executionId: 'private-exec', nativeSessionId: 'private-native'};
-  expect(spaceSession(employee)).toEqual({kind: 'unknown'});
-  expect(spaceSession({...employee, workspaceSessionKnown: true})).toEqual({kind: 'firstSend'});
-  expect(spaceSession({...employee, workspaceSessionKnown: true, workspaceExecutionId: 'space-pending'})).toEqual({kind: 'unknown'});
-  expect(spaceSession({...employee, workspaceSessionKnown: true, workspaceNativeSessionId: 'space-native'})).toEqual({kind: 'bound', nativeSessionId: 'space-native'});
-});
 test('all four workspace page locales have nonempty matching keys', () => {
   for (const copy of Object.values(workspacePageLocales)) {expect(Object.keys(copy).sort()).toEqual(Object.keys(workspacePageLocales.en).sort()); expect(Object.values(copy).every(value => value.trim().length > 0)).toBe(true);}
 });

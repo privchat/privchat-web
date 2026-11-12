@@ -1,6 +1,7 @@
-// SidebarTabs — three-way tab strip for the left rail (Chats / Contacts /
-// Groups). Stateless: parent owns the active tab. Stays inside <aside> so
-// on H5 it disappears together with the list pane when a panel is open.
+// SidebarTabs — tab strip for the left rail (Chats / Contacts / Groups).
+// Stateless: parent owns the active tab. Stays inside <aside> so on H5 it
+// disappears together with the list pane when a panel is open. Workspace is
+// not a rail tab — it opens from the top bar as a modal dialog.
 
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';

@@ -380,6 +380,7 @@ export const vi: LocaleSchema = {
     chats: 'Trò chuyện',
     contacts: 'Danh bạ',
     groups: 'Nhóm',
+    workspace: 'Không gian làm việc',
   },
   accounts: {
     switcher_title: 'Tài khoản',

@@ -2,9 +2,10 @@ import { test, expect, type Page, type Route } from '@playwright/test';
 import { enWorkspace, zhWorkspace, zhTWWorkspace, viWorkspace } from '../../src/i18n/workspace';
 
 const task = (id = '31', status = 'in_progress') => ({id, workspaceId: '21', title: `Task ${id}`, description: 'Real task description', status, version: 2});
-const activity = (id = '31', state: string | null = 'running') => ({item: task(id), latestExecution: state === null ? null : {id: `link-${id}`, executionId: `execution-${id}`, state}, executionCount: state === null ? 0 : 2});
+const activity = (id = '31', state: string | null = 'running') => ({item: task(id), latestExecution: state === null ? null : {id: `link-${id}`, executionId: `execution-${id}`, state}, executionCount: state === null ? 0 : 2, stage: 'development'});
 const event = (seq: number, executionId = '1', text = `Public event ${seq}`) => ({protocolVersion: 1, executionId, eventId: `${executionId}-${seq}`, seq, kind: 'output', payload: {items: [{kind: 'assistant_text', text}]}});
 const archive = (items = [event(1)], nextCursor: string | null = null, snapshotRequired = false) => ({items, nextCursor, snapshotRequired, lastArchivedSeq: items.at(-1)?.seq ?? 0, coverage: 'normalized_events_only'});
+const feedPage = (items: unknown[], olderCursor: string | null = null) => ({items, olderCursor, hasOlder: olderCursor !== null, refreshRequired: false});
 type Handler = (route: Route, url: URL) => Promise<void>;
 const reply = (route: Route, data: unknown) => route.fulfill({json: {code: 0, data}});
 
@@ -18,10 +19,16 @@ async function routes(page: Page, handlers: {activity?: Handler; records?: Handl
     if (path.endsWith('/sessions/records') && handlers.records) return handlers.records(route, url);
     if (path.endsWith('/executions/get') && handlers.executions) return handlers.executions(route, url);
     let data: unknown = [];
+    if (path.endsWith('/workspace/page')) data = {list: ['21', '22'].map(id => ({id, name: `Team ${id}`, description: '', archived: 0, myRole: 'owner', employeeCount: 0, availableEmployeeCount: 0, employeeAvailabilityKnown: true, openItemCount: 1, lastActivityAt: null})), total: 2};
     if (path.endsWith('/workspace/list')) data = [{id: '21', name: 'Team', archived: 0, myRole: 'owner'}, {id: '22', name: 'Other team', archived: 0, myRole: 'owner'}];
+    if (path.includes('/workspace/get/')) data = {id: path.split('/').at(-1), name: 'Team', description: '', archived: 0, myRole: 'owner'};
+    if (path.endsWith('/workspace/project/list')) data = [];
+    if (path.endsWith('/workspace/inbox/list')) data = {entries: []};
+    if (path.endsWith('/workspace/employee/page')) data = {items: [], nextCursor: null, hasMore: false};
     if (path.endsWith('/room/join')) data = {channelId: '400', channelType: 3, ticket: 'fixture', expiresAt: Date.now() + 60000, eventProtocolVersion: 1};
     if (path.endsWith('/work-item/list')) data = [task()];
-    if (path.endsWith('/activity/page')) data = {items: [activity()], nextCursor: null};
+    if (path.includes('/work-item/get/')) data = task(path.split('/').at(-1)!);
+    if (path.endsWith('/activity/page')) data = feedPage([activity()]);
     if (path.endsWith('/executions/get')) data = {executionId: url.searchParams.get('executionId'), nodeId: '8', state: 'running', stateVersion: 1};
     if (path.endsWith('/executions/children')) data = {items: [], nextCursor: null};
     if (path.endsWith('/sessions/records')) data = archive([event(1, url.searchParams.get('executionId')!)]);
@@ -29,11 +36,16 @@ async function routes(page: Page, handlers: {activity?: Handler; records?: Handl
   });
   return writes;
 }
-async function mountWorkspace(page: Page) {
-  await page.evaluate(async () => {const {mountWorkspaceConsole} = await import('/src/test-harness/workspace-console.tsx'); mountWorkspaceConsole(`${location.origin}/__wf05/app`);});
-  await page.getByTestId('workspace-console').locator('select').first().selectOption('21');
-  await page.getByRole('button', {name: 'Task activity', exact: true}).click();
-  return page.getByTestId('workspace-activity');
+/** Deep-link straight into the space view, the way refresh or a shared URL would. */
+async function mountWorkspace(page: Page, hash = '#/workspace/space/21') {
+  const unmount = await page.evaluate(async hash => {
+    const {mountWorkspacePage} = await import('/src/test-harness/workspace-console.tsx');
+    const off = mountWorkspacePage(`${location.origin}/__wf05/app`, hash);
+    (window as any).unmountWf05 = off;
+    return true;
+  }, hash);
+  void unmount;
+  return page.getByTestId('task-feed');
 }
 async function mountRecords(page: Page) {
   await page.evaluate(async () => {
@@ -51,61 +63,56 @@ test.beforeEach(async ({page}) => {
   await page.evaluate(async () => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage('en');});
 });
 
-test('activity separates work status from execution status and all terminal branches omit no-final-result claims', async ({page}) => {
+test('feed cards keep business stage independent of execution state and never surface raw results', async ({page}) => {
   const states = [null, 'running', 'succeeded', 'failed', 'cancelled'];
-  const writes = await routes(page, {activity: route => reply(route, {items: states.map((state, i) => ({...activity(String(31 + i), state), result: {summary: 'DO NOT GUESS FINAL SUMMARY'}})), nextCursor: null})});
+  const writes = await routes(page, {activity: route => reply(route, feedPage(states.map((state, i) => ({...activity(String(31 + i), state), result: {summary: 'DO NOT GUESS FINAL SUMMARY'}}))))});
   const feed = await mountWorkspace(page);
-  await expect(feed.getByTestId('activity-item')).toHaveCount(5);
+  await expect(feed.getByTestId('task-card')).toHaveCount(5);
   for (let i = 0; i < states.length; i++) {
-    const card = feed.getByTestId('activity-item').nth(i);
-    await expect(card).toContainText('Work item status: In progress');
-    await expect(card.getByRole('button', {name: 'Open work details'})).toBeEnabled();
-    if (i < 2) await expect(card).toContainText(enWorkspace.noFinalResult);
-    else {await expect(card).not.toContainText(enWorkspace.noFinalResult); await expect(card).toContainText(enWorkspace.executionDetailsHint);}
+    const card = feed.getByTestId('task-card').nth(i);
+    await expect(card).toContainText(`Task ${31 + i}`);
+    await expect(card).toContainText('Latest stage: In development');
   }
-  await expect(feed.getByTestId('activity-item').nth(2)).toContainText(enWorkspace.execution_succeeded);
   await expect(feed).not.toContainText('DO NOT GUESS FINAL SUMMARY');
-  await feed.getByTestId('activity-item').nth(1).getByRole('button', {name: 'Open work details'}).click();
+  await expect(feed).not.toContainText(/Latest stage: (running|succeeded|failed|cancelled)/);
+  await feed.getByTestId('task-card').nth(1).getByRole('button', {name: 'Task 32', exact: true}).click();
   await expect(page.getByTestId('work-item-panel').getByRole('heading', {name: 'Task 32'})).toBeVisible();
-  await expect(page.getByTestId('session-records')).toContainText('Public event 1');
-  expect(writes.every(path => path.endsWith('/room/join'))).toBe(true);
+  expect(writes).toEqual([]);
 });
 
-test('activity pagination keeps one post per item and does not replace latest round with an overlapping old row', async ({page}) => {
+test('feed pagination keeps one card per item and the newest version of overlapping rows', async ({page}) => {
   const cursors: (string | null)[] = [];
   await routes(page, {activity: (route, url) => {
     expect(url.searchParams.get('limit')).toBe('20');
-    const cursor = url.searchParams.get('beforeId'); cursors.push(cursor);
-    return reply(route, {items: cursor ? [activity('31', 'succeeded'), activity('30', null)] : [activity('31')], nextCursor: cursor ? null : '31'});
+    expect(url.searchParams.get('view')).toBe('active_tasks_v1');
+    const cursor = url.searchParams.get('cursor'); cursors.push(cursor);
+    return reply(route, cursor ? feedPage([activity('31', 'succeeded'), activity('30', null)]) : feedPage([activity('31')], '31'));
   }});
   const feed = await mountWorkspace(page);
   await feed.getByRole('button', {name: 'Load more'}).click();
-  await expect(feed.getByTestId('activity-item')).toHaveCount(2);
-  await expect(feed.getByTestId('activity-item').first()).toContainText(enWorkspace.execution_running);
+  await expect(feed.getByTestId('task-card')).toHaveCount(2);
+  await expect(feed.getByTestId('task-card').first()).toContainText('Task 31');
   expect(cursors).toEqual([null, '31']);
-  await feed.getByTestId('activity-item').last().getByRole('button', {name: 'Open work details'}).click();
+  await feed.getByTestId('task-card').last().getByRole('button', {name: 'Task 30', exact: true}).click();
   await expect(page.getByTestId('work-item-panel').getByRole('heading', {name: 'Task 30'})).toBeVisible();
-  await expect(page.getByTestId('session-console')).toHaveCount(0);
 });
 
-test('activity pagination authorization failure clears cards and the opened task/execution', async ({page}) => {
-  await routes(page, {activity: (route, url) => url.searchParams.has('beforeId') ? route.fulfill({status: 403, json: {}}) : reply(route, {items: [activity()], nextCursor: '31'})});
+test('pagination authorization failure clears cards and stays cleared until reauthorized', async ({page}) => {
+  await routes(page, {activity: (route, url) => url.searchParams.has('cursor') ? route.fulfill({status: 403, json: {}}) : reply(route, feedPage([activity()], '31'))});
   const feed = await mountWorkspace(page);
-  await feed.getByRole('button', {name: 'Open work details'}).click();
-  await expect(page.getByTestId('session-records')).toContainText('Public event 1');
+  await expect(feed.getByTestId('task-card')).toHaveCount(1);
   await feed.getByRole('button', {name: 'Load more'}).click();
-  await expect(page.getByTestId('activity-item')).toHaveCount(0);
-  await expect(page.getByTestId('work-item-panel')).toHaveCount(0);
-  await expect(page.getByTestId('session-console')).toHaveCount(0);
-  await expect(page.getByTestId('workspace-console')).toContainText(enWorkspace.denied);
+  await expect(feed.getByTestId('task-card')).toHaveCount(0);
+  await expect(feed).toContainText('You no longer have access to these tasks.');
+  await expect(feed.getByRole('button', {name: 'Reload'})).toBeDisabled();
 });
 
-test('activity old backend degrades without fabricating posts or losing existing work list', async ({page}) => {
+test('missing activity API degrades to a retryable error without fabricating cards', async ({page}) => {
   await routes(page, {activity: route => route.fulfill({status: 404, json: {}})});
   const feed = await mountWorkspace(page);
-  await expect(feed).toContainText(enWorkspace.activityUnsupported);
-  await expect(feed.getByTestId('activity-item')).toHaveCount(0);
-  await expect(page.getByRole('option', {name: 'Task 31 · in_progress'})).toBeAttached();
+  await expect(feed.getByRole('alert')).toBeVisible();
+  await expect(feed.getByTestId('task-card')).toHaveCount(0);
+  await expect(feed.getByRole('button', {name: 'Reload'})).toBeEnabled();
 });
 
 test('archive pages use afterSeq cursor, show coverage/gaps, and render only public text/status', async ({page}) => {
@@ -209,22 +216,19 @@ for (const invalid of ['missing-owner', 'wrong-owner', 'wrong-version', 'out-of-
 }
 
 for (const [locale, copy] of Object.entries({en: enWorkspace, 'zh-CN': zhWorkspace, 'zh-TW': zhTWWorkspace, vi: viWorkspace})) {
-  test(`WF-05 archive and activity render localized narrow-screen text (${locale})`, async ({page}) => {
+  test(`WF-05 archive and task feed render localized narrow-screen text (${locale})`, async ({page}) => {
     await page.setViewportSize({width: 390, height: 844});
     await routes(page);
     const feed = await mountWorkspace(page);
-    await expect(feed.getByTestId('activity-item')).toHaveCount(1);
-    await feed.getByRole('button', {name: 'Open work details'}).click();
-    await expect(page.getByTestId('session-records')).toContainText('Public event 1');
+    await expect(feed.getByTestId('task-card')).toHaveCount(1);
     await page.evaluate(async locale => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage(locale);}, locale);
-    await expect(feed).toContainText(copy.activityHint);
-    await expect(feed).toContainText(copy.noFinalResult);
-    await expect(page.getByTestId('session-records')).toContainText(copy.archiveCoverage);
-    const box = await page.getByRole('dialog').boundingBox();
-    expect(box && box.x >= 0 && box.x + box.width <= 390).toBe(true);
-    // The modal overlays the existing chat test shell; assert this feature's bounds, not that unrelated shell.
-    expect(await feed.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    expect(await page.getByTestId('session-records').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await expect(feed).toContainText(copy.stage_development);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await feed.getByTestId('task-feed-scroll').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await page.evaluate(() => (window as any).unmountWf05());
+    const records = await mountRecords(page);
+    await expect(records).toContainText(copy.archiveCoverage);
+    expect(await records.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   });
 }
 
@@ -265,22 +269,21 @@ for (const [locale, copy] of Object.entries({en: enWorkspace, 'zh-CN': zhWorkspa
   });
 }
 
-test('changing workspaces discards delayed activity responses from the previous space', async ({page}) => {
+test('changing spaces discards delayed activity responses from the previous space', async ({page}) => {
   let release!: () => void;
   const gate = new Promise<void>(resolve => {release = resolve;});
   let pending = false;
   await routes(page, {activity: async (route, url) => {
     const workspaceId = url.searchParams.get('workspaceId');
-    if (workspaceId === '21') {pending = true; await gate; return reply(route, {items: [{...activity(), item: {...task(), title: 'LATE OLD WORKSPACE'}}], nextCursor: null});}
-    return reply(route, {items: [{...activity('22'), item: {...task('22'), workspaceId: '22', title: 'Current workspace task'}}], nextCursor: null});
+    if (workspaceId === '21') {pending = true; await gate; return reply(route, feedPage([{...activity(), item: {...task(), title: 'LATE OLD WORKSPACE'}}]));}
+    return reply(route, feedPage([{...activity('22'), item: {...task('22'), workspaceId: '22', title: 'Current workspace task'}}]));
   }});
   const feed = await mountWorkspace(page);
   await expect.poll(() => pending).toBe(true);
-  await page.getByTestId('workspace-console').locator('select').first().selectOption('22');
-  await page.getByRole('button', {name: 'Task activity', exact: true}).click();
+  await page.evaluate(() => {location.hash = '#/workspace/space/22';});
   await expect(feed).toContainText('Current workspace task');
-  const delivered = page.waitForResponse(response => response.url().includes('/activity/page?workspaceId=21'));
+  const delivered = page.waitForResponse(response => response.url().includes('workspaceId=21'));
   release(); await delivered;
   await expect(feed).not.toContainText('LATE OLD WORKSPACE');
-  await expect(feed.getByTestId('activity-item')).toHaveCount(1);
+  await expect(feed.getByTestId('task-card')).toHaveCount(1);
 });

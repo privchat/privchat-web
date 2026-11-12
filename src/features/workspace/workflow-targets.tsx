@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import type { Binding, Employee, Node, WorkExecution, WorkNote } from './api';
+import type { Binding, Node, WorkExecution, WorkNote } from './api';
 import { availableEmployeeExecutors } from './employees';
 
-export function matchingEmployeeBindings(employee: Employee | undefined, bindings: Binding[], nodes: Node[]) {
+export function matchingEmployeeBindings(employee: {nodeId?: string; executor: string} | undefined, bindings: Binding[], nodes: Node[]) {
   if (!employee) return [];
   return bindings.filter(b => b.revoked === 0 && b.nodeId === employee.nodeId
     && b.capability === `agent.${employee.executor}`

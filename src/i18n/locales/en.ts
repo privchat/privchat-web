@@ -381,6 +381,7 @@ export const en: LocaleSchema = {
     chats: 'Chats',
     contacts: 'Contacts',
     groups: 'Groups',
+    workspace: 'Workspace',
   },
   accounts: {
     switcher_title: 'Accounts',
@@ -1085,7 +1086,7 @@ export interface LocaleSchema {
     cancel: string;
   };
   theme: { system: string; light: string; dark: string };
-  tabs: { chats: string; contacts: string; groups: string };
+  tabs: { chats: string; contacts: string; groups: string; workspace: string };
   accounts: {
     switcher_title: string;
     switcher_aria: string;

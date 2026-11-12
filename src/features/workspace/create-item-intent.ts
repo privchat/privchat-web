@@ -3,7 +3,7 @@ import { ConsoleIntent, type PendingConsoleRequest } from './console-intent';
 import { retainBlockedDelivery, isBlocked } from './delivery-receipt';
 
 export interface NewItemInput { workspaceId: string; title: string; description: string; acceptance: string; projectId: string | null }
-export interface NewAssignment { bindingId: string; employeeId: string; text: string; projectTargetId?: string }
+export interface NewAssignment { bindingId: string; employeeId: string; text: string; autoReview?: boolean; correctionLimit?: number | null; acknowledgeUnknown?: 'inspect' | 'rerun' }
 export interface ItemRecovery {
   input?: NewItemInput; assignment?: NewAssignment; item?: WorkItem;
   createPending?: PendingConsoleRequest; assignPending?: PendingConsoleRequest;

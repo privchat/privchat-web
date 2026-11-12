@@ -16,14 +16,16 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
   const pageLabel = usePageLabels();
   const employeePages = useEmployeePages(api, item.workspaceId, item.projectId ?? undefined);
   const authorized = employeePages.rows;
-  const employees = authorized.filter(row => row.available).map(row => ({agentId: row.employeeId, name: row.name ?? row.employeeId, nodeId: row.nodeId ?? undefined, executor: row.capability?.replace(/^agent\./, '') ?? '', config: {}, createdAt: 0, roleDescription: row.roleDescription ?? '', title: row.roleDescription ?? '', model: row.model ?? '', workdirBindingId: row.workdirBindingId ?? ''}));
-  const [projectTargetId, setProjectTargetId] = useState('');
+  const employees = authorized.filter(row => row.available).map(row => ({agentId: row.employeeId, name: row.name ?? row.employeeId, nodeId: row.nodeId ?? undefined, executor: row.capability?.replace(/^agent\./, '') ?? '', workdirBindingId: row.workdirBindingId ?? ''}));
   const [links, setLinks] = useState<WorkExecution[]>([]);
   const [reviews, setReviews] = useState<WorkReview[]>([]);
   const [employeeId, setEmployeeId] = useState('');
   const [defaultReviewer, setDefaultReviewer] = useState<string>();
   const [bindingId, setBindingId] = useState('');
   const [text, setText] = useState('');
+  const [autoReview, setAutoReview] = useState(false);
+  const [correctionLimit, setCorrectionLimit] = useState('');
+  const [acknowledge, setAcknowledge] = useState<'' | 'inspect' | 'rerun'>('');
   const [source, setSource] = useState('');
   const [evidence, setEvidence] = useState<string[]>([]);
   const [description, setDescription] = useState('');
@@ -42,22 +44,21 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
   const running = useRef(false);
   const employee = employees.find(e => e.agentId === employeeId);
   const authorizedEmployee = authorized.find(e => e.employeeId === employeeId && e.available);
-  const projectTargets = authorizedEmployee?.projectTargetIds ?? [];
-  const selectedTarget = projectTargets.length === 1 ? projectTargets[0] : projectTargetId;
   const candidates = matchingEmployeeBindings(employee, bindings, nodes);
   const locked = busy || intent.current.hasPending;
   const disabled = locked || readOnly || !ready || !employeePages.ready || employeePages.error;
   const selectedReview = reviews.find(r => r.noteId === reviewId);
   const canRecord = !!selectedReview && !selectedReview.conclusion && ['succeeded', 'failed', 'cancelled'].includes(selectedReview.reviewerExecution.state ?? '');
+  const limitValid = !autoReview || correctionLimit.trim() === '' || (/^\d+$/.test(correctionLimit.trim()) && Number(correctionLimit.trim()) <= 10000);
+  const needsAcknowledge = !!authorizedEmployee?.previousResultUnknown;
   useEffect(() => {
     let active = true; setDefaultReviewer(undefined);
     if (item.projectId) void api.project(item.projectId).then(project => {
-      // The default reviewer works where this turn works: the selected directory's reviewer.
-      if (active) setDefaultReviewer(project.targets.find(t => t.id === selectedTarget)?.reviewerEmployeeId
-        ?? (project.targets.length === 1 ? project.targets[0]?.reviewerEmployeeId : undefined) ?? undefined);
+      // The default reviewer is the one named in the caller's own binding for this project (§20.3).
+      if (active) setDefaultReviewer(project.bindings.find(b => b.mine)?.reviewerEmployeeId ?? undefined);
     }).catch(() => {});
     return () => {active = false;};
-  }, [api, item.projectId, selectedTarget]);
+  }, [api, item.projectId]);
   async function refresh() {
     const [, l, r] = await Promise.all([employeePages.refresh(), api.get<WorkExecution[]>(`/workspace/work-execution/list?workItemId=${encodeURIComponent(item.id)}`), api.get<WorkReview[]>(`/workspace/work-note/review-list?workItemId=${encodeURIComponent(item.id)}`)]);
     if (live.current) {setLinks(l); setReviews(r); setReady(true);}
@@ -94,17 +95,20 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
     {employeePages.error && <><p role="alert">{pageLabel(employeePages.errorCode ?? 'error')}</p><Button disabled={locked || employeePages.busy} onClick={() => void employeePages.refresh()}>{pageLabel('retry')}</Button></>}
     {intent.current.hasPending && <><p>{label('retryRecovery')}</p><Button disabled={busy} onClick={() => void submit()}>{label('retrySame')}</Button></>}
     <fieldset disabled={disabled} className="min-w-0 space-y-3">
-      <label className="block">{label('employees')}<select className={field} value={employeeId} onChange={e => {setEmployeeId(e.target.value); setBindingId(''); setProjectTargetId('');}}><option value="">{label('employees')}</option>{employees.map(e => <option key={e.agentId} value={e.agentId}>{e.name} · {e.title}</option>)}</select></label>
+      <label className="block">{label('employees')}<select className={field} value={employeeId} onChange={e => {setEmployeeId(e.target.value); setBindingId(''); setAcknowledge('');}}><option value="">{label('employees')}</option>{employees.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select></label>
       {employeePages.hasMore && <Button type="button" variant="outline" disabled={employeePages.busy} onClick={() => void employeePages.more()}>{pageLabel('more')}</Button>}
-      {projectTargets.length > 1 && <label className="block">{label('workdir')}<select className={field} value={projectTargetId} onChange={e => setProjectTargetId(e.target.value)}><option value="">{label('workdir')}</option>{projectTargets.map(id => <option key={id} value={id}>{id}</option>)}</select></label>}
       <label className="block">{label('binding')}<select className={field} value={bindingId} onChange={e => setBindingId(e.target.value)}><option value="">{label('binding')}</option>{candidates.map(b => <option key={b.id} value={b.id}>{b.nodeId} · {b.capability}</option>)}</select></label>
       <label className="block">{label('assignmentText')}<textarea className={field} maxLength={16000} value={text} onChange={e => setText(e.target.value)}/></label>
-      <Button disabled={!text.trim() || !authorizedEmployee || (!!item.projectId && !selectedTarget) || !candidates.some(b => b.id === bindingId) || ['done', 'cancelled'].includes(item.status)} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-execution/assign', {workItemId: item.id, version: item.version, bindingId, employeeId, text, ...(selectedTarget ? {projectTargetId: selectedTarget} : {})});}}>{label('assignEmployee')}</Button>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={autoReview} onChange={e => setAutoReview(e.target.checked)}/>{pageLabel('autoReview')}</label>
+      <p className="text-sm text-muted-foreground">{pageLabel('autoReviewHint')}</p>
+      {autoReview && <label className="block">{pageLabel('correctionLimit')}<input className={field} inputMode="numeric" placeholder={pageLabel('correctionLimitUnlimited')} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}/><span className="text-xs text-muted-foreground">{pageLabel('correctionLimitHint')}</span></label>}
+      {needsAcknowledge && <label className="block">{pageLabel('acknowledgeUnknown')}<select className={field} value={acknowledge} onChange={e => setAcknowledge(e.target.value as '' | 'inspect' | 'rerun')}><option value="">{label('none')}</option><option value="inspect">{pageLabel('acknowledgeInspect')}</option><option value="rerun">{pageLabel('acknowledgeRerun')}</option></select></label>}
+      <Button disabled={!text.trim() || !authorizedEmployee || !candidates.some(b => b.id === bindingId) || ['done', 'cancelled'].includes(item.status) || !limitValid || (needsAcknowledge && !acknowledge)} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-execution/assign', {workItemId: item.id, version: item.version, bindingId, employeeId, text, autoReview, ...(autoReview ? {correctionLimit: correctionLimit.trim() === '' ? null : Number(correctionLimit.trim())} : {}), ...(needsAcknowledge && acknowledge ? {acknowledgeUnknown: acknowledge} : {})});}}>{label('assignEmployee')}</Button>
       <h4>{label('requestReview')}</h4>
-      {defaultReviewer && <Button type="button" variant="outline" disabled={!authorized.some(row => row.employeeId === defaultReviewer && row.available)} onClick={() => {setEmployeeId(defaultReviewer); setBindingId(''); setProjectTargetId('');}}>{pageLabel('defaultReviewer')}: {defaultReviewer}</Button>}
+      {defaultReviewer && <Button type="button" variant="outline" disabled={!authorized.some(row => row.employeeId === defaultReviewer && row.available)} onClick={() => {setEmployeeId(defaultReviewer); setBindingId(''); setAcknowledge('');}}>{pageLabel('defaultReviewer')}: {defaultReviewer}</Button>}
       <ReviewEvidenceFields links={links} notes={notes} source={source} onSource={setSource} description={description} onDescription={setDescription} evidence={evidence} onEvidence={setEvidence}/>
       <label className="block">{label('reviewInstructions')}<textarea className={field} maxLength={4000} value={instructions} onChange={e => setInstructions(e.target.value)}/></label>
-      <Button disabled={!links.some(l => l.id === source && l.state === 'succeeded' && l.executionId) || !description.trim() || !candidates.some(b => b.id === bindingId) || ['done', 'cancelled'].includes(item.status) || !authorizedEmployee || (!!item.projectId && !selectedTarget)} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-note/request-review', {workItemId: item.id, version: item.version, sourceWorkExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description, reviewerEmployeeId: employeeId, reviewerBindingId: bindingId, instructions, ...(selectedTarget ? {reviewerProjectTargetId: selectedTarget} : {})});}}>{label('requestReview')}</Button>
+      <Button disabled={!links.some(l => l.id === source && l.state === 'succeeded' && l.executionId) || !description.trim() || !candidates.some(b => b.id === bindingId) || ['done', 'cancelled'].includes(item.status) || !authorizedEmployee} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-note/request-review', {workItemId: item.id, version: item.version, sourceWorkExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description, reviewerEmployeeId: employeeId, reviewerBindingId: bindingId, instructions});}}>{label('requestReview')}</Button>
       <h4>{label('reviewRecords')}</h4>
       {reviews.map(r => <article key={r.noteId} className="space-y-1 rounded border p-2 break-words"><p>{r.noteId} · v{r.workItemVersion} · {r.sourceWorkExecutionId} · {r.sourceExecutionId}</p><p>{r.reviewerExecution.state} · {r.conclusion ?? label('awaitingVerdict')}</p><p className="whitespace-pre-wrap">{r.evidenceDescription}</p><p className="whitespace-pre-wrap">{r.conclusionBody}</p>{r.reviewerExecution.executionId && <Button variant="outline" onClick={() => onExecution(r.reviewerExecution.executionId!)}>{label('openReviewSession')}</Button>}</article>)}
       <label className="block">{label('recordReview')}<select className={field} value={reviewId} onChange={e => {setReviewId(e.target.value); setConclusion('changes_requested');}}><option value="">{label('reviewRecords')}</option>{reviews.filter(r => !r.conclusion).map(r => <option key={r.noteId} value={r.noteId}>{r.noteId} · {r.reviewerExecution.state}</option>)}</select></label>

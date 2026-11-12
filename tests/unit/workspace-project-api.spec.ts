@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { WorkspaceApi, type Project } from '../../src/features/workspace/api';
+import { WorkspaceApi, type Member, type Project, type ProjectBinding, type Workspace } from '../../src/features/workspace/api';
 
-const project: Project = {id: 'p', ownerUserId: 'owner', writable: true, manageable: true, name: 'Standalone', archived: 0, version: 2, targets: [], reviewBasis: []};
+const project: Project = {id: 'p', workspaceId: 'w', name: 'Project', archived: 0, version: 2, description: '', manageable: true, roundEnd: '', bindings: []};
+const binding: ProjectBinding = {id: 'b', projectId: 'p', userId: 'me', mine: true, nodeId: 'n', nodeName: 'Mac', directories: [{workdirBindingId: 'dir', label: 'Repository', access: 'write'}], notes: '', reviewerEmployeeId: null, version: 1};
 const originalFetch = globalThis.fetch;
 const calls: {url: URL; method: string; body: unknown; authorization: string | null}[] = [];
 let response: unknown;
@@ -15,58 +16,81 @@ test.beforeEach(() => {
 test.afterEach(() => {globalThis.fetch = originalFetch;});
 const api = () => new WorkspaceApi('https://platform.example/app', () => 'token');
 
-test('each target carries its reviewer; review basis is sent clean and omission preserves it', async () => {
-  await api().saveProject({name: 'New', targets: [{nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: 'reviewer'}], reviewBasis: [' SPEC.md ', '', 'docs/CODING.md']});
-  await api().saveProject({id: 'p', name: 'Existing', version: 2});
-  await api().saveProject({id: 'p', name: 'Existing', version: 2, targets: [{id: 't', nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: null}], reviewBasis: []});
+test('project create/update carry workspace ownership, version and round-end rules, never legacy targets or review basis', async () => {
+  await api().createProject({workspaceId: 'w /', name: 'New', description: ' Desc ', roundEnd: '  commit  '});
+  await api().updateProject({id: 'p', name: 'Renamed', version: 2});
+  await api().updateProject({id: 'p', name: 'Renamed', version: 2, description: '', roundEnd: ' push '});
+  expect(calls.map(call => [call.method, call.url.pathname, call.body])).toEqual([
+    ['POST', '/app/workspace/project/create', {workspaceId: 'w /', name: 'New', description: ' Desc ', roundEnd: 'commit'}],
+    ['PUT', '/app/workspace/project/update', {id: 'p', name: 'Renamed', version: 2}],
+    ['PUT', '/app/workspace/project/update', {id: 'p', name: 'Renamed', version: 2, description: '', roundEnd: 'push'}],
+  ]);
+  expect(calls.every(call => !JSON.stringify(call.body).includes('targets') && !JSON.stringify(call.body).includes('reviewBasis') && !call.url.pathname.includes('/link/'))).toBe(true);
+});
+
+test('round-end rules are capped at the server limit on create and update', async () => {
+  const long = 'y'.repeat(1500);
+  await api().createProject({workspaceId: 'w', name: 'N', roundEnd: long});
+  await api().updateProject({id: 'p', name: 'N', version: 1, roundEnd: long});
+  expect((calls[0]?.body as {roundEnd: string}).roundEnd).toHaveLength(1000);
+  expect((calls[1]?.body as {roundEnd: string}).roundEnd).toHaveLength(1000);
+});
+
+test('binding save sends directory ids with access, caps notes, and omits empty reviewer/version', async () => {
+  response = binding;
+  expect(await api().saveProjectBinding({projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'write'}, {workdirBindingId: 'docs', access: 'read'}], notes: 'x'.repeat(2500), reviewerEmployeeId: null})).toEqual(binding);
+  await api().saveProjectBinding({projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'read'}], reviewerEmployeeId: 'reviewer', version: 3});
   expect(calls.map(call => call.body)).toEqual([
-    {name: 'New', targets: [{nodeId: 'n', workdirBindingId: 'd', reviewerEmployeeId: 'reviewer'}], reviewBasis: ['SPEC.md', 'docs/CODING.md']},
-    {id: 'p', name: 'Existing', version: 2},
-    {id: 'p', name: 'Existing', version: 2, targets: [{nodeId: 'n', workdirBindingId: 'd'}], reviewBasis: []},
+    {projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'write'}, {workdirBindingId: 'docs', access: 'read'}], notes: 'x'.repeat(2000)},
+    {projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'read'}], notes: '', reviewerEmployeeId: 'reviewer', version: 3},
   ]);
-  expect(calls.every(call => !call.url.pathname.includes('/work-execution/') && !call.url.pathname.includes('/work-note/'))).toBe(true);
+  expect(calls.every(call => call.method === 'POST' && call.url.pathname === '/app/workspace/project/binding/save')).toBe(true);
 });
 
-test('canonical standalone create strips legacy ownership and target IDs; empty targets are explicit', async () => {
-  const legacy = {workspaceId: 'legacy', ownerUserId: 'ignored', writable: false, name: 'Standalone', targets: [{id: 'old', nodeId: 'n', workdirBindingId: 'd'}]};
-  expect(await api().saveProject(legacy)).toEqual(project);
-  await api().saveProject({name: 'Empty'});
-  expect(calls.map(call => [call.url.pathname, call.method, call.body])).toEqual([
-    ['/app/workspace/project/create', 'POST', {name: 'Standalone', targets: [{nodeId: 'n', workdirBindingId: 'd'}]}],
-    ['/app/workspace/project/create', 'POST', {name: 'Empty', targets: []}],
-  ]);
-});
-
-test('versioned project updates exclude workspace and permission metadata', async () => {
-  const legacy = {...project, workspaceId: null};
-  await api().saveProject(legacy);
-  await api().projectStatus('p', 1, 2);
-  expect(calls.map(call => [call.method, call.body])).toEqual([
-    ['PUT', {id: 'p', name: 'Standalone', version: 2, targets: [], reviewBasis: []}],
-    ['PUT', {id: 'p', archived: 1, version: 2}],
-  ]);
-});
-
-test('standalone pagination and explicit workspace project queries use separate contracts', async () => {
-  response = {list: [project], total: 21};
-  expect(await api().projectPage(2)).toEqual(response);
-  response = [project];
-  expect(await api().projects('w &/')).toEqual([project]);
-  expect(await api().projectLinks('w &/')).toEqual([project]);
-  expect(calls[0]?.url.searchParams.toString()).toBe('pageNo=2&pageSize=20');
-  expect(calls.slice(1).map(call => [call.url.pathname, call.url.searchParams.get('workspaceId')])).toEqual([
-    ['/app/workspace/project/list', 'w &/'], ['/app/workspace/project/link/list', 'w &/'],
-  ]);
-});
-
-test('link creates only the association and unlink accepts a payload-free success', async () => {
-  expect(await api().linkProject('w &/', 'p ?/')).toEqual(project);
+test('binding delete and member removal use DELETE with encoded identities', async () => {
   response = null;
-  await api().unlinkProject('w &/', 'p ?/');
-  expect(calls[0]).toMatchObject({method: 'POST', body: {workspaceId: 'w &/', projectId: 'p ?/'}});
-  expect(calls[0]?.url.pathname).toBe('/app/workspace/project/link/create');
-  expect(calls[1]?.url.pathname).toBe('/app/workspace/project/link/delete');
-  expect(calls[1]?.method).toBe('DELETE');
-  expect(Object.fromEntries(calls[1]!.url.searchParams)).toEqual({workspaceId: 'w &/', projectId: 'p ?/'});
+  await api().deleteProjectBinding('b /');
+  await api().removeMember('m &');
+  expect(calls.map(call => [call.method, call.url.pathname + call.url.search])).toEqual([
+    ['DELETE', '/app/workspace/project/binding/delete?id=b+%2F'],
+    ['DELETE', '/app/workspace/member/delete/m%20%26'],
+  ]);
+});
+
+test('space, member and project reads are workspace-scoped and encoded', async () => {
+  const space: Workspace = {id: 'w', name: 'Space', description: '', archived: 0, myRole: 'owner'};
+  response = space;
+  expect(await api().space('w /')).toEqual(space);
+  response = [project];
+  expect(await api().projects('w /')).toEqual([project]);
+  response = {list: [project], total: 21};
+  expect(await api().projectPage(2, 'w /')).toEqual(response);
+  expect(await api().projectPage(2)).toEqual(response);
+  const member: Member = {id: 'm', workspaceId: 'w', userId: 'u', role: 'member'};
+  response = [member];
+  expect(await api().members('w /')).toEqual([member]);
+  expect(calls.map(call => call.url.pathname + call.url.search)).toEqual([
+    '/app/workspace/get/w%20%2F',
+    '/app/workspace/project/list?workspaceId=w%20%2F',
+    '/app/workspace/project/page?pageNo=2&pageSize=20&workspaceId=w%20%2F',
+    '/app/workspace/project/page?pageNo=2&pageSize=20',
+    '/app/workspace/member/list?workspaceId=w%20%2F',
+  ]);
+});
+
+test('member writes and archive status use their own contracts with platform auth', async () => {
+  const member: Member = {id: 'm', workspaceId: 'w', userId: 'u', role: 'admin'};
+  response = member;
+  expect(await api().addMember('w', 'u', 'admin')).toEqual(member);
+  expect(await api().updateMemberRole('m', 'member')).toEqual(member);
+  response = project;
+  await api().projectStatus('p', 1, 2);
+  await api().projectStatus('p', 0);
+  expect(calls.map(call => [call.method, call.url.pathname, call.body])).toEqual([
+    ['POST', '/app/workspace/member/create', {workspaceId: 'w', userId: 'u', role: 'admin'}],
+    ['PUT', '/app/workspace/member/update-role', {id: 'm', role: 'member'}],
+    ['PUT', '/app/workspace/project/update-status', {id: 'p', archived: 1, version: 2}],
+    ['PUT', '/app/workspace/project/update-status', {id: 'p', archived: 0}],
+  ]);
   expect(calls.every(call => call.authorization === 'Bearer token')).toBe(true);
 });

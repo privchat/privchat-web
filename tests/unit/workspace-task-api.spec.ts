@@ -27,13 +27,12 @@ test('modern task views use opaque scoped cursors, never legacy beforeId or clie
   expect(urls).toHaveLength(2);
 });
 
-test('nextCursor-only and olderCursor compatibility; old task_feed_v1 remains unchanged', async () => {
+test('nextCursor-only and olderCursor responses normalize to one cursor contract', async () => {
   response = {items: [], nextCursor: 'next'};
   expect(await api().tasks('history_tasks_v1', {projectId: 'p'})).toMatchObject({olderCursor: 'next', hasOlder: true});
   response = {items: [], olderCursor: null, hasOlder: false, refreshRequired: true};
   expect(await api().tasks('history_tasks_v1', {})).toMatchObject({olderCursor: null, refreshRequired: true});
-  await api().taskFeed('w', 'p', 'legacy');
-  expect(Object.fromEntries(urls[2]!.searchParams)).toEqual({view: 'task_feed_v1', workspaceId: 'w', projectId: 'p', cursor: 'legacy', limit: '20'});
+  expect(urls).toHaveLength(2);
 });
 
 test('details read one item rather than all workspace items', async () => {

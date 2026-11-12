@@ -3,14 +3,13 @@ import { useTranslation } from 'react-i18next';
 import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import type { TaskFeedPage, WorkItem, WorkspaceActivity, WorkspaceApi, TaskScope } from './api';
-import { historical, mergeTaskFeed, mergeActivityPage, unfinishedTaskFeed, validateTaskFeed } from './task-feed';
+import { mergeActivityPage, unfinishedTaskFeed, validateTaskFeed } from './task-feed';
 import { usePageLabels } from './page-labels';
 import { WorkspaceRoomObserver, roomFailure } from './room-observer';
 import {taskStageLabel} from './task-stage';
 
-export function TaskFeed({api, client, workspaceId, projectId, employeeId, unprojected, view = 'legacy', enabled = true, projects = [], onOpen}: TaskScope & {api: WorkspaceApi; client?: PrivchatClient; view?: 'legacy' | 'active' | 'history'; enabled?: boolean; projects?: import('./api').Project[]; onOpen: (row: WorkspaceActivity) => void}) {
+export function TaskFeed({api, client, workspaceId, projectId, employeeId, unprojected, view, enabled = true, projects = [], onOpen}: TaskScope & {api: WorkspaceApi; client?: PrivchatClient; view: 'active' | 'history'; enabled?: boolean; projects?: import('./api').Project[]; onOpen: (row: WorkspaceActivity) => void}) {
   const activeOnly = view === 'active';
-  const modern = view !== 'legacy';
   const loadedPages = useRef(1);
 
   const l = usePageLabels();
@@ -28,9 +27,7 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
   const refreshQueued = useRef(false);
   const accessDenied = useRef(false);
   const initialized = useRef(false);
-  const bottom = useRef(true);
   const anchor = useRef<{cards: {id: string; offset: number}[]; top: number} | undefined>(undefined);
-  const follow = useRef(false);
   const olderCursor = useRef<string | null>(null);
   const currentRows = useRef(rows); currentRows.current = rows;
   const visibleRows = activeOnly ? unfinishedTaskFeed(rows) : rows;
@@ -45,9 +42,8 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
   }
   function apply(next: TaskFeedPage, older = false, replace = false) {
     remember();
-    follow.current = !modern && !older && bottom.current;
-    setRows(old => (modern ? mergeActivityPage : mergeTaskFeed)(replace ? [] : old, next.items));
-    if (older || replace || modern || !initialized.current) {setPage(next); olderCursor.current = next.olderCursor;}
+    setRows(old => mergeActivityPage(replace ? [] : old, next.items));
+    setPage(next); olderCursor.current = next.olderCursor;
     initialized.current = true;
     setPending(undefined);
   }
@@ -60,12 +56,10 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
       let next!: TaskFeedPage;
       let items: WorkspaceActivity[] = [];
       const seen = new Set<string>();
-      const count = modern && !older ? loadedPages.current : 1;
+      const count = older ? 1 : loadedPages.current;
       for (let index = 0; index < count; index++) {
         if (cursor) {if (seen.has(cursor)) throw new Error('Repeated task cursor'); seen.add(cursor);}
-        const result = modern
-          ? await api.tasks(activeOnly ? 'active_tasks_v1' : 'history_tasks_v1', {workspaceId, projectId, employeeId, unprojected}, cursor)
-          : await api.taskFeed(workspaceId!, projectId, cursor);
+        const result = await api.tasks(activeOnly ? 'active_tasks_v1' : 'history_tasks_v1', {workspaceId, projectId, employeeId, unprojected}, cursor);
         next = validateTaskFeed(result, workspaceId, projectId, cursor, unprojected);
         items = mergeActivityPage(items, next.items);
         if (next.refreshRequired || !next.hasOlder) break;
@@ -75,8 +69,8 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
       if (!live.current) return [];
       setError(false);
       if (next.refreshRequired) {setPending(next); return [];}
-      if (!initialized.current || older || (!modern && bottom.current) || explicit) {if (older) loadedPages.current++; apply(next, older, modern && !older);}
-      else if (modern ? JSON.stringify(currentRows.current) !== JSON.stringify(next.items) : next.items.some(row => JSON.stringify(currentRows.current.find(old => old.item.id === row.item.id)) !== JSON.stringify(row))) setPending(next);
+      if (!initialized.current || older || explicit) {if (older) loadedPages.current++; apply(next, older, !older);}
+      else if (JSON.stringify(currentRows.current) !== JSON.stringify(next.items)) setPending(next);
       return next.items.map(row => row.item);
     } catch (e) {
       if (!live.current) return [];
@@ -119,8 +113,7 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
   useLayoutEffect(() => {
     const host = viewport.current;
     if (!host) return;
-    if (follow.current) {host.scrollTop = host.scrollHeight; follow.current = false;}
-    else if (anchor.current) {
+    if (anchor.current) {
       const saved = anchor.current;
       const elements = [...host.querySelectorAll<HTMLElement>('[data-item-id]')];
       const survivor = saved.cards.find(card => elements.some(el => el.dataset.itemId === card.id));
@@ -136,36 +129,24 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
       {pending && <Button disabled={busy} onClick={() => {
         if (pending.refreshRequired) {
           void load(false, true);
-        } else apply(pending, false, modern);
+        } else apply(pending, false, true);
       }}>{l('updates')}</Button>}
     </div>
     {error && <p role="alert">{denied ? l('accessDenied') : l('error')}</p>}
-    <div ref={viewport} data-testid="task-feed-scroll" className="h-[58dvh] min-h-48 space-y-3 overflow-y-auto overscroll-contain [overflow-anchor:none]" onScroll={() => {
-      const host = viewport.current!;
-      bottom.current = host.scrollHeight - host.clientHeight - host.scrollTop < 48;
-    }}>
-      {!modern && page?.hasOlder && <Button disabled={busy || denied} onClick={() => void load(true)}>{l('older')}</Button>}
+    <div ref={viewport} data-testid="task-feed-scroll" className="h-[58dvh] min-h-48 space-y-3 overflow-y-auto overscroll-contain [overflow-anchor:none]">
       {!visibleRows.length && <p role="status">{l(busy ? 'loading' : activeOnly ? 'activeEmpty' : 'empty')}</p>}
-      {visibleRows.map((row, index) => <div key={row.item.id} data-item-id={row.item.id}>
-        {!modern && (index === 0 || historical(visibleRows[index - 1]!) !== historical(row)) && <h3 className="py-2 text-sm text-muted-foreground">{l(historical(row) ? 'history' : 'unfinished')}</h3>}
+      {visibleRows.map(row => <div key={row.item.id} data-item-id={row.item.id}>
         <article className="min-w-0 space-y-2 break-words rounded-lg border bg-card p-4" data-testid="task-card">
-          <h4 className="break-words font-semibold">{modern ? <button type="button" className="text-left hover:underline focus-visible:underline" onClick={() => onOpen(row)}>{row.item.title}</button> : row.item.title}</h4>
+          <h4 className="break-words font-semibold"><button type="button" className="text-left hover:underline focus-visible:underline" onClick={() => onOpen(row)}>{row.item.title}</button></h4>
           <p className="text-sm">{l('project')}: {row.item.projectId ? projects.find(project => project.id === row.item.projectId)?.name ?? row.item.projectId : l('ungrouped')}</p>
-          {!modern && <><p>{l('status')}: {t(`agentWorkspace.status_${row.item.status}`, {defaultValue: row.item.status})}</p>
-          <p className="text-sm">{l('execution')}: {row.latestExecution?.state ? t(`agentWorkspace.execution_${row.latestExecution.state}`, {defaultValue: row.latestExecution.state}) : l('none')}</p></>}
-          {modern ? <>
-            <p className="text-sm">{l('developer')}: {row.developerEmployeeId ?? l('unassigned')}</p>
-            <p className="text-sm">{l('reviewer')}: {row.reviewerEmployeeId ?? l('unassigned')}{!row.reviewNoteId && row.reviewerEmployeeId && <span> · {l('pendingAssignment')}</span>}</p>
-            <p className="text-sm">{l('stage')}: {taskStageLabel(row, key => t(key))}</p>
-            {row.needsAttention && <p className="text-sm font-medium">{l('needsAttention')}</p>}
-            {row.lastActivityAt != null && <p className="text-xs text-muted-foreground">{l('activity')}: {new Date(row.lastActivityAt).toLocaleString()}</p>}
-          </> : row.latestExecution?.employeeId && <p>{l('employees')}: {row.latestExecution.employeeId}</p>}
-          {!modern && historical(row) && <p className="text-xs text-muted-foreground">{row.item.closedAt ? new Date(row.item.closedAt).toLocaleString() : l('unknownTime')}</p>}
-          {!modern && !historical(row) && <p className="text-sm text-muted-foreground">{l('noResult')}</p>}
-          {!modern && <Button variant="outline" onClick={() => onOpen(row)}>{l('details')}</Button>}
+          <p className="text-sm">{l('developer')}: {row.developerEmployeeId ?? l('unassigned')}</p>
+          <p className="text-sm">{l('reviewer')}: {row.reviewerEmployeeId ?? l('unassigned')}{!row.reviewNoteId && row.reviewerEmployeeId && <span> · {l('pendingAssignment')}</span>}</p>
+          <p className="text-sm">{l('stage')}: {taskStageLabel(row, key => t(key))}</p>
+          {row.needsAttention && <p className="text-sm font-medium">{l('needsAttention')}</p>}
+          {row.lastActivityAt != null && <p className="text-xs text-muted-foreground">{l('activity')}: {new Date(row.lastActivityAt).toLocaleString()}</p>}
         </article>
       </div>)}
-      {modern && page?.hasOlder && <Button disabled={busy || denied} onClick={() => void load(true)}>{l('more')}</Button>}
+      {page?.hasOlder && <Button disabled={busy || denied} onClick={() => void load(true)}>{l('more')}</Button>}
     </div>
   </section>;
 }
