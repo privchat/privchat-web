@@ -334,10 +334,10 @@ function WorkspaceDialog({open, onClose, client, accountKey}: {open: boolean; on
   return (
     <Dialog open={open} onOpenChange={(next) => {if (!next) onClose();}}>
       <DialogContent className="flex h-[90vh] w-[95vw] max-w-[1400px] flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0 border-b px-4 py-3 text-left">
+        <DialogHeader className="sr-only">
           <DialogTitle>{t('tabs.workspace')}</DialogTitle>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4">
+        <div className="min-h-0 flex-1">
           {open && <WorkspaceScreen client={client} accountKey={accountKey} />}
         </div>
       </DialogContent>

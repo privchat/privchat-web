@@ -1,19 +1,34 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Check, Circle, Clock, RotateCw } from 'lucide-react';
 import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import type { TaskFeedPage, WorkItem, WorkspaceActivity, WorkspaceApi, TaskScope } from './api';
 import { mergeActivityPage, unfinishedTaskFeed, validateTaskFeed } from './task-feed';
 import { usePageLabels } from './page-labels';
 import { WorkspaceRoomObserver, roomFailure } from './room-observer';
-import {taskStageLabel} from './task-stage';
+import {taskStageLabel, taskStatusCategory, type TaskStatusCategory} from './task-stage';
+import { StatusPill, WsTable, WsTd, WsTh } from './shell';
 
-export function TaskFeed({api, client, workspaceId, projectId, employeeId, unprojected, view, enabled = true, projects = [], onOpen}: TaskScope & {api: WorkspaceApi; client?: PrivchatClient; view: 'active' | 'history'; enabled?: boolean; projects?: import('./api').Project[]; onOpen: (row: WorkspaceActivity) => void}) {
+const CATEGORY_ICON = {pending: Circle, running: RotateCw, review: Clock, done: Check} as const;
+
+function relativeTime(value: number, language: string): string {
+  const diff = value - Date.now();
+  const abs = Math.abs(diff);
+  const rtf = new Intl.RelativeTimeFormat(language, {numeric: 'auto'});
+  if (abs < 60_000) return rtf.format(Math.round(diff / 1000), 'second');
+  if (abs < 3_600_000) return rtf.format(Math.round(diff / 60_000), 'minute');
+  if (abs < 86_400_000) return rtf.format(Math.round(diff / 3_600_000), 'hour');
+  if (abs < 7 * 86_400_000) return rtf.format(Math.round(diff / 86_400_000), 'day');
+  return new Date(value).toLocaleDateString(language);
+}
+
+export function TaskFeed({api, client, workspaceId, projectId, employeeId, unprojected, view, enabled = true, projects = [], onOpen, statusFilter = 'all', search = ''}: TaskScope & {api: WorkspaceApi; client?: PrivchatClient; view: 'active' | 'history'; enabled?: boolean; projects?: import('./api').Project[]; onOpen: (row: WorkspaceActivity) => void; statusFilter?: TaskStatusCategory | 'all'; search?: string}) {
   const activeOnly = view === 'active';
   const loadedPages = useRef(1);
 
   const l = usePageLabels();
-  const {t} = useTranslation();
+  const {t, i18n} = useTranslation();
   const [rows, setRows] = useState<WorkspaceActivity[]>([]);
   const [page, setPage] = useState<TaskFeedPage>();
   const [pending, setPending] = useState<TaskFeedPage>();
@@ -30,7 +45,11 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
   const anchor = useRef<{cards: {id: string; offset: number}[]; top: number} | undefined>(undefined);
   const olderCursor = useRef<string | null>(null);
   const currentRows = useRef(rows); currentRows.current = rows;
-  const visibleRows = activeOnly ? unfinishedTaskFeed(rows) : rows;
+  const base = activeOnly ? unfinishedTaskFeed(rows) : rows;
+  const query = search.trim().toLowerCase();
+  const visibleRows = base.filter(row =>
+    (statusFilter === 'all' || taskStatusCategory(row) === statusFilter) &&
+    (!query || row.item.title.toLowerCase().includes(query)));
   function remember() {
     const host = viewport.current;
     if (!host) return;
@@ -123,30 +142,41 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
     }
     anchor.current = undefined;
   }, [rows]);
-  return <section className="space-y-2" data-testid="task-feed">
+  return <section className="space-y-3" data-testid="task-feed">
     <div className="flex gap-2">
-      <Button variant="outline" disabled={busy || denied} onClick={() => void load(false, true)}>{l('reload')}</Button>
-      {pending && <Button disabled={busy} onClick={() => {
+      <Button variant="outline" size="sm" disabled={busy || denied} onClick={() => void load(false, true)}>{l('reload')}</Button>
+      {pending && <Button size="sm" disabled={busy} onClick={() => {
         if (pending.refreshRequired) {
           void load(false, true);
         } else apply(pending, false, true);
       }}>{l('updates')}</Button>}
     </div>
     {error && <p role="alert">{denied ? l('accessDenied') : l('error')}</p>}
-    <div ref={viewport} data-testid="task-feed-scroll" className="h-[58dvh] min-h-48 space-y-3 overflow-y-auto overscroll-contain [overflow-anchor:none]">
-      {!visibleRows.length && <p role="status">{l(busy ? 'loading' : activeOnly ? 'activeEmpty' : 'empty')}</p>}
-      {visibleRows.map(row => <div key={row.item.id} data-item-id={row.item.id}>
-        <article className="min-w-0 space-y-2 break-words rounded-lg border bg-card p-4" data-testid="task-card">
-          <h4 className="break-words font-semibold"><button type="button" className="text-left hover:underline focus-visible:underline" onClick={() => onOpen(row)}>{row.item.title}</button></h4>
-          <p className="text-sm">{l('project')}: {row.item.projectId ? projects.find(project => project.id === row.item.projectId)?.name ?? row.item.projectId : l('ungrouped')}</p>
-          <p className="text-sm">{l('developer')}: {row.developerEmployeeId ?? l('unassigned')}</p>
-          <p className="text-sm">{l('reviewer')}: {row.reviewerEmployeeId ?? l('unassigned')}{!row.reviewNoteId && row.reviewerEmployeeId && <span> · {l('pendingAssignment')}</span>}</p>
-          <p className="text-sm">{l('stage')}: {taskStageLabel(row, key => t(key))}</p>
-          {row.needsAttention && <p className="text-sm font-medium">{l('needsAttention')}</p>}
-          {row.lastActivityAt != null && <p className="text-xs text-muted-foreground">{l('activity')}: {new Date(row.lastActivityAt).toLocaleString()}</p>}
-        </article>
-      </div>)}
-      {page?.hasOlder && <Button disabled={busy || denied} onClick={() => void load(true)}>{l('more')}</Button>}
+    <div ref={viewport} data-testid="task-feed-scroll">
+      {!visibleRows.length && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : activeOnly ? 'activeEmpty' : 'empty')}</p>}
+      {visibleRows.length > 0 && <WsTable head={<>
+        <WsTh>{l('colTask')}</WsTh><WsTh>{l('project')}</WsTh><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colStatus')}</WsTh><WsTh className="text-right">{l('colUpdated')}</WsTh>
+      </>}>
+        {visibleRows.map(row => {
+          const category = taskStatusCategory(row);
+          const Icon = CATEGORY_ICON[category];
+          return <tr key={row.item.id} data-item-id={row.item.id} data-testid="task-card" className="hover:bg-accent/40">
+            <WsTd className="max-w-0">
+              <button type="button" className="break-words text-left font-medium hover:underline focus-visible:underline" onClick={() => onOpen(row)}>{row.item.title}</button>
+              <span className="ml-2 font-mono text-xs text-muted-foreground">{row.item.id.slice(0, 8)}</span>
+              {row.needsAttention && <span className="ml-2 text-xs font-medium">{l('needsAttention')}</span>}
+            </WsTd>
+            <WsTd className="text-muted-foreground">{row.item.projectId ? projects.find(project => project.id === row.item.projectId)?.name ?? row.item.projectId : l('ungrouped')}</WsTd>
+            <WsTd className="text-muted-foreground">
+              <span className="block">{l('developer')}: {row.developerEmployeeId ?? l('unassigned')}</span>
+              <span className="block text-xs">{l('reviewer')}: {row.reviewerEmployeeId ?? l('unassigned')}{!row.reviewNoteId && row.reviewerEmployeeId && ` · ${l('pendingAssignment')}`}</span>
+            </WsTd>
+            <WsTd><span className="sr-only">{l('stage')}: </span><StatusPill icon={Icon}>{taskStageLabel(row, key => t(key))}</StatusPill></WsTd>
+            <WsTd className="whitespace-nowrap text-right text-muted-foreground">{row.lastActivityAt != null ? relativeTime(row.lastActivityAt, i18n.resolvedLanguage ?? 'en') : '—'}</WsTd>
+          </tr>;
+        })}
+      </WsTable>}
+      {page?.hasOlder && <div className="pt-3"><Button variant="outline" size="sm" disabled={busy || denied} onClick={() => void load(true)}>{l('more')}</Button></div>}
     </div>
   </section>;
 }

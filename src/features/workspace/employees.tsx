@@ -8,7 +8,7 @@ import { roomFailure } from './room-observer';
 import { PlatformApiError, PlatformHttpError } from '@/lib/platform-errors';
 import { usePageLabels } from './page-labels';
 
-const field = 'block min-w-0 w-full rounded-md border bg-background px-3 py-2 text-sm';
+const field = 'block min-w-0 w-full rounded-[7px] border bg-background px-2.5 py-2 text-sm';
 const emptyConfig: EmployeeConfig = {name: '', nodeId: '', executor: '', roleDescription: '', title: '', model: '', workdirBindingId: ''};
 const terminal = new Set(['succeeded', 'failed', 'cancelled']);
 function failureLabel(error: unknown): string {
@@ -132,25 +132,25 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
     setConfig({...emptyConfig}); setConfirmed(false);
   }
   if (historyEmployee) return <TaskHistory api={api} scope={{employeeId: historyEmployee}} renderSession={renderSession} onBack={() => setHistoryEmployee(undefined)}/>;
-  return <section data-testid="employee-panel" className="min-w-0 space-y-3 border-t pt-4">
-    {employee && <Button variant="outline" disabled={locked} onClick={() => setHistoryEmployee(employee.agentId)}>{pageLabel('taskRecords')}</Button>}
-    <h3 className="font-semibold">{label('employees')}</h3>
+  return <section data-testid="employee-panel" className="mt-[22px] min-w-0 space-y-3 rounded-[9px] border bg-card p-4">
+    {employee && <Button variant="outline" size="sm" disabled={locked} onClick={() => setHistoryEmployee(employee.agentId)}>{pageLabel('taskRecords')}</Button>}
+    <h3 className="text-[17px] font-semibold">{label('employees')}</h3>
     <p className="text-sm text-muted-foreground">{label('employeeHint')}</p>
-    <p className="text-sm" data-testid="external-discovery-unsupported">{label('externalUnsupported')}</p>
-    {error && <p role="alert">{label(error)}</p>}
-    {intent.current.hasPending && <div className="space-y-2"><p className="text-sm">{label('retryRecovery')}</p><Button disabled={busy} onClick={() => {if (pendingAction.current) void act(pendingAction.current);}}>{label('retrySame')}</Button></div>}
-    {saved && <p role="status">{label('employeeSaved')}</p>}
-    {loading && <p role="status">{label('loading')}</p>}
-    <Button variant="outline" disabled={locked || loading} onClick={() => void act(async () => {
+    <p className="text-sm text-muted-foreground" data-testid="external-discovery-unsupported">{label('externalUnsupported')}</p>
+    {error && <p role="alert" className="text-sm text-destructive">{label(error)}</p>}
+    {intent.current.hasPending && <div className="space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5"><p className="text-sm">{label('retryRecovery')}</p><Button size="sm" disabled={busy} onClick={() => {if (pendingAction.current) void act(pendingAction.current);}}>{label('retrySame')}</Button></div>}
+    {saved && <p role="status" className="text-sm text-muted-foreground">{label('employeeSaved')}</p>}
+    {loading && <p role="status" className="text-sm text-muted-foreground">{label('loading')}</p>}
+    <Button variant="outline" size="sm" disabled={locked || loading} onClick={() => void act(async () => {
       const [a] = await Promise.all([api.employees(), refreshNodes()]);
       if (live.current) {setEmployees(a); setReady(true); setExecutionId(a.find(e => e.agentId === selected)?.executionId ?? ''); setCandidateRefresh(n => n + 1);}
     })}>{label('refresh')}</Button>
-    <label className="block">{label('employees')}<select className={field} value={selected} disabled={locked || !ready} onChange={e => choose(e.target.value)}>
+    <label className="grid gap-1.5 text-sm font-medium">{label('employees')}<select className={field} value={selected} disabled={locked || !ready} onChange={e => choose(e.target.value)}>
       <option value="">{label('newEmployee')}</option>
       {employees.map(a => <option key={a.agentId} value={a.agentId}>{a.name} · {a.title} · {a.agentId}</option>)}
     </select></label>
     {ready && employees.length === 0 && <p>{label('empty')}</p>}
-    {employee && <div className="space-y-2 rounded border p-3 text-sm break-words">
+    {employee && <div className="space-y-2 rounded-[7px] border bg-sidebar p-3 text-sm break-words">
       <p>{employee.name} · {employee.title}</p><p className="whitespace-pre-wrap">{employee.roleDescription}</p>
       <p>{nodeBound ? employee.nodeId : label('unconfigured')} · {employee.executor} · {employee.model} · {employee.workdirBindingId}</p>
       <p>{workspaceMode ? pageLabel('privateNotImported') : `${label('managedSession')}: ${nodeBound ? executionId || label('sessionOnSend') : label('unconfigured')}`}</p>
@@ -161,36 +161,36 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
     </div>}
     {(!selected || editing) && <form className="space-y-3" onSubmit={e => {e.preventDefault(); if (!busy && (valid || intent.current.hasPending)) void act(save);}}>
       <fieldset disabled={locked || !ready} className="min-w-0 space-y-3">
-        <label className="block">{label('name')}<input className={field} value={config.name} onChange={e => setConfig({...config, name: e.target.value})}/></label>
-        <label className="block">{label('employeeTitle')}<input className={field} value={config.title} onChange={e => setConfig({...config, title: e.target.value})}/></label>
-        <label className="block">{label('roleDescription')}<textarea className={field} value={config.roleDescription} onChange={e => setConfig({...config, roleDescription: e.target.value})}/></label>
+        <label className="grid gap-1.5 text-sm font-medium">{label('name')}<input className={field} value={config.name} onChange={e => setConfig({...config, name: e.target.value})}/></label>
+        <label className="grid gap-1.5 text-sm font-medium">{label('employeeTitle')}<input className={field} value={config.title} onChange={e => setConfig({...config, title: e.target.value})}/></label>
+        <label className="grid gap-1.5 text-sm font-medium">{label('roleDescription')}<textarea className={field} value={config.roleDescription} onChange={e => setConfig({...config, roleDescription: e.target.value})}/></label>
         {editing ? <p className="text-sm">{label('routingFixed')}</p> : <>
-          <label className="block">{label('nodes')}<select className={field} value={config.nodeId} onChange={e => {setConfig({...config, nodeId: e.target.value, executor: '', workdirBindingId: '', bindExecutionId: undefined}); setConfirmed(false);}}>
+          <label className="grid gap-1.5 text-sm font-medium">{label('nodes')}<select className={field} value={config.nodeId} onChange={e => {setConfig({...config, nodeId: e.target.value, executor: '', workdirBindingId: '', bindExecutionId: undefined}); setConfirmed(false);}}>
             <option value="">{label('nodes')}</option>{nodes.map(n => <option key={n.nodeId} value={n.nodeId} disabled={n.state !== 'active'}>{n.name} · {n.state} · {n.nodeId}</option>)}
           </select></label>
-          <label className="block">{label('executor')}<select className={field} value={config.executor} onChange={e => {setConfig({...config, executor: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>
+          <label className="grid gap-1.5 text-sm font-medium">{label('executor')}<select className={field} value={config.executor} onChange={e => {setConfig({...config, executor: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>
             <option value="">{label('executor')}</option>{executors.map(e => <option key={e}>{e}</option>)}
           </select></label>
-          <label className="block">{label('model')}<input className={field} value={config.model} onChange={e => {setConfig({...config, model: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}/></label>
-          <label className="block">{label('workdir')}<select className={field} value={config.workdirBindingId} onChange={e => {setConfig({...config, workdirBindingId: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>
+          <label className="grid gap-1.5 text-sm font-medium">{label('model')}<input className={field} value={config.model} onChange={e => {setConfig({...config, model: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}/></label>
+          <label className="grid gap-1.5 text-sm font-medium">{label('workdir')}<select className={field} value={config.workdirBindingId} onChange={e => {setConfig({...config, workdirBindingId: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>
             <option value="">{label('workdir')}</option>{node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label} · {w.id}</option>)}
           </select></label>
           {node && (!node.workdirs?.length || !executors.length) && <p>{label('unconfigured')}</p>}
           <p className="text-sm">{workspaceMode ? pageLabel('privateNotImported') : label('bindingHint')}</p>
           {candidatesLoading && <p role="status">{label('loading')}</p>}
           {candidatesError && <p role="alert">{label('candidateError')}</p>}
-          <label className="block">{label('managedSession')}<select className={field} value={config.bindExecutionId ?? ''} disabled={workspaceMode || candidatesLoading || candidatesError} onChange={e => {setConfig({...config, bindExecutionId: e.target.value || undefined}); setConfirmed(false);}}>
+          <label className="grid gap-1.5 text-sm font-medium">{label('managedSession')}<select className={field} value={config.bindExecutionId ?? ''} disabled={workspaceMode || candidatesLoading || candidatesError} onChange={e => {setConfig({...config, bindExecutionId: e.target.value || undefined}); setConfirmed(false);}}>
             <option value="">{label('sessionOnSend')}</option>{candidates.map(e => <option key={e.executionId} value={e.executionId}>{typeof e.params?.title === 'string' ? `${e.params.title} · ` : ''}{e.executionId} · {e.state} · {String(e.params?.model ?? '')} · {String(e.params?.workdirBindingId ?? '')}</option>)}
           </select></label>
           {config.bindExecutionId && <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/>{label('confirmBinding')}</label>}
         </>}
       </fieldset>
-      <div className="flex flex-wrap gap-2"><Button type="submit" disabled={locked || !ready || !valid}>{label(editing ? 'saveEmployee' : 'newEmployee')}</Button>
+      <div className="flex flex-wrap justify-end gap-2"><Button type="submit" disabled={locked || !ready || !valid}>{label(editing ? 'saveEmployee' : 'newEmployee')}</Button>
         {editing && <Button type="button" variant="outline" disabled={locked} onClick={() => {setEditing(false); setConfig({...emptyConfig});}}>{label('back')}</Button>}
       </div>
     </form>}
     {employee && !editing && !workspaceMode && <>
-      <label className="block">{label('employeeMessage')}<textarea className={field} value={text} disabled={locked || !nodeBound} onChange={e => setText(e.target.value)}/></label>
+      <label className="grid gap-1.5 text-sm font-medium">{label('employeeMessage')}<textarea className={field} value={text} disabled={locked || !nodeBound} onChange={e => setText(e.target.value)}/></label>
       <Button disabled={locked || !ready || !nodeBound || !text.trim()} onClick={() => {if (!nodeBound) return; void act(async () => {
         const result = await intent.current.run<Execution>(api, '/agent/agents/send', {agentId: employee.agentId, text}, 'requestId');
         if (!live.current) return;

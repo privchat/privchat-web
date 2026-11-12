@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Employee, Node, Project, ProjectBindingDirectoryWrite, Workspace, WorkspaceApi } from './api';
 import { BINDING_DIRECTORY_LIMIT, BINDING_NOTES_LIMIT, ROUND_END_LIMIT } from './api';
@@ -6,7 +7,8 @@ import { TaskHistory } from './task-history';
 import { usePageLabels } from './page-labels';
 import { navigateWorkspace } from './routes';
 import { roomFailure } from './room-observer';
-export const workspaceField = 'block w-full min-w-0 rounded-md border bg-background px-3 py-2 text-sm';
+import { WsPageHeader, WsTable, WsTd, WsTh } from './shell';
+export const workspaceField = 'block w-full min-w-0 rounded-[7px] border bg-background px-2.5 py-2 text-sm';
 
 export function ProjectList({api, workspaceId, renderSession}: {api: WorkspaceApi; workspaceId?: string; renderSession?: (id: string) => ReactNode}) {
   const l = usePageLabels();
@@ -30,19 +32,37 @@ export function ProjectList({api, workspaceId, renderSession}: {api: WorkspaceAp
   useEffect(() => {void load(); return () => {generation.current++;};}, [api, workspaceId]);
   useEffect(() => {void api.list().then(rows => setSpaces(rows)).catch(() => {});}, [api]);
   if (history) return <TaskHistory api={api} scope={{projectId: history.id}} projects={[history]} renderSession={renderSession} onBack={() => setHistory(undefined)}/>;
-  return <section data-testid="project-management" className="space-y-3">
-    <header className="flex items-center justify-between gap-2"><Button variant="ghost" disabled={busy} onClick={() => navigateWorkspace(workspaceId ? {view: 'space', spaceId: workspaceId} : {view: 'home'})}>{l('back')}</Button><h2 className="font-semibold">{l('projects')}</h2><Button disabled={busy} onClick={() => navigateWorkspace({view: 'create-project', workspaceId})}>{l('createProject')}</Button></header>
+  return <section data-testid="project-management">
+    <WsPageHeader title={l('projectsTitle')} subtitle={l('projectsSub')} actions={<>
+      <Button variant="ghost" size="sm" disabled={busy} onClick={() => navigateWorkspace(workspaceId ? {view: 'space', spaceId: workspaceId} : {view: 'home'})}>{l('back')}</Button>
+      <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>{l('reload')}</Button>
+      <Button size="sm" disabled={busy} onClick={() => navigateWorkspace({view: 'create-project', workspaceId})}><Plus className="h-4 w-4" />{l('createProject')}</Button>
+    </>} />
     {error && <p role="alert">{l('error')}</p>}
-    <label>{l('workspace')}<select className={workspaceField} value={workspaceId ?? ''} onChange={e => navigateWorkspace({view: 'projects', workspaceId: e.target.value || undefined})}><option value="">{l('allProjects')}</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-    <Button variant="outline" disabled={busy} onClick={() => void load()}>{l('reload')}</Button>
-    {!projects.length && <p role="status">{l(busy ? 'loading' : 'empty')}</p>}
-    {projects.map(project => <article key={project.id} className="space-y-2 rounded border p-3">
-      <h3 className="break-words font-medium">{project.name} {project.archived !== 0 && <span className="text-xs text-muted-foreground">{l('archived')}</span>}</h3>
-      <p className="text-sm text-muted-foreground">{spaces.find(s => s.id === project.workspaceId)?.name ?? project.workspaceId} · v{project.version}</p>
-      {project.description && <p className="whitespace-pre-wrap break-words text-sm">{project.description}</p>}
-      <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => navigateWorkspace({view: 'project', projectId: project.id})}>{l('edit')}</Button><Button variant="outline" disabled={busy} onClick={() => setHistory(project)}>{l('taskRecords')}</Button></div>
-    </article>)}
-    {projects.length < total && <Button disabled={busy} onClick={() => void load(page + 1)}>{l('more')}</Button>}
+    <div className="mb-4"><select aria-label={l('workspace')} className={`${workspaceField} w-auto`} value={workspaceId ?? ''} onChange={e => navigateWorkspace({view: 'projects', workspaceId: e.target.value || undefined})}><option value="">{l('allProjects')}</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+    {!projects.length && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
+    {projects.length > 0 && <WsTable head={<>
+      <WsTh>{l('project')}</WsTh><WsTh>{l('description')}</WsTh><WsTh>{l('colMyDirs')}</WsTh><WsTh className="text-right">{l('manage')}</WsTh>
+    </>}>
+      {projects.map(project => {
+        const mine = project.bindings.find(b => b.mine);
+        return <tr key={project.id} className="hover:bg-accent/40">
+          <WsTd className="font-medium">{project.name}{project.archived !== 0 && <span className="ml-2 text-xs text-muted-foreground">{l('archived')}</span>}</WsTd>
+          <WsTd className="text-muted-foreground">
+            {project.description && <span className="block whitespace-pre-wrap break-words">{project.description}</span>}
+            <span className="block text-xs">{spaces.find(s => s.id === project.workspaceId)?.name ?? project.workspaceId} · v{project.version}</span>
+          </WsTd>
+          <WsTd>{mine ? mine.directories.length : '—'}</WsTd>
+          <WsTd className="text-right">
+            <span className="inline-flex gap-2">
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => navigateWorkspace({view: 'project', projectId: project.id})}>{l('edit')}</Button>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => setHistory(project)}>{l('taskRecords')}</Button>
+            </span>
+          </WsTd>
+        </tr>;
+      })}
+    </WsTable>}
+    {projects.length < total && <div className="pt-3"><Button variant="outline" size="sm" disabled={busy} onClick={() => void load(page + 1)}>{l('more')}</Button></div>}
   </section>;
 }
 
@@ -57,16 +77,19 @@ export function ProjectCreate({api, workspaceId}: {api: WorkspaceApi; workspaceI
   const [error, setError] = useState(false);
   useEffect(() => {let live = true; void api.list().then(rows => {if (live) setSpaces(rows);}).catch(() => {if (live) setError(true);}); return () => {live = false;};}, [api]);
   const manageable = spaces.filter(s => s.archived === 0 && ['owner', 'admin'].includes(s.myRole));
-  return <form className="space-y-3" data-testid="project-create" onSubmit={async e => {e.preventDefault(); if (busy || !selected || !name.trim()) return; setBusy(true); setError(false); try {const project = await api.createProject({workspaceId: selected, name, description, roundEnd}); navigateWorkspace({view: 'project', projectId: project.id});} catch {setError(true);} finally {setBusy(false);}}}>
-    <header className="flex items-center justify-between gap-2"><Button variant="ghost" type="button" disabled={busy} onClick={() => navigateWorkspace({view: 'projects', workspaceId})}>{l('back')}</Button><h2 className="font-semibold">{l('createProject')}</h2></header>
+  return <form className="mx-auto max-w-lg space-y-4 rounded-lg border bg-card p-6" data-testid="project-create" onSubmit={async e => {e.preventDefault(); if (busy || !selected || !name.trim()) return; setBusy(true); setError(false); try {const project = await api.createProject({workspaceId: selected, name, description, roundEnd}); navigateWorkspace({view: 'project', projectId: project.id});} catch {setError(true);} finally {setBusy(false);}}}>
+    <h2 className="text-lg font-bold">{l('createProject')}</h2>
     {error && <p role="alert">{l('error')}</p>}
-    <fieldset disabled={busy} className="space-y-3">
-      <label>{l('workspace')}<select required className={workspaceField} value={selected} onChange={e => setSelected(e.target.value)}><option value="">{l('none')}</option>{manageable.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      <label>{l('name')}<input required maxLength={64} className={workspaceField} value={name} onChange={e => setName(e.target.value)}/></label>
-      <label>{l('description')}<textarea className={workspaceField} rows={3} maxLength={2000} value={description} onChange={e => setDescription(e.target.value)}/></label>
-      <label>{l('roundEnd')}<textarea aria-label={l('roundEnd')} className={workspaceField} rows={3} placeholder={l('roundEndDefault')} value={roundEnd} onChange={e => setRoundEnd(e.target.value.slice(0, ROUND_END_LIMIT))}/></label>
+    <fieldset disabled={busy} className="space-y-4">
+      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('workspace')}</span><select required className={workspaceField} value={selected} onChange={e => setSelected(e.target.value)}><option value="">{l('none')}</option>{manageable.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('name')}</span><input required maxLength={64} className={workspaceField} value={name} onChange={e => setName(e.target.value)}/></label>
+      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('description')}</span><textarea className={workspaceField} rows={3} maxLength={2000} value={description} onChange={e => setDescription(e.target.value)}/></label>
+      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('roundEnd')}</span><textarea aria-label={l('roundEnd')} className={workspaceField} rows={3} placeholder={l('roundEndDefault')} value={roundEnd} onChange={e => setRoundEnd(e.target.value.slice(0, ROUND_END_LIMIT))}/></label>
       <p className="text-sm text-muted-foreground">{l('roundEndHint')}</p>
-      <Button type="submit" disabled={busy || !selected || !name.trim()}>{l('save')}</Button>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" type="button" disabled={busy} onClick={() => navigateWorkspace({view: 'projects', workspaceId})}>{l('cancel')}</Button>
+        <Button type="submit" disabled={busy || !selected || !name.trim()}>{l('save')}</Button>
+      </div>
     </fieldset>
   </form>;
 }
@@ -112,7 +135,10 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
   const reviewerCandidates = employees.filter(e => e.nodeId === draft?.nodeId && draft?.directories.some(d => d.workdirBindingId === e.workdirBindingId));
   const accessLabel = (access: string) => access === 'write' ? l('accessWrite') : l('accessRead');
   return <section data-testid="project-detail" className="space-y-3">
-    <header className="flex items-center justify-between gap-2"><Button variant="ghost" disabled={busy} onClick={() => navigateWorkspace({view: 'projects', workspaceId: project?.workspaceId})}>{l('back')}</Button><h2 className="min-w-0 flex-1 truncate font-semibold">{project?.name ?? projectId}</h2><Button variant="outline" disabled={busy || !project} onClick={() => void load().catch(() => setError(true))}>{l('reload')}</Button></header>
+    <WsPageHeader title={project?.name ?? projectId} subtitle={project ? `v${project.version}${project.archived !== 0 ? ` · ${l('archived')}` : ''}` : undefined} actions={<>
+      <Button variant="ghost" size="sm" disabled={busy} onClick={() => navigateWorkspace({view: 'projects', workspaceId: project?.workspaceId})}>{l('back')}</Button>
+      <Button variant="outline" size="sm" disabled={busy || !project} onClick={() => void load().catch(() => setError(true))}>{l('reload')}</Button>
+    </>} />
     {error && <p role="alert">{l(denied ? 'accessDenied' : stale ? 'conflict' : 'error')}</p>}
     {!project && !error && <p role="status">{l('loading')}</p>}
     {project && <>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Plus } from 'lucide-react';
 import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -15,6 +15,8 @@ import { WorkDetails } from './work-details';
 import { WorkspaceInbox } from './inbox';
 import { roomFailure } from './room-observer';
 import { navigateWorkspace, parseWorkspaceRoute, scopedWorkspaceRoute, workspaceHref, type WorkspaceRoute } from './routes';
+import { WorkspaceShell, WsChip, WsChipGroup, WsPageHeader } from './shell';
+import type { TaskStatusCategory } from './task-stage';
 
 // Survives the account-switch remount (AppProviders is keyed by account) but not a
 // page refresh, so deep links survive reload while a switch drops scoped routes.
@@ -35,20 +37,22 @@ export function WorkspacePage({api, client, accountKey, renderSession, onLockCha
       if (current && scopedWorkspaceRoute(current)) navigateWorkspace({view: 'home'});
     }
   }, [accountKey]);
+  let view: ReactNode;
   switch (route.view) {
-    case 'projects': return <ProjectList key={workspaceHref(route)} api={api} workspaceId={route.workspaceId} renderSession={renderSession}/>;
-    case 'create-project': return <ProjectCreate key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>;
-    case 'project': return <ProjectDetail key={route.projectId} api={api} projectId={route.projectId} renderSession={renderSession}/>;
-    case 'devices': return <DevicePage api={api} onBack={() => navigateWorkspace({view: 'home'})}/>;
-    case 'create-space': return <CreateSpace api={api}/>;
+    case 'projects': view = <ProjectList key={workspaceHref(route)} api={api} workspaceId={route.workspaceId} renderSession={renderSession}/>; break;
+    case 'create-project': view = <ProjectCreate key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>; break;
+    case 'project': view = <ProjectDetail key={route.projectId} api={api} projectId={route.projectId} renderSession={renderSession}/>; break;
+    case 'devices': view = <DevicePage api={api} onBack={() => navigateWorkspace({view: 'home'})}/>; break;
+    case 'create-space': view = <CreateSpace api={api}/>; break;
     case 'space':
-    case 'records': return <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId} records={route.view === 'records'}/>;
-    case 'create-item': return <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>;
-    case 'item': return <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>;
-    case 'employees': return <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>;
-    case 'settings': return <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})}/>;
-    default: return <SpaceHome api={api}/>;
+    case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId} records={route.view === 'records'}/>; break;
+    case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
+    case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
+    case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
+    case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})}/>; break;
+    default: view = <SpaceHome api={api}/>;
   }
+  return <WorkspaceShell api={api} route={route}>{view}</WorkspaceShell>;
 }
 
 function SpaceHome({api}: {api: WorkspaceApi}) {
@@ -70,18 +74,21 @@ function SpaceHome({api}: {api: WorkspaceApi}) {
     finally {if (generation.current === current) setBusy(false);}
   }
   useEffect(() => {void load(); return () => {generation.current++;};}, [api]);
-  return <section data-testid="workspace-home" className="space-y-4">
-    <header className="flex items-center justify-between"><h2 className="text-lg font-semibold">{l('home')}</h2><DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline">{l('manage')}</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => navigateWorkspace({view: 'projects'})}>{l('projects')}</DropdownMenuItem><DropdownMenuItem onSelect={() => navigateWorkspace({view: 'devices'})}>{l('devices')}</DropdownMenuItem><DropdownMenuItem onSelect={() => navigateWorkspace({view: 'create-space'})}>{l('createSpace')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></header>
+  return <section data-testid="workspace-home">
+    <WsPageHeader title={l('home')} subtitle={l('spacesSub')} actions={<>
+      <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>{l('reload')}</Button>
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm">{l('manage')}</Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => navigateWorkspace({view: 'projects'})}>{l('projects')}</DropdownMenuItem><DropdownMenuItem onSelect={() => navigateWorkspace({view: 'devices'})}>{l('devices')}</DropdownMenuItem><DropdownMenuItem onSelect={() => navigateWorkspace({view: 'create-space'})}>{l('createSpace')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+      <Button size="sm" onClick={() => navigateWorkspace({view: 'create-space'})}><Plus className="h-4 w-4" />{l('createSpace')}</Button>
+    </>} />
     {error && <p role="alert">{l('error')}</p>}
-    <Button variant="outline" disabled={busy} onClick={() => void load()}>{l('reload')}</Button>
-    {!spaces.length && <p role="status">{l(busy ? 'loading' : 'empty')}</p>}
-    <div className="grid gap-3 sm:grid-cols-2">{spaces.map(s => <button key={s.id} type="button" data-testid="workspace-card" className="min-w-0 space-y-3 rounded-xl border bg-card p-5 text-left transition-colors hover:bg-accent focus-visible:outline focus-visible:outline-2" onClick={() => navigateWorkspace({view: 'space', spaceId: s.id})}>
-      <h3 className="truncate font-semibold">{s.name} {s.archived !== 0 && <span className="text-xs text-muted-foreground">{l('archived')}</span>}</h3>
+    {!spaces.length && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
+    {spaces.length > 0 && <div className="grid gap-3 sm:grid-cols-2">{spaces.map(s => <button key={s.id} type="button" data-testid="workspace-card" className="min-w-0 space-y-3 rounded-[9px] border bg-card p-4 text-left transition-colors hover:bg-accent focus-visible:outline focus-visible:outline-2" onClick={() => navigateWorkspace({view: 'space', spaceId: s.id})}>
+      <h3 className="truncate font-semibold">{s.name}{s.archived !== 0 && <span className="ml-2 text-xs font-normal text-muted-foreground">{l('archived')}</span>}</h3>
       {s.description && <p className="truncate text-sm text-muted-foreground">{s.description}</p>}
-      <div className="flex flex-wrap gap-3 text-sm"><span>{l('employees')}: {s.employeeCount}</span><span>{l('available')}: {s.employeeAvailabilityKnown && s.availableEmployeeCount != null ? s.availableEmployeeCount : l('unavailable')}</span><span>{l('open')}: {s.openItemCount}</span></div>
+      <div className="flex flex-wrap gap-3 text-sm text-muted-foreground"><span>{l('employees')}: {s.employeeCount}</span><span>{l('available')}: {s.employeeAvailabilityKnown && s.availableEmployeeCount != null ? s.availableEmployeeCount : l('unavailable')}</span><span>{l('open')}: {s.openItemCount}</span></div>
       {s.lastActivityAt != null && <p className="text-xs text-muted-foreground">{l('activity')}: {new Date(s.lastActivityAt).toLocaleString()}</p>}
-    </button>)}</div>
-    {spaces.length < total && <Button disabled={busy} onClick={() => void load(page + 1)}>{l('more')}</Button>}
+    </button>)}</div>}
+    {spaces.length < total && <div className="pt-3"><Button variant="outline" size="sm" disabled={busy} onClick={() => void load(page + 1)}>{l('more')}</Button></div>}
   </section>;
 }
 
@@ -91,11 +98,14 @@ function CreateSpace({api}: {api: WorkspaceApi}) {
   const [description, setDescription] = useState('');
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
-  return <form className="space-y-3" onSubmit={async e => {e.preventDefault(); if (busy) return; setBusy(true); try {await api.post('/workspace/create', {name, description}); navigateWorkspace({view: 'home'});} catch {setError(true);} finally {setBusy(false);}}}>
-    <h2>{l('createSpace')}</h2>{error && <p role="alert">{l('error')}</p>}
-    <label>{l('name')}<input className={workspaceField} required maxLength={120} value={name} onChange={e => setName(e.target.value)}/></label>
-    <label>{l('description')}<textarea className={workspaceField} maxLength={2000} value={description} onChange={e => setDescription(e.target.value)}/></label>
-    <Button disabled={busy || !name.trim()} type="submit">{l('save')}</Button><Button variant="ghost" type="button" disabled={busy} onClick={() => navigateWorkspace({view: 'home'})}>{l('cancel')}</Button>
+  return <form className="mx-auto max-w-lg space-y-4 rounded-lg border bg-card p-6" onSubmit={async e => {e.preventDefault(); if (busy) return; setBusy(true); try {await api.post('/workspace/create', {name, description}); navigateWorkspace({view: 'home'});} catch {setError(true);} finally {setBusy(false);}}}>
+    <h2 className="text-lg font-bold">{l('createSpace')}</h2>{error && <p role="alert">{l('error')}</p>}
+    <label className="block space-y-1.5"><span className="text-sm font-medium">{l('name')}</span><input className={workspaceField} required maxLength={120} value={name} onChange={e => setName(e.target.value)}/></label>
+    <label className="block space-y-1.5"><span className="text-sm font-medium">{l('description')}</span><textarea className={workspaceField} maxLength={2000} value={description} onChange={e => setDescription(e.target.value)}/></label>
+    <div className="flex justify-end gap-2">
+      <Button variant="outline" type="button" disabled={busy} onClick={() => navigateWorkspace({view: 'home'})}>{l('cancel')}</Button>
+      <Button disabled={busy || !name.trim()} type="submit">{l('save')}</Button>
+    </div>
   </form>;
 }
 
@@ -104,6 +114,8 @@ function SpaceView({api, client, spaceId, records}: {api: WorkspaceApi; client?:
   const [space, setSpace] = useState<Workspace>();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
+  const [statusFilter, setStatusFilter] = useState<TaskStatusCategory | 'all'>('all');
+  const [search, setSearch] = useState('');
   const [historyEmployee, setHistoryEmployee] = useState('');
   const [unprojected, setUnprojected] = useState(false);
   const [recordsVisited, setRecordsVisited] = useState(records);
@@ -127,28 +139,40 @@ function SpaceView({api, client, spaceId, records}: {api: WorkspaceApi; client?:
   useEffect(() => {live.current = true; void load(); return () => {live.current = false;};}, [api, spaceId]);
   useEffect(() => {if (records) setRecordsVisited(true);}, [records]);
   const open = (row: WorkspaceActivity) => navigateWorkspace({view: 'item', spaceId, itemId: row.item.id, executionId: row.latestExecution?.executionId ?? undefined});
-  return <section className="space-y-3" data-testid="workspace-detail">
-    <header className="flex items-center justify-between gap-2"><Button variant="ghost" onClick={() => navigateWorkspace({view: 'home'})}>{l('back')}</Button><h2 className="min-w-0 flex-1 truncate font-semibold">{space?.name ?? spaceId}</h2>
+  return <section data-testid="workspace-detail">
+    <WsPageHeader title={l('tasksTitle')} subtitle={l('tasksSub')} actions={<>
+      <Button variant="ghost" size="sm" onClick={() => navigateWorkspace({view: 'home'})}>{l('back')}</Button>
       <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={l('manage')}><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
         <DropdownMenuItem disabled={readOnly} onSelect={() => navigateWorkspace({view: 'create-item', spaceId})}>{l('createItem')}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigateWorkspace({view: 'employees', spaceId})}>{l('manageEmployees')}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigateWorkspace({view: 'projects', workspaceId: spaceId})}>{l('projects')}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigateWorkspace({view: 'settings', spaceId})}>{l('settings')}</DropdownMenuItem>
       </DropdownMenuContent></DropdownMenu>
-    </header>
+      <Button size="sm" disabled={readOnly} onClick={() => navigateWorkspace({view: 'create-item', spaceId})}><Plus className="h-4 w-4" />{l('newTask')}</Button>
+    </>} />
     {error && <p role="alert">{l(denied ? 'accessDenied' : 'error')}</p>}
-    {!space && !error && <p role="status">{l(busy ? 'loading' : 'empty')}</p>}
+    {!space && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
     {space && <>
-      {readOnly && <p>{l('readOnly')}</p>}
+      {readOnly && <p className="mb-3 text-sm text-muted-foreground">{l('readOnly')}</p>}
       <WorkspaceInbox key={`inbox:${spaceId}`} api={api} workspaceId={spaceId}/>
-      <div className="flex gap-2" role="group" aria-label={l('taskViews')}>
-        <Button variant="outline" aria-pressed={!records} onClick={() => navigateWorkspace({view: 'space', spaceId})}>{l('unfinished')}</Button>
-        <Button variant="outline" aria-pressed={records} onClick={() => navigateWorkspace({view: 'records', spaceId})}>{l('taskRecords')}</Button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <WsChipGroup label={l('taskViews')}>
+            <WsChip active={!records} onClick={() => navigateWorkspace({view: 'space', spaceId})}>{l('unfinished')}</WsChip>
+            <WsChip active={records} onClick={() => navigateWorkspace({view: 'records', spaceId})}>{l('taskRecords')}</WsChip>
+          </WsChipGroup>
+          <WsChipGroup label={l('colStatus')}>
+            {([['all', 'statusAll'], ['pending', 'statusPending'], ['running', 'statusRunning'], ['review', 'statusReview'], ['done', 'statusDone']] as const).map(([key, label]) => <WsChip key={key} active={statusFilter === key} onClick={() => setStatusFilter(key)}>{l(label)}</WsChip>)}
+          </WsChipGroup>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label={l('project')} className={`${workspaceField} w-auto`} value={projectId} onChange={e => {setProjectId(e.target.value); setUnprojected(false);}}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+          <input aria-label={l('searchTasks')} placeholder={l('searchTasks')} className={`${workspaceField} w-48`} value={search} onChange={e => setSearch(e.target.value)}/>
+        </div>
       </div>
-      <label>{l('project')}<select className={workspaceField} value={projectId} onChange={e => {setProjectId(e.target.value); setUnprojected(false);}}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-      {records && <div className="flex flex-wrap gap-2"><label>{l('employeeFilter')}<input className={workspaceField} value={historyEmployee} onChange={e => setHistoryEmployee(e.target.value)}/></label><label><input type="checkbox" checked={unprojected} onChange={e => {setUnprojected(e.target.checked); setProjectId('');}}/>{l('ungrouped')}</label></div>}
-      <div hidden={records}><TaskFeed key={`active:${spaceId}:${projectId}`} api={api} client={client} workspaceId={spaceId} projectId={projectId || undefined} view="active" enabled={!records} projects={projects} onOpen={open}/></div>
-      {recordsVisited && <div hidden={!records}><TaskFeed key={`records:${spaceId}:${projectId}:${historyEmployee}:${unprojected}`} api={api} client={client} workspaceId={spaceId} projectId={unprojected ? undefined : projectId || undefined} employeeId={historyEmployee || undefined} unprojected={unprojected} view="history" enabled={records} projects={projects} onOpen={open}/></div>}
+      {records && <div className="mb-3 flex flex-wrap items-center gap-3"><label className="flex items-center gap-2 text-sm">{l('employeeFilter')}<input className={`${workspaceField} w-40`} value={historyEmployee} onChange={e => setHistoryEmployee(e.target.value)}/></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unprojected} onChange={e => {setUnprojected(e.target.checked); setProjectId('');}}/>{l('ungrouped')}</label></div>}
+      <div hidden={records}><TaskFeed key={`active:${spaceId}:${projectId}`} api={api} client={client} workspaceId={spaceId} projectId={projectId || undefined} view="active" enabled={!records} projects={projects} onOpen={open} statusFilter={statusFilter} search={search}/></div>
+      {recordsVisited && <div hidden={!records}><TaskFeed key={`records:${spaceId}:${projectId}:${historyEmployee}:${unprojected}`} api={api} client={client} workspaceId={spaceId} projectId={unprojected ? undefined : projectId || undefined} employeeId={historyEmployee || undefined} unprojected={unprojected} view="history" enabled={records} projects={projects} onOpen={open} statusFilter={statusFilter} search={search}/></div>}
     </>}
   </section>;
 }

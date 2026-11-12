@@ -33,7 +33,7 @@ import type { Binding, Node, WorkItem, WorkNote } from '@/features/workspace/api
 /** Full module fixture. The hash is set before render, exactly like a deep link or refresh. */
 export function mountWorkspacePage(baseUrl: string, hash = '#/workspace', client?: PrivchatClient, accountKey?: string | null) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
-  host.className = 'mx-auto max-w-3xl p-3';
+  host.className = 'h-screen w-full';
   location.hash = hash;
   const root = createRoot(host);
   root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} client={client} accountKey={accountKey} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
@@ -43,7 +43,7 @@ export function mountWorkspacePage(baseUrl: string, hash = '#/workspace', client
 /** Standalone employee panel fixture with the production node refresh and managed session console. */
 export function mountEmployeePanel(baseUrl: string) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
-  host.className = 'mx-auto max-w-3xl p-3';
+  host.className = 'workspace-scope mx-auto max-w-3xl p-3';
   const api = new WorkspaceApi(baseUrl, () => 'test');
   const root = createRoot(host);
   const render = (nodes: Node[]) => root.render(<EmployeePanel api={api} nodes={nodes} refreshNodes={async () => {render(await api.nodes());}} renderSession={id => <SessionConsole key={id} api={api} executionId={id} employeeManaged/>} onRequestLockChange={locked => {host.dataset.locked = String(locked);}}/>);
@@ -74,6 +74,7 @@ export function mountNormalWorkspaceConsole(baseUrl: string) {
 
 export function mountDevicePage(baseUrl: string) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
+  host.className = 'workspace-scope mx-auto max-w-3xl p-3';
   createRoot(host).render(<DevicePage api={new WorkspaceApi(baseUrl, () => 'test')} onBack={() => {}}/>);
 }
 export function mountAssistantPage(baseUrl: string) {
@@ -87,9 +88,11 @@ export function mountAssistantPage(baseUrl: string) {
 }
 export function mountWorkItem(baseUrl: string, item: WorkItem, notes: WorkNote[]) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
+  host.className = 'workspace-scope mx-auto max-w-3xl p-3';
   createRoot(host).render(<WorkItemPanel api={new WorkspaceApi(baseUrl, () => 'test')} item={item} notes={notes} readOnly={false} refresh={async () => {}}/>);
 }
 export function mountWorkflow(baseUrl: string, item: WorkItem, nodes: Node[], bindings: Binding[], notes: WorkNote[]) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
+  host.className = 'workspace-scope mx-auto max-w-3xl p-3';
   createRoot(host).render(<WorkflowPanel api={new WorkspaceApi(baseUrl, () => 'test')} item={item} nodes={nodes} bindings={bindings} notes={notes} readOnly={false} onLockChange={locked => {host.dataset.locked = String(locked);}} onExecution={id => {host.dataset.execution = id;}}/>);
 }
