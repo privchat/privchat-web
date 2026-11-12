@@ -41,7 +41,9 @@ export function mountWorkspaceConsole(baseUrl: string) {
     unsubscribeChannel:async(id:string)=>{workspaceSubscriptions.push(`leave:${id}`);},
   } as unknown as PrivchatClient;
   const root=createRoot(host);
-  root.render(<Dialog open onOpenChange={()=>{root.unmount();host.remove();}}><DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl"><DialogTitle>Workspace legacy controls</DialogTitle><ConsoleBody client={client} providedApi={new WorkspaceApi(baseUrl,()=> 'test')} onEmployeeRequestLockChange={() => {}}/></DialogContent></Dialog>);
+  // Mirror production WorkspaceConsole (console.tsx): block dialog close while an employee request is pending.
+  let employeeRequestLocked = false;
+  root.render(<Dialog open onOpenChange={value => {if (value || !employeeRequestLocked) {root.unmount();host.remove();}}}><DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-3xl"><DialogTitle>Workspace legacy controls</DialogTitle><ConsoleBody client={client} providedApi={new WorkspaceApi(baseUrl,()=> 'test')} onEmployeeRequestLockChange={locked => {employeeRequestLocked = locked;}}/></DialogContent></Dialog>);
 }
 
 export function mountWorkspacePage(baseUrl: string) {

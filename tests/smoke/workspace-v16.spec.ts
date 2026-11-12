@@ -85,10 +85,12 @@ test('home buffers updates and preserves surviving card anchor on completion, pr
   await expect(active.getByRole('button', {name: 'Reload', exact: true})).toBeEnabled();
   expect(Math.abs(await position() - before)).toBeLessThan(2);
   await host.evaluate(el => {el.scrollTop = el.scrollHeight;});
-  const bottomAnchor = await host.locator('[data-item-id="21"]').evaluate(el => el.getBoundingClientRect().top);
+  // Measure within the scroll host: clicking the below-the-fold "Load more" button makes Playwright scroll the document, which shifts window-relative rects without moving the feed anchor.
+  const offset21 = () => host.evaluate(el => el.querySelector('[data-item-id="21"]')!.getBoundingClientRect().top - el.getBoundingClientRect().top);
+  const bottomAnchor = await offset21();
   await active.getByRole('button', {name: 'Load more', exact: true}).click();
   await expect(active.locator('[data-item-id="20"]')).toHaveCount(1);
-  expect(Math.abs(await host.locator('[data-item-id="21"]').evaluate(el => el.getBoundingClientRect().top) - bottomAnchor)).toBeLessThan(2);
+  expect(Math.abs(await offset21() - bottomAnchor)).toBeLessThan(2);
 });
 test('project filter starts fresh tail; readonly keeps employee menu but disables creation', async ({page}) => {
   const requests = await mock(page, path => path === '/workspace/page' ? {list: [space('w', {archived: 1})], total: 1} : undefined); await mount(page); await page.getByTestId('workspace-card').click(); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await expect.poll(() => requests.filter(r => r.path.endsWith('/activity/page')).at(-1)?.query.searchParams.get('projectId')).toBe('p'); expect(requests.filter(r => r.path.endsWith('/activity/page')).at(-1)?.query.searchParams.has('cursor')).toBe(false);

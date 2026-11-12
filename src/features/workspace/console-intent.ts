@@ -43,7 +43,9 @@ export class ConsoleIntent {
     this.store?.assertScope(api);
     if (!this.pending) { this.pending = JSON.parse(JSON.stringify({path, body: {...body, [idKey]: crypto.randomUUID()}, idKey})); this.maybeCommitted = false; }
     const pending = this.pending!;
-    if (pending.path !== path || pending.idKey !== idKey || Object.keys(pending.body).length !== Object.keys(body).length+1 || Object.entries(body).some(([k,v]) => JSON.stringify(pending.body[k]) !== JSON.stringify(v))) throw new Error('Retry the original request');
+    // pending is JSON-normalized (undefined keys dropped); compare normalized bodies so an optional undefined field doesn't falsely trip the key-count guard.
+    const normalized = JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
+    if (pending.path !== path || pending.idKey !== idKey || Object.keys(pending.body).length !== Object.keys(normalized).length+1 || Object.entries(normalized).some(([k,v]) => JSON.stringify(pending.body[k]) !== JSON.stringify(v))) throw new Error('Retry the original request');
     // Fail closed: never send a request whose recovery record could not be written.
     this.store?.save(pending);
     let result: T;

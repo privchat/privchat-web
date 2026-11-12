@@ -137,3 +137,18 @@ test('existing nonpersistent console intents keep their rejection/retry semantic
   await intent.run(api(async (_p, b) => { expect(b.commandId).toBe(id); return {}; }), '/x', {text: 'one'});
   expect(intent.hasPending).toBe(false);
 });
+
+test('first attempt sends a body carrying an optional undefined field instead of failing the retry guard', async () => {
+  // EmployeeConfig.bindExecutionId stays undefined after routing onChange; JSON normalization drops it, so the guard must compare normalized bodies.
+  const intent = new ConsoleIntent();
+  let sent = 0;
+  const result = await intent.run(api(async (_p, b) => {
+    sent++;
+    expect(b).not.toHaveProperty('bindExecutionId');
+    expect(typeof b.requestId).toBe('string');
+    return {agentId: 'employee-1'};
+  }), '/agent/agents', {name: 'Alex', nodeId: 'remote-1', bindExecutionId: undefined}, 'requestId');
+  expect(sent).toBe(1);
+  expect(result).toEqual({agentId: 'employee-1'});
+  expect(intent.hasPending).toBe(false);
+});
