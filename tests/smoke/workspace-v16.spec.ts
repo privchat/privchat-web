@@ -95,7 +95,7 @@ test('project filter starts fresh tail; readonly keeps employee menu but disable
   await page.getByRole('button', {name: 'Manage', exact: true}).click(); await expect(page.getByRole('menuitem', {name: 'Create work item'})).toBeDisabled(); await expect(page.getByRole('menuitem', {name: 'Manage virtual employees'})).toBeEnabled();
 });
 test('project edit submits version and authorized mappings without workspace authority', async ({page}) => {
-  const requests = await mock(page); await mount(page); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Project management'}).click(); await page.getByRole('button', {name: 'Edit', exact: true}).click(); await page.getByLabel('Name', {exact: true}).fill('Renamed'); await expect(page.getByRole('combobox', {name: 'Workspace', exact: true})).toHaveCount(0); await page.getByRole('button', {name: 'Save', exact: true}).click(); await expect.poll(() => requests.filter(r => r.path === '/workspace/project/update').length).toBe(1); expect(requests.find(r => r.path === '/workspace/project/update')?.body).toEqual({id: 'p', name: 'Renamed', version: 7, targets: [{nodeId: 'n', workdirBindingId: 'dir'}]}); expect(requests.some(r => r.path === '/workspace/list')).toBe(false);
+  const requests = await mock(page); await mount(page); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Project management'}).click(); await page.getByRole('button', {name: 'Edit', exact: true}).click(); await page.getByLabel('Name', {exact: true}).fill('Renamed'); await expect(page.getByRole('combobox', {name: 'Workspace', exact: true})).toHaveCount(0); await page.getByRole('button', {name: 'Save', exact: true}).click(); await expect.poll(() => requests.filter(r => r.path === '/workspace/project/update').length).toBe(1); expect(requests.find(r => r.path === '/workspace/project/update')?.body).toEqual({id: 'p', name: 'Renamed', version: 7, targets: [{nodeId: 'n', workdirBindingId: 'dir'}], reviewBasis: [], roundEnd: ''}); expect(requests.some(r => r.path === '/workspace/list')).toBe(false);
 });
 
 async function openProjects(page: Page) {
@@ -119,7 +119,7 @@ test('standalone creation has no spaces dropdown, spaces fetch, or reverse links
   await page.getByLabel('Name', {exact: true}).fill('Independent');
   await page.getByRole('button', {name: 'Save', exact: true}).click();
   await expect.poll(() => requests.filter(r => r.path === '/workspace/project/create').length).toBe(1);
-  expect(requests.find(r => r.path === '/workspace/project/create')?.body).toEqual({name: 'Independent', targets: []});
+  expect(requests.find(r => r.path === '/workspace/project/create')?.body).toEqual({name: 'Independent', targets: [], reviewBasis: [], roundEnd: ''});
   expect(requests.slice(start).some(r => r.path === '/workspace/list' || r.path === '/workspace/page' || r.path.includes('/link/'))).toBe(false);
   expect(requests.filter(r => r.path === '/workspace/project/page').every(r => !r.query.searchParams.has('workspaceId'))).toBe(true);
 });
