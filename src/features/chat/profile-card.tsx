@@ -47,6 +47,7 @@ import { useLastSeenI18n } from './use-presence-i18n';
 import { errorText } from './error-text';
 import { ProfileEditDialog } from '@/features/profile/profile-edit-dialog';
 import { PrivacySettingsDialog } from '@/features/profile/privacy-settings-dialog';
+import { BlacklistDialog } from '@/features/profile/blacklist-dialog';
 import { SignInDialog } from '@/features/profile/sign-in-dialog';
 
 export interface ProfileCardProps {
@@ -103,6 +104,7 @@ export function ProfileCard({
   const [editOpen, setEditOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [blacklistOpen, setBlacklistOpen] = useState(false);
 
   return (
     <>
@@ -162,6 +164,16 @@ export function ProfileCard({
               {t('privacy.open_button')}
             </button>
           )}
+          {isSelf && (
+            <button
+              type="button"
+              onClick={() => setBlacklistOpen(true)}
+              className="flex w-full items-center justify-center gap-2 border-t px-3 py-2 text-xs hover:bg-accent"
+              data-testid="profile-card-blacklist-self"
+            >
+              {t('blacklist.open_button')}
+            </button>
+          )}
           {showSelfEdit && (
             <button
               type="button"
@@ -192,6 +204,9 @@ export function ProfileCard({
       )}
       {isSelf && (
         <PrivacySettingsDialog open={privacyOpen} onOpenChange={setPrivacyOpen} />
+      )}
+      {isSelf && (
+        <BlacklistDialog open={blacklistOpen} onOpenChange={setBlacklistOpen} />
       )}
       {showSignIn && (
         <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />

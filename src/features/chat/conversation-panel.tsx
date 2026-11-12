@@ -30,7 +30,7 @@ import {
   useJumpToMessage,
 } from '@privchat/react';
 import type { MessageItemVM } from '@privchat/react';
-import type { PinnedMessageItem } from '@privchat/sdk';
+import type { GroupMember, PinnedMessageItem } from '@privchat/sdk';
 import { stopAll as stopVoicePlayback } from './voice-playback';
 import { projectEntry, removeEntry } from './media-send-store';
 import { useChannelMediaSends, useMediaSender } from './use-media-send';
@@ -42,6 +42,15 @@ import { formatPresenceLine } from './format-last-seen';
 import { useLastSeenI18n } from './use-presence-i18n';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { MessageList } from './message-list';
+import { MentionPicker } from './mention-picker';
+import {
+  collectMentionIds,
+  detectMention,
+  filterMentionMembers,
+  insertMention,
+  type MentionSelection,
+  type MentionTrigger,
+} from './use-mention';
 import { ForwardDialog } from './forward-dialog';
 import { BotMenuButton } from './bot-menu-button';
 import { PinnedBar } from './pinned-bar';
@@ -227,6 +236,58 @@ export function ConversationPanel({
   // uid → role ('owner'/'admin'/'member'):驱动气泡昵称旁的【群主】/【管理】标签。
   const [roleByUid, setRoleByUid] = useState<Map<string, string>>(new Map());
   const [pinnedItems, setPinnedItems] = useState<PinnedMessageItem[]>([]);
+  const pinConnectionState = useConnectionState();
+
+  // ---- @mention composer (MENTION_SPEC §3「ID 锚定」) ----
+  //
+  // 群成员 local-first 加载：先读本地缓存渲染选择器，再 listMembers 刷新
+  // （与 App 两段式一致）。选择只记录 user_id；发送时从草稿回收 id 列表，
+  // 文本实体配对交给 SDK 接收侧。单聊不加载、不弹选择器。
+  const [mentionMembers, setMentionMembers] = useState<GroupMember[]>([]);
+  const [mentionSelections, setMentionSelections] = useState<MentionSelection[]>([]);
+  const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  useEffect(() => {
+    setMentionSelections([]);
+    setMentionTrigger(null);
+    setMentionIndex(0);
+    setMentionMembers([]);
+    if (groupId === undefined || pinConnectionState !== 'authenticated') return;
+    let cancelled = false;
+    let refreshed = false;
+    // 先本地：缓存命中即刻可渲染，不等网络。
+    void groupOps
+      .cachedMembers(groupId)
+      .then((rows) => {
+        if (!cancelled && !refreshed && rows.length > 0) setMentionMembers(rows);
+      })
+      .catch(() => {
+        /* best-effort */
+      });
+    // 再同步：拉全量刷新（与成员页同源），失败保留本地缓存。
+    void groupOps
+      .listMembers(groupId)
+      .then((resp) => {
+        if (cancelled) return;
+        refreshed = true;
+        setMentionMembers(resp.members);
+      })
+      .catch(() => {
+        /* best-effort */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, groupOps, pinConnectionState]);
+
+  const mentionOptions = useMemo(
+    () =>
+      mentionTrigger === null
+        ? []
+        : filterMentionMembers(mentionMembers, mentionTrigger.query, selfUid),
+    [mentionTrigger, mentionMembers, selfUid],
+  );
+  const mentionActive = !isDirect && mentionTrigger !== null;
 
   // 权限与角色标签都走 group/info 的**有界**字段：`my_role` 判断我能不能管理，
   // `owner_id` + `admin_user_ids` 给气泡打【群主】/【管理】标签。
@@ -235,7 +296,6 @@ export function ConversationPanel({
   // 服务端约 1s，只为回答「我是不是管理员」和几个发言人的名字。发言人昵称由
   // 本地 user store 提供（SenderNameLabel 已有该回落），群名片 alias 目前
   // 全站为空且无任何端可设置。见 CHANNEL_SPEC §9.2.2。失败时降级为只读。
-  const pinConnectionState = useConnectionState();
   useEffect(() => { setPinnedItems([]); }, [groupId, selfUid]);
   useEffect(() => {
     setIsManager(false);
@@ -345,9 +405,12 @@ export function ConversationPanel({
     try {
       await send(text, {
         reply_to_message_id: replyTo?.server_message_id,
+        mentioned_user_ids: collectMentionIds(text, mentionSelections),
       });
       setDraft('');
       setReplyTo(null);
+      setMentionSelections([]);
+      setMentionTrigger(null);
       // Send stop-typing immediately so peer's "正在输入…" clears the
       // moment our message lands, not after the idle timeout.
       notifyTyping('');
@@ -364,6 +427,37 @@ export function ConversationPanel({
         inputRef.current?.focus();
       });
     }
+  };
+
+  // 选中一个成员：把草稿里的 `@query` 替换成 `@显示名 `，记录 user_id，
+  // 关闭选择器并把光标落到插入点之后。显示名优先 display_name（群名片），
+  // 与选择器/气泡昵称同源。
+  const onSelectMention = (member: GroupMember) => {
+    if (mentionTrigger === null) return;
+    const uid = String(member.user_id);
+    const label =
+      member.display_name || member.nickname || member.username || `#${uid}`;
+    const { text, caret } = insertMention(
+      draft,
+      mentionTrigger.start,
+      mentionTrigger.end,
+      label,
+    );
+    setDraft(text);
+    setMentionSelections((prev) =>
+      prev.some((s) => s.userId === uid) ? prev : [...prev, { userId: uid, label }],
+    );
+    setMentionTrigger(null);
+    setMentionIndex(0);
+    notifyTyping(text);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (el === null) return;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+    });
   };
 
   // Send a canned message from a bot-menu `message` action through the
@@ -731,6 +825,15 @@ export function ConversationPanel({
         </div>
       )}
 
+      {mentionActive && (
+        <MentionPicker
+          members={mentionOptions}
+          activeIndex={mentionIndex}
+          onSelect={onSelectMention}
+          onHover={setMentionIndex}
+        />
+      )}
+
       <footer className="shrink-0 border-t p-3 flex items-center gap-2">
         <input
           ref={imagePickerRef}
@@ -827,14 +930,46 @@ export function ConversationPanel({
             const el = e.currentTarget;
             const v = el.value;
             setDraft(v);
+            setMentionTrigger(detectMention(v, el.selectionStart ?? v.length));
+            setMentionIndex(0);
             notifyTyping(v);
             // 自增高:随内容行数长高,封顶后内部滚动。
             el.style.height = 'auto';
             el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
           }}
           onKeyDown={(e) => {
-            // Enter 发送；Shift+Enter 插入换行（多行消息）。输入法组合中(isComposing)不拦截。
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            // 输入法组合中(isComposing)不拦截任何键，交给 IME 默认行为。
+            if (e.nativeEvent.isComposing) return;
+            // @选择器激活时接管 Esc/上下/Enter/Tab（MENTION_SPEC P0 选择 UI）。
+            if (mentionActive) {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setMentionTrigger(null);
+                return;
+              }
+              if (mentionOptions.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setMentionIndex((i) => (i + 1) % mentionOptions.length);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setMentionIndex(
+                    (i) => (i - 1 + mentionOptions.length) % mentionOptions.length,
+                  );
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  const pick = mentionOptions[mentionIndex] ?? mentionOptions[0];
+                  if (pick !== undefined) onSelectMention(pick);
+                  return;
+                }
+              }
+            }
+            // Enter 发送；Shift+Enter 插入换行（多行消息）。
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               void onSend();
             }

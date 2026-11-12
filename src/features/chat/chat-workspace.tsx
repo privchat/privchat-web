@@ -426,6 +426,7 @@ function TopBar({
       <ProfileCard user={me} fallbackTitle={display}>
         <button
           type="button"
+          data-testid="self-profile-trigger"
           className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent"
         >
           {/* P4.2 local-first:自己的头像也按 uid 走 useAvatarModel。 */}

@@ -108,6 +108,13 @@ export function MessageRow({
     [vm.timestamp, i18n.language],
   );
 
+  // MENTION_SPEC §5.2：被 @ 的消息高亮。web 侧 local-first 直接读 VM body
+  // 的 mentioned_user_ids（SDK 接收侧已投影），等价于 App 的 extra.has_mention。
+  const mentionsMe =
+    !vm.is_self &&
+    selfUid !== undefined &&
+    vm.body.mentioned_user_ids.includes(selfUid);
+
   // Revoked rows render as a centered system-style placeholder, not as
   // a bubble. Mirrors WeChat / Telegram convention. The original
   // bubble + actions are intentionally suppressed.
@@ -252,13 +259,20 @@ export function MessageRow({
             />
           )}
           <div
+            data-mentions-me={mentionsMe ? 'true' : undefined}
             className={cn(
               'flex flex-col rounded-lg px-3 py-2 text-sm',
               vm.is_self
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted',
+              mentionsMe && 'bg-primary/5 ring-1 ring-primary/60',
             )}
           >
+            {mentionsMe && (
+              <span className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                {t('mention.mentioned_you')}
+              </span>
+            )}
             {vm.reply_to !== undefined && (
               <ReplyQuote
                 replyVm={replyVm}

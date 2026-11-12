@@ -195,6 +195,20 @@ export const zhCN: LocaleSchema = {
     allow_receive_message_from_non_friend: '允许接收非好友消息',
     hint: '关闭后,对应途径将无法找到或添加你;已是好友的不受影响。',
   },
+  blacklist: {
+    open_button: '黑名单',
+    title: '黑名单',
+    empty: '暂无黑名单',
+    unblock: '解除',
+    unblock_confirm: '确定解除拉黑该用户？解除后双方可再次互发消息。',
+    blocked_at: '拉黑于 {{date}}',
+    retry: '重试',
+  },
+  mention: {
+    picker_label: '提及成员',
+    empty: '无匹配成员',
+    mentioned_you: '有人@你',
+  },
   channel_actions: {
     pin: '置顶',
     unpin: '取消置顶',
@@ -236,6 +250,7 @@ export const zhCN: LocaleSchema = {
   },
   notify: {
     new_message: '新消息',
+    mention: '有人@你',
     sound_label: '消息提示音',
     desktop_label: '桌面通知',
     desktop_request: '开启桌面通知',

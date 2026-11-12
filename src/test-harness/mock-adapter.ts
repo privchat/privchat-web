@@ -19,7 +19,11 @@
 // a *fully behavioural* mock for end-to-end UI smoke. They serve
 // different roles and intentionally don't share code.
 
-import { ChannelType } from '@privchat/sdk';
+import {
+  ChannelType,
+  decodeMessagePayloadEnvelope,
+  encodeMessagePayloadEnvelope,
+} from '@privchat/sdk';
 import { CacheDB } from '@privchat/sdk/cache-idb';
 import { migrateLegacySessionToRegistryOfOne } from '@/lib/migrate-single-account-session';
 import {
@@ -55,11 +59,13 @@ import {
 import { sessionAccountMode } from '@/lib/session-storage';
 import { entryAccountMode } from '@/lib/account-registry';
 import type {
+  BlacklistUserInfo,
   ChannelRecord,
   ConnectionState,
   ConversationPatch,
   ConversationSnapshot,
   FriendshipRecord,
+  GroupMember,
   GroupRecord,
   MessageRecord,
   OutboxEntry,
@@ -138,6 +144,13 @@ interface MockState {
   groups: GroupRecord[];
   friendships: FriendshipRecord[];
   outbox: OutboxEntry[];
+  /** Caller's blacklist entries (BLACKLIST_SPEC). Seedable; blockUser /
+   *  unblockUser mutate it so the management dialog smoke can assert
+   *  list + unblock end-to-end without a server. */
+  blacklist: BlacklistUserInfo[];
+  /** Group rosters keyed by group_id (MENTION_SPEC @ picker source).
+   *  Seedable; cachedGroupMembers / listGroupMembers read from here. */
+  groupMembers: Record<string, GroupMember[]>;
   /** Controls how `sendImage`/`sendFile`/`sendVideo` resolve. `'fail'`
    *  (default) throws — drives the media-send-failure bubble. `'ok'`
    *  resolves, letting specs exercise retry-to-success. */
@@ -245,6 +258,8 @@ function defaultState(): MockState {
       { user_id: '102', alias: undefined, created_at: 0, updated_at: 0, sync_version: 1 },
     ],
     outbox: [],
+    blacklist: [],
+    groupMembers: {},
     mediaSendOutcome: 'fail',
   };
 }
@@ -350,6 +365,7 @@ const channelListeners = new Set<ChannelListener>();
 const convListeners = new Map<string, Set<ConvListener>>();
 const outboxListeners = new Set<OutboxListener>();
 const eventListeners = new Set<EventListener>();
+let eventSequence = 0;
 
 function notifyChannels() {
   for (const cb of channelListeners) cb([...state.channels]);
@@ -376,6 +392,37 @@ function notifyConv(channelId: string, patch: Partial<ConversationPatch> = {}) {
 }
 function notifyOutbox() {
   for (const cb of outboxListeners) cb([...state.outbox]);
+}
+// Fan a `message_received` L1 event out to observeEvents subscribers (the
+// incoming-notifier listens here). Distinct from notifyConv: this is the raw
+// push path, so specs can drive notification / strong-prompt behaviour with a
+// seeded payload envelope (e.g. mentioned_user_ids).
+function notifyMessageReceived(record: MessageRecord) {
+  const msg: PushMessageRequest = {
+    setting: { need_receipt: false, signal: 0 },
+    msg_key: record.id,
+    server_message_id: record.server_message_id ?? '0',
+    message_seq: 0,
+    local_message_id: record.local_message_id ?? '0',
+    stream_no: '',
+    stream_seq: 0,
+    stream_flag: 0,
+    timestamp: Math.floor(record.timestamp / 1000),
+    channel_id: record.channel_id,
+    channel_type: record.channel_type,
+    message_type: Number(record.message_type) || 0,
+    expire: 0,
+    topic: '',
+    from_uid: record.from_uid,
+    payload: record.payload,
+    deleted: false,
+  };
+  const env: SequencedSdkEvent = {
+    sequence_id: ++eventSequence,
+    timestamp_ms: record.timestamp,
+    event: { type: 'message_received', message: msg },
+  };
+  for (const cb of [...eventListeners]) cb(env);
 }
 
 // ---- Adapter implementation ----
@@ -447,6 +494,20 @@ export function createTestAdapter(): PrivchatClientAdapter {
       const local_message_id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const channel = state.channels.find((c) => c.channel_id === input.channel_id);
       const nextPts = String(BigInt(channel?.latest_pts ?? '0') + 1n);
+      // Mirror the real SDK: reply / mention ride a FlatBuffers envelope so the
+      // receiver's VM projection picks up mentioned_user_ids / reply_to. Plain
+      // text keeps an empty payload (the VM reads record.content directly).
+      const payload =
+        input.payload ??
+        ((input.mentioned_user_ids !== undefined &&
+          input.mentioned_user_ids.length > 0) ||
+        input.reply_to_message_id !== undefined
+          ? encodeMessagePayloadEnvelope({
+              content: input.content,
+              mentioned_user_ids: input.mentioned_user_ids ?? [],
+              reply_to_message_id: input.reply_to_message_id,
+            })
+          : new Uint8Array());
       const record: MessageRecord = {
         id: `r-${local_message_id}`,
         channel_id: input.channel_id,
@@ -456,7 +517,7 @@ export function createTestAdapter(): PrivchatClientAdapter {
         from_uid: input.from_uid,
         message_type: String(input.message_type ?? 0),
         content: input.content,
-        payload: input.payload ?? new Uint8Array(),
+        payload,
         timestamp: Date.now(),
         pts: nextPts,
         status: 'sent',
@@ -673,11 +734,24 @@ export function createTestAdapter(): PrivchatClientAdapter {
     async removeFriend() {
       return true;
     },
-    async blockUser() {
+    async blockUser(_callerUserId: number, blockedUserId: number) {
+      if (!state.blacklist.some((b) => b.blocked_user_id === blockedUserId)) {
+        state.blacklist.push({
+          user_id: Number(state.selfUid) || 0,
+          blocked_user_id: blockedUserId,
+          blocked_at: new Date().toISOString(),
+        });
+      }
       return true;
     },
-    async unblockUser() {
+    async unblockUser(_callerUserId: number, blockedUserId: number) {
+      state.blacklist = state.blacklist.filter(
+        (b) => b.blocked_user_id !== blockedUserId,
+      );
       return true;
+    },
+    async blacklistList() {
+      return { success: true, users: [...state.blacklist] };
     },
     async groupCreate() {
       return {
@@ -746,11 +820,12 @@ export function createTestAdapter(): PrivchatClientAdapter {
       return 0;
     },
     // harness 没有本地投影：返回空数组即"未缓存过"，UI 退化成等网络。
-    async cachedGroupMembers() {
-      return [];
+    async cachedGroupMembers(groupId: string) {
+      return [...(state.groupMembers[groupId] ?? [])];
     },
-    async listGroupMembers() {
-      return { members: [], total: 0 };
+    async listGroupMembers(groupId: string) {
+      const members = state.groupMembers[groupId] ?? [];
+      return { members: [...members], total: members.length };
     },
     async leaveGroup() {
       return true;
@@ -952,6 +1027,8 @@ interface TestSeedInput {
   groups?: GroupRecord[];
   friendships?: FriendshipRecord[];
   outbox?: OutboxEntry[];
+  blacklist?: BlacklistUserInfo[];
+  groupMembers?: Record<string, GroupMember[]>;
 }
 
 /** R7.4 — outcome of a sequencer simulation. Mirrors the
@@ -993,6 +1070,14 @@ export interface TestHarnessControls {
   }): { local_message_id: string; outbox_id: string };
   /** Push an inbound message into a channel and notify observers. */
   pushIncomingMessage(record: MessageRecord): void;
+  /** Emit a raw `message_received` L1 event (the observeEvents path) built
+   *  from the record's payload — drives the incoming-notifier / @ strong
+   *  prompt without a server. Does NOT touch the conversation cache. */
+  emitMessageReceived(record: MessageRecord): void;
+  /** Decode the mentioned_user_ids off the newest message in a channel's
+   *  cache (real SDK envelope decoder, in-browser). Lets the mention smoke
+   *  assert the composer collected + encoded the right ids on send. */
+  lastMessageMentions(channelId: string): string[];
   /** Control how media sends (`sendImage`/`sendFile`/`sendVideo`)
    *  resolve: `'fail'` throws (failure bubble), `'ok'` resolves
    *  (retry-to-success). Reset back to `'fail'` by `reset()`. */
@@ -1450,6 +1535,8 @@ export function installTestControls(): TestHarnessControls {
       if (input.groups !== undefined) state.groups = input.groups;
       if (input.friendships !== undefined) state.friendships = input.friendships;
       if (input.outbox !== undefined) state.outbox = input.outbox;
+      if (input.blacklist !== undefined) state.blacklist = input.blacklist;
+      if (input.groupMembers !== undefined) state.groupMembers = input.groupMembers;
       if (input.messages !== undefined) {
         for (const [cid, msgs] of Object.entries(input.messages)) {
           state.messages.set(cid, msgs);
@@ -1509,6 +1596,27 @@ export function installTestControls(): TestHarnessControls {
       arr.push(record);
       state.messages.set(record.channel_id, arr);
       notifyConv(record.channel_id, { upserted: [record] });
+    },
+    emitMessageReceived(record) {
+      notifyMessageReceived(record);
+    },
+    lastMessageMentions(channelId) {
+      const arr = state.messages.get(channelId) ?? [];
+      const last = arr[arr.length - 1];
+      if (last === undefined || last.payload.length === 0) return [];
+      try {
+        if (last.payload[0] === 0x7b) {
+          const obj = JSON.parse(new TextDecoder().decode(last.payload)) as {
+            mentioned_user_ids?: unknown;
+          };
+          return Array.isArray(obj.mentioned_user_ids)
+            ? obj.mentioned_user_ids.map(String)
+            : [];
+        }
+        return decodeMessagePayloadEnvelope(last.payload).mentioned_user_ids;
+      } catch {
+        return [];
+      }
     },
     queuePrependPage(channelId, records) {
       const existing = queuedPrependPages.get(channelId) ?? [];

@@ -200,6 +200,20 @@ export const vi: LocaleSchema = {
     allow_receive_message_from_non_friend: 'Cho phép tin nhắn từ người lạ',
     hint: 'Khi tắt, kênh đó sẽ không thể tìm hoặc thêm bạn; bạn bè hiện có không bị ảnh hưởng.',
   },
+  blacklist: {
+    open_button: 'Danh sách chặn',
+    title: 'Danh sách chặn',
+    empty: 'Chưa chặn người dùng nào',
+    unblock: 'Bỏ chặn',
+    unblock_confirm: 'Bỏ chặn người này? Hai bên sẽ có thể nhắn tin cho nhau lại.',
+    blocked_at: 'Đã chặn {{date}}',
+    retry: 'Thử lại',
+  },
+  mention: {
+    picker_label: 'Nhắc đến thành viên',
+    empty: 'Không có thành viên phù hợp',
+    mentioned_you: 'Bạn được nhắc đến',
+  },
   channel_actions: {
     pin: 'Ghim',
     unpin: 'Bỏ ghim',
@@ -241,6 +255,7 @@ export const vi: LocaleSchema = {
   },
   notify: {
     new_message: 'Tin nhắn mới',
+    mention: 'Có người nhắc đến bạn',
     sound_label: 'Âm báo tin nhắn',
     desktop_label: 'Thông báo trên máy tính',
     desktop_request: 'Bật thông báo trên máy tính',

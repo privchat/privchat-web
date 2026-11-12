@@ -20,6 +20,7 @@ import {
   usePrivchatClient,
   useUserProfile,
 } from '@privchat/react';
+import { decodeMessagePayloadEnvelope, parseRpcJson } from '@privchat/sdk';
 
 const SOUND_PREF_KEY = 'privchat:notify:sound';
 const DESKTOP_PREF_KEY = 'privchat:notify:desktop';
@@ -114,13 +115,21 @@ export function useIncomingNotifier(
       const isVisible =
         typeof document !== 'undefined' && document.visibilityState === 'visible';
       const isActive = activeRef.current === msg.channel_id;
+      // MENTION_SPEC P0「@通知」：被 @ 是强提示，突破「可见且正在看本会话」
+      // 的抑制——即便用户盯着当前群，也要响铃/弹专属通知。
+      const mentionsMe =
+        selfUid !== undefined && payloadMentions(msg.payload).includes(selfUid);
       // Visible AND looking at the same conversation → user already
-      // sees the message; no ping/notification.
-      if (isVisible && isActive) return;
+      // sees the message; no ping/notification (unless mentioned).
+      if (isVisible && isActive && !mentionsMe) return;
 
       if (soundRef.current) playPing();
-      if (desktopRef.current && readDesktopState() === 'granted' && !isVisible) {
-        notifyDesktop(t('notify.new_message'));
+      if (
+        desktopRef.current &&
+        readDesktopState() === 'granted' &&
+        (!isVisible || mentionsMe)
+      ) {
+        notifyDesktop(mentionsMe ? t('notify.mention') : t('notify.new_message'));
       }
     });
     return off;
@@ -142,6 +151,26 @@ export function useIncomingNotifier(
 void useUserProfile;
 
 // ----- helpers -----
+
+/** 从 push payload 解出 mentioned_user_ids，用于「被 @」强提示判定。
+ *  兼容两种 wire 形态：JSON envelope（首字节 '{'，lossless parse 防 u64 精度
+ *  丢失）与 FlatBuffers MessagePayloadEnvelope。解码失败一律视为无提及，
+ *  绝不让通知路径因一条畸形 payload 抛错。 */
+function payloadMentions(payload: Uint8Array): string[] {
+  if (payload.length === 0) return [];
+  try {
+    if (payload[0] === 0x7b) {
+      const obj = parseRpcJson<{ mentioned_user_ids?: unknown }>(
+        new TextDecoder().decode(payload),
+      );
+      const ids = obj?.mentioned_user_ids;
+      return Array.isArray(ids) ? ids.map((x) => String(x)) : [];
+    }
+    return decodeMessagePayloadEnvelope(payload).mentioned_user_ids;
+  } catch {
+    return [];
+  }
+}
 
 function readPref(key: string, fallback: boolean): boolean {
   if (typeof localStorage === 'undefined') return fallback;

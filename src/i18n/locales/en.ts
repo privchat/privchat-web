@@ -199,6 +199,20 @@ export const en: LocaleSchema = {
     allow_receive_message_from_non_friend: 'Allow messages from non-friends',
     hint: 'When off, that channel can no longer find or add you; existing friends are unaffected.',
   },
+  blacklist: {
+    open_button: 'Blacklist',
+    title: 'Blacklist',
+    empty: 'No blocked users',
+    unblock: 'Unblock',
+    unblock_confirm: 'Unblock this user? You will be able to message each other again.',
+    blocked_at: 'Blocked {{date}}',
+    retry: 'Retry',
+  },
+  mention: {
+    picker_label: 'Mention a member',
+    empty: 'No matching members',
+    mentioned_you: 'Mentioned you',
+  },
   channel_actions: {
     pin: 'Pin',
     unpin: 'Unpin',
@@ -242,6 +256,7 @@ export const en: LocaleSchema = {
   },
   notify: {
     new_message: 'New message',
+    mention: 'Someone mentioned you',
     sound_label: 'Notification sound',
     desktop_label: 'Desktop notifications',
     desktop_request: 'Enable desktop notifications',
@@ -947,6 +962,20 @@ export interface LocaleSchema {
     allow_receive_message_from_non_friend: string;
     hint: string;
   };
+  blacklist: {
+    open_button: string;
+    title: string;
+    empty: string;
+    unblock: string;
+    unblock_confirm: string;
+    blocked_at: string;
+    retry: string;
+  };
+  mention: {
+    picker_label: string;
+    empty: string;
+    mentioned_you: string;
+  };
   channel_actions: {
     pin: string;
     unpin: string;
@@ -988,6 +1017,7 @@ export interface LocaleSchema {
   };
   notify: {
     new_message: string;
+    mention: string;
     sound_label: string;
     desktop_label: string;
     desktop_request: string;
