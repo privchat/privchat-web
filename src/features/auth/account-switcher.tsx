@@ -1,6 +1,6 @@
 // R7.3 — sidebar account switcher.
 //
-// Lives in the top bar next to logout / theme / lang. Clicking the
+// Lives in the avatar menu. Clicking the
 // trigger opens a dropdown listing every entry in
 // `privchat.web.accounts`, with a checkmark on the active one and
 // an "Add account" item at the bottom. Selecting an account fires
@@ -14,16 +14,15 @@
 
 import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Check, Plus, Users, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronRight, Plus, Users, X } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Button } from '@/components/ui/button';
 import {
   loadRegistry,
   subscribeRegistry,
@@ -87,7 +86,7 @@ function snapshotSubscribe(cb: () => void): () => void {
   // Catch-up read: `cachedSnapshot` is module-level and initialized
   // ONCE at module load — which happens BEFORE the user logs in.
   // After login, `saveRegistry` notifies listeners, but at that
-  // moment the AccountSwitcher (inside ChatWorkspace) isn't mounted
+  // moment the AccountSwitcher (inside AuthenticatedShell) isn't mounted
   // yet, so its listener doesn't exist and the cache stays stale.
   // The first time the switcher mounts post-login, useSyncExternalStore
   // calls this subscribe — refresh the cache here so the dropdown
@@ -143,35 +142,14 @@ export function AccountSwitcher({
   // back to the seam if the parent hasn't published one yet (early
   // boot, before connectAccount completes).
   const activeKey = activeAccountKey ?? snapshot.active ?? getActiveAccountKey();
-  const activeEntry =
-    activeKey !== null
-      ? snapshot.entries.find((e) => e.key === activeKey)
-      : undefined;
-  const triggerLabel =
-    activeEntry !== undefined
-      ? accountDisplayName(activeEntry.entry)
-      : t('accounts.switcher_unknown');
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1.5"
-          aria-label={t('accounts.switcher_aria')}
-          data-testid="account-switcher-trigger"
-          data-switching={disabled ? '1' : '0'}
-          disabled={disabled}
-        >
-          <Users className="h-4 w-4" />
-          <span className="hidden sm:inline text-xs font-normal">
-            {triggerLabel}
-          </span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger data-testid="account-switcher-trigger" data-switching={disabled ? '1' : '0'} disabled={disabled}>
+        <Users className="h-4 w-4" />
+        {t('accounts.switcher_aria')}
+        <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" aria-hidden />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent
         className="flex w-[min(20rem,calc(100vw-1rem))] min-w-[220px] flex-col overflow-hidden"
         style={{
           maxHeight:
@@ -253,7 +231,7 @@ export function AccountSwitcher({
           <Plus className="h-4 w-4" />
           <span className="text-sm">{t('accounts.add_account')}</span>
         </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }

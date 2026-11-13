@@ -32,10 +32,10 @@ export function ContactFindDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Invoked when the user taps Chat on an already-friend row. The
-   *  dialog dispatches and closes itself; ChatWorkspace handles the
+   *  dialog dispatches and closes itself; AuthenticatedShell handles the
    *  actual `channelDirectGetOrCreate` + tab switch. */
   onOpenChat: (user_id: string) => void;
-  /** Mirrors ChatWorkspace's `openingDirectUid` debounce so we disable
+  /** Mirrors AuthenticatedShell's `openingDirectUid` debounce so we disable
    *  Chat buttons while a previous tap is still in flight. */
   openingUid: string | null;
 }) {

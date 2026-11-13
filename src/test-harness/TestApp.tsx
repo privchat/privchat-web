@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PrivchatProvider } from '@privchat/react';
-import { ChatWorkspace } from '@/features/chat/chat-workspace';
+import { AuthenticatedShell } from '@/app/authenticated-shell';
 import { LoginPage } from '@/features/auth/login-page';
 import { RequiredActionsGate } from '@/features/onboarding/required-actions-gate';
 import { SessionExpiredDialog } from '@/features/auth/session-expired-dialog';
@@ -59,9 +59,9 @@ export function TestApp() {
   const handle = useMemo(() => {
     installTestControls();
     const adapter = createTestAdapter();
-    // ChatWorkspace reads `handle.client` only for the workspace panel
+    // AuthenticatedShell reads `handle.client` only for the workspace panel
     // (useWorkspaceApi → client.sessionSnapshot). Mirror that one method
-    // so the workspace dialog can mount in mock mode; all chat data still
+    // so the workspace page can mount in mock mode; all chat data still
     // flows through the real adapter below.
     const fakeHandle: PrivchatHandle = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -195,7 +195,7 @@ export function TestApp() {
           }}
         />
         <PrivchatProvider adapter={handle.adapter}>
-          <ChatWorkspace
+          <AuthenticatedShell
             handle={handle}
             onLogout={() => {
               /* no-op in test mode */
@@ -231,7 +231,7 @@ export function TestApp() {
         }}
       >
         <PrivchatProvider adapter={handle.adapter}>
-          <ChatWorkspace
+          <AuthenticatedShell
             handle={handle}
             onLogout={() => {
               /* no-op in test mode */

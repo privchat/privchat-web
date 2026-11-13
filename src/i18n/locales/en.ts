@@ -377,6 +377,7 @@ export const en: LocaleSchema = {
     light: 'Theme: light',
     dark: 'Theme: dark',
   },
+  accountMenu: { label: 'Account menu', profile: 'Profile', settings: 'Settings' },
   tabs: {
     chats: 'Chats',
     contacts: 'Contacts',
@@ -1086,6 +1087,7 @@ export interface LocaleSchema {
     cancel: string;
   };
   theme: { system: string; light: string; dark: string };
+  accountMenu: { label: string; profile: string; settings: string };
   tabs: { chats: string; contacts: string; groups: string; workspace: string };
   accounts: {
     switcher_title: string;

@@ -14,6 +14,18 @@ export const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
 export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
+export function DropdownMenuSubTrigger({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) {
+  return <DropdownMenuPrimitive.SubTrigger className={cn('flex select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[state=open]:bg-accent data-[disabled]:opacity-50', className)} {...props} />;
+}
+
+export function DropdownMenuSubContent({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.SubContent sideOffset={6} collisionPadding={8} className={cn('z-50 rounded-lg border bg-popover p-1 text-popover-foreground shadow-md', className)} {...props} />
+    </DropdownMenuPrimitive.Portal>
+  );
+}
+
 export const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>

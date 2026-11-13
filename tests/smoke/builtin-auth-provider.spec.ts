@@ -145,6 +145,7 @@ test.describe('builtin auth provider integration (R8.2)', () => {
     // and render the username/password form. If the provider
     // import path was broken (cyclical dep, throw at module
     // load, etc.) this would surface here as a missing form.
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     await page.getByTestId('account-switcher-add').click();
     await expect(page.getByLabel(/Username|用户名/)).toBeVisible();

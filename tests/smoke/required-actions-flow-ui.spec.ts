@@ -109,7 +109,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
 
     // ChatWorkspace surfaces the "no conversation selected" or "联系人/会话" tab strip.
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toBeVisible();
     // Onboarding pieces should be absent
     await expect(page.getByTestId('onboarding-nickname-input')).toHaveCount(0);
@@ -129,7 +129,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     await expect(page.getByTestId('onboarding-nickname-submit')).toBeVisible();
     // Workspace must NOT be visible
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toHaveCount(0);
   });
 
@@ -145,7 +145,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     await expect(page.getByTestId('onboarding-nickname-input')).toBeVisible();
     // Sidebar tabs (Contacts / Groups) and account switcher trigger
     // belong to ChatWorkspace and must not render under gate.
-    await expect(page.getByTestId('account-switcher-trigger')).toHaveCount(0);
+    await expect(page.getByTestId('self-profile-trigger')).toHaveCount(0);
   });
 
   test('4. submit valid nickname → server clears → enter workspace', async ({
@@ -186,7 +186,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
 
     // After update + re-list → workspace renders
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toBeVisible({ timeout: 5_000 });
 
     expect(updateBody).toEqual({ nickname: 'Alice' });
@@ -311,7 +311,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
     await expect(page.getByTestId('onboarding-nickname-input')).toHaveCount(0);
     // Workspace must NOT be rendered
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toHaveCount(0);
   });
 
@@ -356,7 +356,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
 
     // Skipped → no action page, no unsupported page, workspace renders
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('unsupported-required-action')).toHaveCount(0);
     await expect(page.getByTestId('onboarding-nickname-input')).toHaveCount(0);
@@ -400,7 +400,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
 
     // Workspace renders (server says clear)
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toBeVisible({ timeout: 5_000 });
     // Stale flag must be cleared
     const flag = await page.evaluate(() =>
@@ -428,7 +428,7 @@ test.describe('Required Actions UI gate (R8.4c)', () => {
 
     // Workspace renders despite 503 (captureException logged off-band).
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toBeVisible({ timeout: 5_000 });
     // No onboarding / unsupported UI
     await expect(page.getByTestId('onboarding-nickname-input')).toHaveCount(0);

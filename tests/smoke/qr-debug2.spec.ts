@@ -22,6 +22,7 @@ test('mirror real test 4', async ({ page }) => {
     }));
   });
   await gotoAppFresh(page);
+  await page.getByTestId('self-profile-trigger').click();
   await page.getByTestId('account-switcher-trigger').click();
   await page.getByTestId('account-switcher-add').click();
 

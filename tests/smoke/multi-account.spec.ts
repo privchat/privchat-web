@@ -109,11 +109,12 @@ test.describe('multi-account UI (R7.5)', () => {
     await gotoAppFresh(page);
 
     // ChatWorkspace mounted.
-    await expect(page.getByTestId('account-switcher-trigger')).toBeVisible();
+    await expect(page.getByTestId('self-profile-trigger')).toBeVisible();
     // Sidebar tab containers — proves the workspace chrome rendered.
     await expect(page.getByTestId('pane-chats')).toBeVisible();
 
     // Open the switcher; one entry, marked active.
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     const entries = page.getByTestId('account-switcher-entry');
     await expect(entries).toHaveCount(1);
@@ -134,6 +135,7 @@ test.describe('multi-account UI (R7.5)', () => {
     await gotoAppFresh(page);
 
     // Open switcher → click "Add account".
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     await page.getByTestId('account-switcher-add').click();
 
@@ -147,7 +149,7 @@ test.describe('multi-account UI (R7.5)', () => {
 
     // Click Cancel → workspace restored.
     await cancel.click();
-    await expect(page.getByTestId('account-switcher-trigger')).toBeVisible();
+    await expect(page.getByTestId('self-profile-trigger')).toBeVisible();
     await expect(page.getByTestId('pane-chats')).toBeVisible();
 
     // Active account unchanged.
@@ -163,6 +165,7 @@ test.describe('multi-account UI (R7.5)', () => {
     await gotoAppFresh(page);
 
     // First open: 1 entry.
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     await expect(
       page.getByTestId('account-switcher-entry'),
@@ -209,13 +212,14 @@ test.describe('multi-account UI (R7.5)', () => {
     });
 
     // Open switcher → click Bob.
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     await page
       .getByTestId('account-switcher-entry')
       .filter({ hasText: 'Bob' })
       .click();
 
-    const trigger = page.getByTestId('account-switcher-trigger');
+    const trigger = page.getByTestId('self-profile-trigger');
 
     // While pending: the trigger is disabled + reports "1".
     await expect(trigger).toHaveAttribute('data-switching', '1');
@@ -229,13 +233,10 @@ test.describe('multi-account UI (R7.5)', () => {
     await expect(trigger).toHaveAttribute('data-switching', '0');
     await expect(trigger).not.toBeDisabled();
 
-    // Trigger label now reflects the new active account (Bob's
-    // alias). This is more robust than re-opening the Radix
-    // dropdown — the switcher's `triggerLabel` is computed from
-    // the same `activeAccountKey` that drives the entries, so
-    // testing it covers the same React-state plumbing without
-    // racing the popover open/close lifecycle.
-    await expect(trigger).toContainText('Bob');
+    await trigger.click();
+    await page.getByTestId('account-switcher-trigger').click();
+    await expect(page.getByTestId('account-switcher-entry').filter({ hasText: 'Bob' }))
+      .toHaveAttribute('data-account-active', '1');
   });
 
   test('5. session blobs stay namespaced across simulated switches', async ({

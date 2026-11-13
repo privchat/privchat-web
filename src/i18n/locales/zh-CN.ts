@@ -368,10 +368,11 @@ export const zhCN: LocaleSchema = {
     light: '主题：浅色',
     dark: '主题:深色',
   },
+  accountMenu: { label: '账户菜单', profile: '个人资料', settings: '设置' },
   tabs: {
-    chats: '会话',
+    chats: '聊天',
     contacts: '联系人',
-    groups: '群聊',
+    groups: '群组',
     workspace: '工作空间',
   },
   accounts: {

@@ -37,7 +37,7 @@ test.describe('sidebar tabs', () => {
   test('Groups tab lists groups; tapping one opens the group chat', async ({
     page,
   }) => {
-    await page.getByRole('button', { name: /^Groups$|^群聊$/ }).click();
+    await page.getByRole('button', { name: /^Groups$|^群组$/ }).click();
 
     const groups = page.getByTestId('pane-groups');
     const eng = groups.getByText('Engineering').first();

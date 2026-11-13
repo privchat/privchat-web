@@ -1,6 +1,6 @@
 // R8.4c — Required Actions UI gate.
 //
-// Wrapper component: between auth-success and ChatWorkspace. Decides
+// Wrapper component: between auth-success and AuthenticatedShell. Decides
 // based on the server's required-actions list whether to render the
 // flow (block) or pass through to children (clear).
 //
@@ -55,7 +55,7 @@ export interface RequiredActionsGateProps {
   initialActions?: RequiredAction[];
   /** Caller-supplied logout (Unsupported page's "Sign out" button). */
   onLogout: () => void | Promise<void>;
-  /** Children = the post-gate UI (ChatWorkspace + providers tree).
+  /** Children = the post-gate UI (AuthenticatedShell + providers tree).
    *  Only rendered when state.kind === 'clear'. */
   children: React.ReactNode;
 }

@@ -376,6 +376,7 @@ export const vi: LocaleSchema = {
     light: 'Giao diện: sáng',
     dark: 'Giao diện: tối',
   },
+  accountMenu: { label: 'Trình đơn tài khoản', profile: 'Hồ sơ cá nhân', settings: 'Cài đặt' },
   tabs: {
     chats: 'Trò chuyện',
     contacts: 'Danh bạ',

@@ -14,6 +14,7 @@ interface BlacklistHarness {
 
 async function openBlacklist(page: import('@playwright/test').Page) {
   await page.getByTestId('self-profile-trigger').click();
+  await page.getByTestId('account-settings').click();
   await page.getByTestId('profile-card-blacklist-self').click();
 }
 

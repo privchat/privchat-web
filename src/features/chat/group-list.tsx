@@ -1,7 +1,7 @@
 // GroupList — groups tab in the sidebar. Headless data from useGroupList.
 //
 // Group VM exposes `channel_id === group_id` (server invariant), so click
-// can dispatch directly into ChatWorkspace's setActive without going
+// can dispatch directly into AuthenticatedShell's setActive without going
 // through any "get-or-create" call. Empty state is normal: server-side
 // eligibility may exclude the user from any visible group.
 //

@@ -14,16 +14,14 @@ test('app loads, sidebar tabs and conversation panel chrome render', async ({
 
   // Sidebar tabs (Chats / Contacts / Groups) — all three present at
   // boot regardless of which tab is active.
-  await expect(page.getByRole('button', { name: /^Chats$|^会话$/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Chats$|^聊天$/ })).toBeVisible();
   await expect(
     page.getByRole('button', { name: /^Contacts$|^联系人$/ }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /^Groups$|^群聊$/ }),
+    page.getByRole('button', { name: /^Groups$|^群组$/ }),
   ).toBeVisible();
 
-  // Top-bar carries our identity. The harness seeds selfUid='self'
-  // with display name "Me". Look for the @PrivChat suffix as the
-  // anchor — it's stable regardless of nickname tokenisation.
-  await expect(page.getByText(/@PrivChat/i)).toBeVisible();
+  await expect(page.getByTestId('self-profile-trigger')).toBeVisible();
+  await expect(page.getByTestId('nav-workspace')).toHaveCount(0);
 });

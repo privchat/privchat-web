@@ -142,6 +142,7 @@ test.describe('LoginPage QR tab (R8.5c)', () => {
     });
     await gotoAppFresh(page);
     // Open switcher → Add account → LoginPage mounts.
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     await page.getByTestId('account-switcher-add').click();
   });

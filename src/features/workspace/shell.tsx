@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Bot, CheckSquare, ChevronDown, ChevronRight, Folder, Monitor, Moon, Plus, Sun, Users, type LucideIcon } from 'lucide-react';
+import { Bot, CheckSquare, ChevronDown, ChevronRight, Folder, Monitor, Plus, Users, type LucideIcon } from 'lucide-react';
 import { brandConfig } from '@/lib/brand-config';
 import { cn } from '@/lib/utils';
 import type { Workspace, WorkspaceApi } from './api';
@@ -84,7 +84,6 @@ function sectionKey(route: WorkspaceRoute): NavKey | 'createSpace' | null {
 export function WorkspaceShell({api, route, children}: {api: WorkspaceApi; route: WorkspaceRoute; children: ReactNode}) {
   const l = usePageLabels();
   const [spaces, setSpaces] = useState<Workspace[]>([]);
-  const [light, setLight] = useState(false);
   useEffect(() => {
     let live = true;
     void api.list().then(rows => {if (live) setSpaces(rows);}).catch(() => {});
@@ -95,13 +94,13 @@ export function WorkspaceShell({api, route, children}: {api: WorkspaceApi; route
   const section = sectionKey(route);
   const detail = route.view === 'item' || route.view === 'project';
   const initial = (brandConfig.appName || 'W').charAt(0).toUpperCase();
-  return <div className={cn('workspace-scope dark flex h-full min-h-0 w-full bg-background text-foreground', light && 'ws-light')}>
-    <aside className="flex w-[224px] shrink-0 flex-col border-r bg-sidebar px-3 py-3.5">
-      <div className="flex items-center gap-2.5 px-1.5 pb-[17px] pt-[3px]">
+  return <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground md:flex-row">
+    <aside className="flex min-w-0 shrink-0 flex-col border-b bg-sidebar px-3 pt-2 md:w-[224px] md:border-b-0 md:border-r md:py-3.5">
+      <div className="hidden items-center gap-2.5 px-1.5 pb-[17px] pt-[3px] md:flex">
         <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-primary text-lg font-bold text-primary-foreground">{initial}</span>
         <span className="truncate text-[17px] font-bold">{brandConfig.appName}</span>
       </div>
-      <div className="mb-[17px] flex items-center gap-1">
+      <div className="mb-1 flex items-center gap-1 md:mb-[17px]">
         <div className="flex min-w-0 flex-1 items-center rounded-[7px] border bg-background px-2">
           <select aria-label={l('shellSelectSpace')} className="w-full appearance-none bg-transparent py-2 text-sm outline-none" value={spaceId ?? ''} onChange={e => {if (e.target.value) navigateWorkspace({view: 'space', spaceId: e.target.value});}}>
             {!spaces.length && <option value="">{l('shellSelectSpace')}</option>}
@@ -111,32 +110,22 @@ export function WorkspaceShell({api, route, children}: {api: WorkspaceApi; route
         </div>
         <button type="button" title={l('createSpace')} aria-label={l('createSpace')} data-testid="ws-create-space" className="rounded-[7px] border bg-background p-2 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => navigateWorkspace({view: 'create-space'})}><Plus className="h-4 w-4" /></button>
       </div>
-      <nav className="min-h-0 flex-1 overflow-y-auto">
-        {NAV.map(group => <div key={group.group}>
-          <p className="px-2.5 pb-1 pt-2 text-[11px] text-muted-foreground">{l(group.group)}</p>
-          <div>
+      <nav className="flex min-h-0 flex-1 gap-1 overflow-x-auto md:block md:overflow-y-auto">
+        {NAV.map(group => <div key={group.group} className="shrink-0">
+          <p className="hidden px-2.5 pb-1 pt-2 text-[11px] text-muted-foreground md:block">{l(group.group)}</p>
+          <div className="flex md:block">
             {group.items.map(item => {
               const active = item.views.includes(route.view);
-              return <button key={item.key} type="button" data-testid={`ws-nav-${item.key}`} aria-current={active ? 'page' : undefined} onClick={() => navigateWorkspace(item.go(spaceId))} className={cn('my-0.5 flex w-full items-center justify-start gap-2.5 rounded-[7px] px-2.5 py-[7px] text-sm transition-colors', active ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground')}>
+              return <button key={item.key} type="button" data-testid={`ws-nav-${item.key}`} aria-current={active ? 'page' : undefined} onClick={() => navigateWorkspace(item.go(spaceId))} className={cn('my-0.5 flex w-full items-center justify-start gap-1.5 whitespace-nowrap rounded-[7px] px-2 py-[7px] text-sm transition-colors md:gap-2.5 md:px-2.5', active ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground')}>
                 <item.icon className="h-4 w-4 shrink-0" />{l(item.key)}
               </button>;
             })}
           </div>
         </div>)}
       </nav>
-      <div className="mt-auto flex items-center gap-2.5 border-t px-[3px] pt-2.5">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-accent text-xs font-semibold">{initial}</span>
-        <span className="min-w-0 flex-1 truncate">
-          <span className="block truncate text-sm font-medium">{brandConfig.appName}</span>
-          <span className="block truncate text-xs text-muted-foreground">{l('groupWorkspace')}</span>
-        </span>
-        <button type="button" data-testid="ws-theme-toggle" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => setLight(v => !v)}>
-          {light ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}{light ? l('shellDark') : l('shellLight')}
-        </button>
-      </div>
     </aside>
-    <div className="flex min-w-0 flex-1 flex-col">
-      <header className="flex h-[58px] shrink-0 items-center border-b px-[26px]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex h-10 shrink-0 items-center border-b px-4 md:h-[58px] md:px-[26px]">
         <nav aria-label="breadcrumb" className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
           <button type="button" className="truncate hover:text-foreground" onClick={() => navigateWorkspace({view: 'home'})}>{space?.name ?? l('groupWorkspace')}</button>
           {section && <><ChevronRight className="h-3.5 w-3.5 shrink-0" /><span className="truncate text-foreground">{l(section)}</span></>}
@@ -144,7 +133,7 @@ export function WorkspaceShell({api, route, children}: {api: WorkspaceApi; route
         </nav>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1180px] px-8 py-[34px]">{children}</div>
+        <div className="mx-auto max-w-[1180px] px-4 py-5 md:px-8 md:py-[34px]">{children}</div>
       </div>
     </div>
   </div>;

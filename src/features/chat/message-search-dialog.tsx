@@ -4,7 +4,7 @@
 // all live in @privchat/react's shared `useMessageSearchState` — the single
 // cross-client (web/h5/App) search state machine — so this dialog only wires
 // that state to the UI. Hits are snippet projections and are never written
-// into the message cache; picking one asks ChatWorkspace to open the channel
+// into the message cache; picking one asks AuthenticatedShell to open the channel
 // anchored at the matched message (jump-to-message, spec §5).
 
 import { useEffect, useMemo } from 'react';

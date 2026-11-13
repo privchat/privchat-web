@@ -36,7 +36,7 @@ export interface CompleteProfileActionProps {
   action: RequiredAction;
   /** Invoked AFTER `updateNickname()` succeeds. Caller (gate) re-fetches
    *  the authoritative list to decide whether to stay on this page,
-   *  show another action, or enter ChatWorkspace. */
+   *  show another action, or enter AuthenticatedShell. */
   onCompleted: () => Promise<void> | void;
 }
 

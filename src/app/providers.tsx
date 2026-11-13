@@ -8,7 +8,7 @@ export interface AppProvidersProps {
    *  and remounts the entire React subtree under the provider.
    *  Without this, switching from account A to account B would
    *  reuse every hook subscription / scroll position / virtualizer
-   *  instance under the still-mounted ChatWorkspace, leaking A's
+   *  instance under the still-mounted AuthenticatedShell, leaking A's
    *  in-memory state into B's render. */
   providerKey?: string | null;
   children: ReactNode;

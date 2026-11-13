@@ -90,6 +90,7 @@ export interface ConversationPanelProps {
   /** 搜索命中跳转锚（server_message_id）：mount 后回灌上下文并定位高亮（spec §5）。 */
   jumpToMessageId?: string;
   className?: string;
+  visible?: boolean;
 }
 
 export function ConversationPanel({
@@ -100,6 +101,7 @@ export function ConversationPanel({
   jumpToMessageId,
   onBack,
   className,
+  visible = true,
 }: ConversationPanelProps) {
   const { t } = useTranslation();
   const locationDialog = useLocationDialog(channelId, channelType);
@@ -113,7 +115,7 @@ export function ConversationPanel({
     peerReadPts,
     loadOlder,
     send,
-  } = useConversation(channelId, channelType);
+  } = useConversation(channelId, channelType, { autoMarkRead: visible });
 
   // 群会话打开时拉一次成员列表 —— SDK 的 groupMemberList 会把成员 profile 灌进用户缓存
   // (ingestUserProfiles 单写路径),使点击非好友/未同步成员的头像时资料能解析出来,
@@ -629,7 +631,7 @@ export function ConversationPanel({
     <div
       className={cn(
         // No default border/rounded — visual chrome is the consumer's job.
-        // ChatWorkspace uses the panel as the right pane (no extra frame
+        // AuthenticatedShell uses the panel as the right pane (no extra frame
         // needed); embed scenarios wrap with their own <Card> if desired.
         // h-full requires the parent to constrain height (flex-1 + min-h-0).
         'relative flex h-full flex-col overflow-hidden bg-card',

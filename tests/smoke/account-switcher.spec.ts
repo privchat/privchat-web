@@ -91,8 +91,9 @@ test.describe('account switcher (R7.3)', () => {
     // The switcher trigger lives in the chat top bar — wait for it
     // to mount.
     await expect(
-      page.getByTestId('account-switcher-trigger'),
+      page.getByTestId('self-profile-trigger'),
     ).toBeVisible();
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
 
     const entries = page.getByTestId('account-switcher-entry');
@@ -118,6 +119,7 @@ test.describe('account switcher (R7.3)', () => {
     await stageRegistry(page, [ALICE, BOB], BOB.accountKey);
     await gotoAppFresh(page);
 
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
 
     const entries = page.getByTestId('account-switcher-entry');
@@ -151,6 +153,7 @@ test.describe('account switcher (R7.3)', () => {
     await stageRegistry(page, accounts, accounts[0].accountKey);
     await gotoAppFresh(page);
 
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     const menu = page.getByTestId('account-switcher-menu');
     const list = page.getByTestId('account-switcher-list');
@@ -190,6 +193,7 @@ test.describe('account switcher (R7.3)', () => {
     // dropdown close + active-checkmark not-yet-flipped (the real
     // active flip happens after async connectAccount, which the
     // mock harness can't do).
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     const bobEntry = page
       .getByTestId('account-switcher-entry')
@@ -210,6 +214,7 @@ test.describe('account switcher (R7.3)', () => {
     await stageRegistry(page, [ALICE], ALICE.accountKey);
     await gotoAppFresh(page);
 
+    await page.getByTestId('self-profile-trigger').click();
     await page.getByTestId('account-switcher-trigger').click();
     const addEntry = page.getByTestId('account-switcher-add');
     await expect(addEntry).toBeVisible();
@@ -233,7 +238,7 @@ test.describe('account switcher (R7.3)', () => {
     // the production wiring has a stable selector to assert on.
     await stageRegistry(page, [ALICE], ALICE.accountKey);
     await gotoAppFresh(page);
-    const trigger = page.getByTestId('account-switcher-trigger');
+    const trigger = page.getByTestId('self-profile-trigger');
     await expect(trigger).toHaveAttribute('data-switching', '0');
   });
 });

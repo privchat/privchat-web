@@ -5,7 +5,7 @@ import { AccountLanguageSync } from '@/features/workspace/account-language-sync'
 import { AppProviders } from '@/app/providers';
 import { MoneyDialogsProvider } from '@/features/money/money-ui';
 import { LoginPage } from '@/features/auth/login-page';
-import { ChatWorkspace } from '@/features/chat/chat-workspace';
+import { AuthenticatedShell } from '@/app/authenticated-shell';
 import { retainChatWorkspace } from '@/features/chat/reconnect-policy';
 import { RequiredActionsGate } from '@/features/onboarding/required-actions-gate';
 import { SessionExpiredDialog } from '@/features/auth/session-expired-dialog';
@@ -416,7 +416,7 @@ export default function App() {
     );
   }
 
-  // R8.4c — Required Actions gate. Wraps ChatWorkspace + providers so:
+  // R8.4c — Required Actions gate. Wraps AuthenticatedShell + providers so:
   //   - PLATFORM users with pending actions see the action flow (not the
   //     chat UI) until they finish.
   //   - BUILTIN users pass straight through (BuiltinRequiredActionsProvider
@@ -494,7 +494,7 @@ function PostClientRoot({
       <>
         <ActiveAccountDisplayNameSync activeAccountKey={activeAccountKey} />
         <AccountLanguageSync client={handle.client} />
-        <ChatWorkspace
+        <AuthenticatedShell
           handle={handle}
           onLogout={onLogout}
           activeAccountKey={activeAccountKey}
