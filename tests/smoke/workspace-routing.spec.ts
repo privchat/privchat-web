@@ -38,18 +38,17 @@ test.beforeEach(async ({page}) => {
   await page.evaluate(async () => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage('en');});
 });
 
-test('records deep link loads the history view directly and survives a refresh remount', async ({page}) => {
+test('records deep link loads the unified history view directly and survives a refresh remount', async ({page}) => {
   const views = await routes(page);
   await mount(page, '#/workspace/space/w/records');
   const detail = page.getByTestId('workspace-detail');
   await expect(detail).toBeVisible();
-  await expect(detail.getByRole('button', {name: 'Task records'})).toHaveAttribute('aria-pressed', 'true');
-  await expect(detail.getByRole('button', {name: 'Unfinished'})).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(() => views.includes('history_tasks_v1')).toBe(true);
   expect(views).not.toContain('active_tasks_v1');
   await unmount(page);
   await mount(page, '#/workspace/space/w/records');
-  await expect(page.getByTestId('workspace-detail').getByRole('button', {name: 'Task records'})).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('workspace-detail')).toBeVisible();
+  expect(views).not.toContain('active_tasks_v1');
 });
 
 test('back and forward move between home and the space without losing the route', async ({page}) => {

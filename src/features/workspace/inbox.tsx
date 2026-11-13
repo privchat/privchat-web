@@ -42,7 +42,7 @@ function useLabels() {
 }
 
 /** One list of everything waiting for a person; answers go through each record's own API. */
-export function WorkspaceInbox({api, workspaceId, onCount}: {api: WorkspaceApi; workspaceId: string; onCount?: (count: number) => void}) {
+export function WorkspaceInbox({api, workspaceId, onCount, hideWhenEmpty}: {api: WorkspaceApi; workspaceId: string; onCount?: (count: number) => void; hideWhenEmpty?: boolean}) {
   const l = useLabels();
   const [entries, setEntries] = useState<WorkspaceInboxEntry[]>([]);
   const [busy, setBusy] = useState(false);
@@ -73,6 +73,7 @@ export function WorkspaceInbox({api, workspaceId, onCount}: {api: WorkspaceApi; 
     catch {if (live.current) {setError(true); setBusy(false);} return;}
     await load();
   }
+  if (hideWhenEmpty && !entries.length && !busy && !error) return null;
   return <section className="space-y-2 rounded border p-3" data-testid="workspace-inbox" aria-label={l('title')}>
     <header className="flex items-center justify-between"><h3 className="font-semibold">{l('title')} ({entries.length})</h3><Button variant="ghost" disabled={busy} onClick={() => void load()}>{l('reload')}</Button></header>
     {error && <p role="alert">{l('error')}</p>}

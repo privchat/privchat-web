@@ -39,25 +39,22 @@ test('empty list keeps management; creating a space only saves the space', async
   const requests = await mock(page, path => path === '/workspace/page' ? {list: [], total: 0} : undefined); await mount(page);
   await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Create workspace', exact: true}).click(); await page.getByLabel('Name', {exact: true}).fill('New team'); await page.getByRole('button', {name: 'Save', exact: true}).click(); await expect(page.getByTestId('workspace-home')).toBeVisible(); expect(requests.filter(r => r.method === 'POST').map(r => r.path)).toEqual(['/workspace/create']);
 });
-test('home pages downward without ended cards; task records include current and ungrouped history on isolated views', async ({page}) => {
+test('unified task list pages downward and includes ended work; status chips filter without a separate view', async ({page}) => {
   const requests = await mock(page); await mount(page); await page.getByTestId('workspace-card').first().click();
-  const active = page.locator('[data-testid="task-feed"]:visible');
-  await expect(active.getByTestId('task-card')).toHaveCount(2);
-  await expect(active.getByTestId('task-card').first()).toContainText('Task 21');
-  await active.getByRole('button', {name: 'Load more', exact: true}).click();
-  await expect(active.getByRole('button', {name: 'Load more', exact: true})).toHaveCount(0);
-  await expect(active.getByTestId('task-card')).toHaveCount(2);
-  await expect(active).not.toContainText('Task 1');
-  await page.getByRole('button', {name: 'Task records', exact: true}).click();
-  const records = page.locator('[data-testid="task-feed"]:visible');
-  await records.getByRole('button', {name: 'Load more', exact: true}).click();
-  await expect(records.getByTestId('task-card')).toHaveCount(4);
-  await expect(records.locator('[data-item-id="1"]')).toContainText('Task 1');
-  await expect(records.locator('[data-item-id="1"]')).toContainText('No project');
-  await expect(records.locator('[data-item-id="2"]')).toContainText('Task 2');
-  expect(new Set(requests.filter(r => r.path === '/workspace/activity/page').map(r => r.query.searchParams.get('view')))).toEqual(new Set(['active_tasks_v1', 'history_tasks_v1']));
-  await page.getByRole('button', {name: 'Unfinished', exact: true}).click();
-  await expect(page.locator('[data-testid="task-feed"]:visible').getByTestId('task-card')).toHaveCount(2);
+  const feed = page.locator('[data-testid="task-feed"]:visible');
+  await expect(feed.getByTestId('task-card')).toHaveCount(2);
+  await expect(feed.getByTestId('task-card').first()).toContainText('Task 21');
+  await feed.getByRole('button', {name: 'Load more', exact: true}).click();
+  await expect(feed.getByRole('button', {name: 'Load more', exact: true})).toHaveCount(0);
+  await expect(feed.getByTestId('task-card')).toHaveCount(4);
+  await expect(feed.locator('[data-item-id="1"]')).toContainText('Task 1');
+  await expect(feed.locator('[data-item-id="1"]')).toContainText('No project');
+  await expect(feed.locator('[data-item-id="2"]')).toContainText('Task 2');
+  expect(new Set(requests.filter(r => r.path === '/workspace/activity/page').map(r => r.query.searchParams.get('view')))).toEqual(new Set(['history_tasks_v1']));
+  await page.getByRole('button', {name: 'Done', exact: true}).click();
+  await expect(feed.getByTestId('task-card')).toHaveCount(2);
+  await page.getByRole('button', {name: 'All', exact: true}).click();
+  await expect(feed.getByTestId('task-card')).toHaveCount(4);
 });
 test('home buffers updates and preserves surviving card anchor on completion, prepend and pagination', async ({page}) => {
   let changed = false;
@@ -80,10 +77,7 @@ test('home buffers updates and preserves surviving card anchor on completion, pr
   await page.clock.fastForward(15001); await expect(active.getByRole('button', {name: 'Updates available'})).toBeVisible();
   expect(Math.abs(await position() - before)).toBeLessThan(2);
   await active.getByRole('button', {name: 'Updates available'}).click();
-  await expect(active.locator('[data-item-id="36"]')).toHaveCount(0);
-  expect(Math.abs(await position() - before)).toBeLessThan(2);
-  await active.getByRole('button', {name: 'Reload', exact: true}).click();
-  await expect(active.getByRole('button', {name: 'Reload', exact: true})).toBeEnabled();
+  await expect(active.locator('[data-item-id="36"]')).toContainText('Done');
   expect(Math.abs(await position() - before)).toBeLessThan(2);
   await host.evaluate(el => {el.scrollTop = el.scrollHeight;});
   // Measure within the scroll host: clicking the below-the-fold "Load more" button makes Playwright scroll the document, which shifts window-relative rects without moving the feed anchor.
@@ -93,11 +87,10 @@ test('home buffers updates and preserves surviving card anchor on completion, pr
   await expect(active.locator('[data-item-id="20"]')).toHaveCount(1);
   expect(Math.abs(await offset21() - bottomAnchor)).toBeLessThan(2);
 });
-test('project filter starts fresh tail; readonly keeps employee menu but disables creation', async ({page}) => {
+test('project filter starts fresh tail; readonly disables creation but keeps resource navigation', async ({page}) => {
   const requests = await mock(page, path => path === '/workspace/page' ? {list: [space('w', {archived: 1})], total: 1} : path === '/workspace/get/w' ? space('w', {archived: 1}) : undefined); await mount(page); await page.getByTestId('workspace-card').click(); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await expect.poll(() => requests.filter(r => r.path.endsWith('/activity/page')).at(-1)?.query.searchParams.get('projectId')).toBe('p'); expect(requests.filter(r => r.path.endsWith('/activity/page')).at(-1)?.query.searchParams.has('cursor')).toBe(false);
-  await page.getByRole('button', {name: 'Manage', exact: true}).click();
-  await expect(page.getByRole('menuitem')).toHaveText(['Create work item', 'Manage virtual employees', 'Project management', 'Space settings']);
-  await expect(page.getByRole('menuitem', {name: 'Create work item'})).toBeDisabled(); await expect(page.getByRole('menuitem', {name: 'Manage virtual employees'})).toBeEnabled();
+  await expect(page.getByRole('button', {name: 'New task', exact: true})).toBeDisabled();
+  await expect(page.getByTestId('ws-nav-navEmployees')).toBeEnabled();
 });
 test('project edit submits version, description and round-end rules without legacy fields', async ({page}) => {
   const requests = await mock(page); await openProjects(page);
@@ -111,8 +104,7 @@ test('project edit submits version, description and round-end rules without lega
 });
 
 async function openProjects(page: Page) {
-  await mount(page); await page.getByRole('button', {name: 'Manage', exact: true}).click();
-  await page.getByRole('menuitem', {name: 'Project management', exact: true}).click();
+  await mount(page); await page.getByTestId('ws-nav-navProjects').click();
   await expect(page.getByTestId('project-management')).toBeVisible();
 }
 async function openProjectDetail(page: Page) {
@@ -122,8 +114,7 @@ async function openProjectDetail(page: Page) {
 }
 async function openSettings(page: Page) {
   await mount(page); await page.getByTestId('workspace-card').first().click();
-  await page.getByRole('button', {name: 'Manage', exact: true}).click();
-  await page.getByRole('menuitem', {name: 'Space settings', exact: true}).click();
+  await page.getByTestId('ws-nav-navMembers').click();
   return page.getByTestId('space-settings');
 }
 
@@ -258,7 +249,7 @@ for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) te
 
 test('lost assignment retains saved item and original key; candidates come from associations', async ({page}) => {
   let lost = true; const requests = await mock(page, path => {if (path === '/workspace/work-execution/assign') {if (lost) {lost = false; return 'abort';} return {id: 'link', executionId: 'exec', state: 'accepted'};}}); page.on('dialog', dialog => dialog.accept());
-  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Create work item'}).click(); await page.getByLabel('Title', {exact: true}).fill('Ship'); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click(); await expect(page.getByRole('alert')).toContainText('Work item saved; assignment not confirmed'); await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect(page.getByTestId('workspace-detail')).toBeVisible();
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click(); await page.getByLabel('Title', {exact: true}).fill('Ship'); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click(); await expect(page.getByRole('alert')).toContainText('Work item saved; assignment not confirmed'); await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect(page.getByTestId('workspace-detail')).toBeVisible();
   const creates = requests.filter(r => r.path === '/workspace/work-item/create'), assigns = requests.filter(r => r.path === '/workspace/work-execution/assign'); expect(creates).toHaveLength(1); expect(assigns).toHaveLength(2); expect(assigns[0]?.body).toEqual(assigns[1]?.body); expect(assigns[0]?.body).toMatchObject({workItemId: '42', version: 1, employeeId: 'emp', bindingId: 'b'}); expect(requests.some(r => r.path === '/agent/agents/send')).toBe(false);
 });
 test('mobile cards and scoped feed fit phone viewport', async ({page}) => {
@@ -271,7 +262,7 @@ const referencePage = (cursor: string | null) => cursor
 
 test('employee management exposes reference 101 through load more and retains all 100 unavailable rows', async ({page}) => {
   const requests = await mock(page, (path, query) => path === '/workspace/employee/page' ? referencePage(query.searchParams.get('cursor')) : undefined);
-  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Manage virtual employees'}).click();
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
   const panel = page.getByTestId('space-employees'); await expect(panel.locator('tbody tr')).toHaveCount(100);
   await panel.getByRole('button', {name: 'Load more', exact: true}).click(); await expect(panel.locator('tbody tr')).toHaveCount(101);
   await expect(panel.getByRole('cell', {name: 'Employee 101', exact: true})).toBeVisible(); await expect(panel.locator('tbody tr').first()).toContainText('offline');
@@ -279,7 +270,7 @@ test('employee management exposes reference 101 through load more and retains al
 });
 test('create-item discovers available employee 101 after an entirely unavailable first page without starting work', async ({page}) => {
   const requests = await mock(page, (path, query) => path === '/workspace/employee/page' ? referencePage(query.searchParams.get('cursor')) : undefined);
-  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Create work item'}).click();
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click();
   const panel = page.getByTestId('create-work-item'); const select = panel.getByRole('combobox', {name: 'Employee (optional)', exact: true});
   await expect(select.getByRole('option')).toHaveCount(101); await expect(select.getByRole('option', {name: 'Employee 1 · offline', exact: true})).toHaveJSProperty('disabled', true);
   await panel.getByRole('button', {name: 'Load more', exact: true}).click(); await expect(select.getByRole('option')).toHaveCount(102); await select.selectOption('employee-101'); await expect(select).toHaveValue('employee-101');
@@ -289,14 +280,14 @@ test('create-item discovers available employee 101 after an entirely unavailable
 test('blocked accepted create-and-assign stays recoverable across reload without claiming delivery or replacing identity', async ({page}) => {
   const requests = await mock(page, path => path === '/workspace/work-execution/assign' ? {id: 'held-link', executionId: 'accepted-held', state: 'accepted', deliveryBlockedReason: 'INTERNAL_DETAIL_NOT_FOR_DISPLAY'} : undefined);
   page.on('dialog', dialog => dialog.accept());
-  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Create work item'}).click();
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click();
   await page.getByLabel('Title', {exact: true}).fill('Held task'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click();
   await expect(page.getByTestId('create-work-item')).toBeVisible(); await expect(page.getByTestId('delivery-blocked')).toContainText('execution delivery is blocked');
   await expect(page.getByTestId('delivery-blocked')).toContainText('accepted-held'); await expect(page.getByTestId('delivery-blocked')).not.toContainText('INTERNAL_DETAIL_NOT_FOR_DISPLAY');
   const first = requests.find(request => request.path === '/workspace/work-execution/assign')!.body;
   await expect(page.getByTestId('delivery-blocked')).toContainText(first.requestId);
   await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect.poll(() => requests.filter(request => request.path === '/workspace/work-execution/assign').length).toBe(2);
-  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Create work item'}).click();
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click();
   await expect(page.getByTestId('delivery-blocked')).toContainText(first.requestId); await page.getByRole('button', {name: 'Retry', exact: true}).click();
   await expect.poll(() => requests.filter(request => request.path === '/workspace/work-execution/assign').length).toBe(3);
   expect(requests.filter(request => request.path === '/workspace/work-item/create')).toHaveLength(1);
@@ -329,9 +320,9 @@ test('normal entry keeps home room-free, subscribes only viewed space, refreshes
   expect(await roomCalls(page)).toEqual(['observe', 'subscribe:400']);
   const joined = requests.findIndex(request => request.path === '/workspace/room/join'); const snapshot = requests.findIndex(request => request.path === '/workspace/activity/page'); expect(joined).toBeLessThan(snapshot);
   const reads = requests.filter(request => request.path === '/workspace/activity/page').length;
-  changed = true; await emitRoomChange(page); await page.getByRole('button', {name: 'Updates available'}).click(); await expect(page.getByTestId('task-card')).toHaveCount(0);
+  changed = true; await emitRoomChange(page); await page.getByRole('button', {name: 'Updates available'}).click(); await expect(page.getByTestId('task-card')).toHaveCount(1); await expect(page.getByTestId('task-card')).toContainText('Done');
   expect(requests.filter(request => request.path === '/workspace/activity/page')).toHaveLength(reads + 1);
-  await page.getByTestId('workspace-detail').getByRole('button', {name: 'Back', exact: true}).click(); await expect(page.getByTestId('workspace-home')).toBeVisible();
+  await page.locator('nav[aria-label="breadcrumb"] button').first().click(); await expect(page.getByTestId('workspace-home')).toBeVisible();
   await expect.poll(() => roomCalls(page)).toEqual(['observe', 'subscribe:400', 'off', 'unsubscribe:400']);
   const exitedReads = requests.filter(request => request.path === '/workspace/activity/page').length; await emitRoomChange(page); expect(requests.filter(request => request.path === '/workspace/activity/page')).toHaveLength(exitedReads);
   changed = false; await page.getByTestId('workspace-card').last().click(); await expect(page.getByTestId('task-card')).toHaveCount(1);
@@ -344,7 +335,7 @@ test('normal entry keeps home room-free, subscribes only viewed space, refreshes
 test('normal room event buffers changes while reading history, preserves anchor and ignores other spaces', async ({page}) => {
   let changed = false;
   const requests = await mock(page, (path, query) => path === '/workspace/activity/page' && !query.searchParams.has('cursor') && changed ? feed([row('21', 'done', 2), row('22')]) : undefined);
-  await mountNormal(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Task records', exact: true}).click(); const records = page.locator('[data-testid="task-feed"]:visible'); await expect(records.getByTestId('task-card')).toHaveCount(2); await records.getByRole('button', {name: 'Load more', exact: true}).click();
+  await mountNormal(page); await page.getByTestId('workspace-card').first().click(); const records = page.locator('[data-testid="task-feed"]:visible'); await expect(records.getByTestId('task-card')).toHaveCount(2); await records.getByRole('button', {name: 'Load more', exact: true}).click();
   const host = records.getByTestId('task-feed-scroll'); await host.evaluate(el => {el.scrollTop = 0; el.dispatchEvent(new Event('scroll', {bubbles: true}));});
   const anchor = await host.locator('[data-item-id="22"]').evaluate(el => el.getBoundingClientRect().top);
   const reads = requests.filter(request => request.path === '/workspace/activity/page').length;
@@ -378,8 +369,7 @@ test('project task list reads all permitted spaces without reverse workspace loo
 test('employee task list is scoped by employee across visible spaces, not by the currently selected workspace', async ({page}) => {
   const requests = await mock(page, path => path === '/workspace/activity/page' ? feed([row('21'), row('22', 'done')], false) : undefined);
   await mount(page); await page.getByTestId('workspace-card').first().click();
-  await page.getByRole('button', {name: 'Manage', exact: true}).click();
-  await page.getByRole('menuitem', {name: 'Manage virtual employees'}).click();
+  await page.getByTestId('ws-nav-navEmployees').click();
   await page.getByTestId('space-employees').locator('tbody tr').first().getByRole('button', {name: 'Task records', exact: true}).click();
   await expect(page.getByTestId('task-history').getByTestId('task-card')).toHaveCount(2);
   expect(Object.fromEntries(requests.filter(r => r.path === '/workspace/activity/page').at(-1)!.query.searchParams)).toEqual({view: 'history_tasks_v1', employeeId: 'emp', limit: '20'});
@@ -393,10 +383,8 @@ test('cards use projected roles and reviewNoteId, retain server order and never 
   ], false) : undefined);
   await mount(page); await page.getByTestId('workspace-card').first().click(); const cards = page.getByTestId('task-card');
   await expect(cards).toHaveCount(3); await expect(cards.first()).toContainText('Task 21');
-  await expect(cards.first()).toContainText('Development employee: dev-a');
-  await expect(cards.first()).toContainText('Review employee: reviewer-c · Pending assignment');
-  await expect(cards.nth(1)).toContainText('Development employee: dev-b');
-  await expect(cards.nth(1)).not.toContainText('Pending assignment');
+  await expect(cards.first()).toContainText('dev-a');
+  await expect(cards.nth(1)).toContainText('dev-b');
   await expect(cards.nth(1)).toContainText('Needs attention');
   await expect(cards.nth(2)).toContainText('Stage unavailable');
   for (const [locale, development, reviewing] of [['en', 'In development', 'Under review'], ['zh-CN', '开发中', '评审中'], ['zh-TW', '開發中', '評審中'], ['vi', 'Đang phát triển', 'Đang đánh giá']]) {
@@ -406,17 +394,14 @@ test('cards use projected roles and reviewNoteId, retain server order and never 
   }
 });
 
-test('space task records retain no-project and removed-employee filters; empty refresh removes old cards', async ({page}) => {
+test('unified task list refresh removes old cards when the feed empties', async ({page}) => {
   let empty = false;
-  const requests = await mock(page, path => path === '/workspace/activity/page' ? feed(empty ? [] : [row('21')], false) : undefined);
-  await mount(page); await page.getByTestId('workspace-card').first().click();
-  await page.getByRole('button', {name: 'Task records', exact: true}).click();
-  await page.getByLabel('Employee ID', {exact: true}).fill('removed-employee');
-  await page.getByLabel('No project', {exact: true}).check();
-  const records = page.locator('[data-testid="task-feed"]:visible'); await expect(records.getByTestId('task-card')).toHaveCount(1);
-  await expect.poll(() => Object.fromEntries(requests.filter(r => r.path === '/workspace/activity/page').at(-1)!.query.searchParams)).toEqual({view: 'history_tasks_v1', workspaceId: 'w', employeeId: 'removed-employee', unprojected: 'true', limit: '20'});
-  empty = true; await records.getByRole('button', {name: 'Reload', exact: true}).click();
-  await expect(records.getByTestId('task-card')).toHaveCount(0);
+  await mock(page, path => path === '/workspace/activity/page' ? feed(empty ? [] : [row('21')], false) : undefined);
+  await mount(page); await page.clock.install(); await page.getByTestId('workspace-card').first().click();
+  const list = page.locator('[data-testid="task-feed"]:visible'); await expect(list.getByTestId('task-card')).toHaveCount(1);
+  empty = true; await page.clock.fastForward(15001);
+  await list.getByRole('button', {name: 'Updates available'}).click();
+  await expect(list.getByTestId('task-card')).toHaveCount(0);
 });
 
 test('snapshot invalidation fetches a fresh first page; failed paging retains original cursor and denied reads clear cards', async ({page}) => {
@@ -427,7 +412,7 @@ test('snapshot invalidation fetches a fresh first page; failed paging retains or
     if (fail) return 'abort';
     return feed([row(query.searchParams.has('cursor') ? '20' : '21')], !query.searchParams.has('cursor'));
   });
-  await mount(page); await page.getByTestId('workspace-card').first().click(); const active = page.locator('[data-testid="task-feed"]:visible');
+  await mount(page); await page.clock.install(); await page.getByTestId('workspace-card').first().click(); const active = page.locator('[data-testid="task-feed"]:visible');
   await active.getByRole('button', {name: 'Load more', exact: true}).click();
   await expect(active.getByRole('button', {name: 'Updates available'})).toBeVisible(); invalidate = false;
   await active.getByRole('button', {name: 'Updates available'}).click();
@@ -438,7 +423,7 @@ test('snapshot invalidation fetches a fresh first page; failed paging retains or
   await active.getByRole('button', {name: 'Load more', exact: true}).click(); await expect(active.getByTestId('task-card')).toHaveCount(2);
   expect(requests.filter(r => r.path === '/workspace/activity/page' && r.query.searchParams.has('cursor')).map(r => r.query.searchParams.get('cursor'))).toEqual(['opaque-w', 'opaque-w', 'opaque-w']);
   await page.route('**/__v16/app/workspace/activity/page?**', route => route.fulfill({json: {code: 403, message: 'FORBIDDEN'}}));
-  await active.getByRole('button', {name: 'Reload', exact: true}).click(); await expect(active.getByTestId('task-card')).toHaveCount(0);
+  await page.clock.fastForward(15001); await expect(active.getByTestId('task-card')).toHaveCount(0);
 });
 
 for (const authorized of [true, false]) test(`default review selection uses the caller's own binding and cannot grant missing access (${authorized})`, async ({page}) => {
@@ -491,7 +476,6 @@ test('closed stage shows business Done or Cancelled, while open work with a clos
     {...row('23'), stage: 'closed'},
   ], false) : undefined);
   await mount(page); await page.getByTestId('workspace-card').first().click();
-  await page.getByRole('button', {name: 'Task records', exact: true}).click();
   const records = page.locator('[data-testid="task-feed"]:visible');
   await expect(records.getByTestId('task-card')).toHaveCount(3);
   await expect(records.locator('[data-item-id="21"]')).toContainText('Latest stage: Done');

@@ -12,6 +12,16 @@ import { StatusPill, WsTable, WsTd, WsTh } from './shell';
 
 const CATEGORY_ICON = {pending: Circle, running: RotateCw, review: Clock, done: Check} as const;
 
+function scrollHost(el: HTMLElement): HTMLElement {
+  let node: HTMLElement | null = el;
+  while (node) {
+    const oy = getComputedStyle(node).overflowY;
+    if (oy === 'auto' || oy === 'scroll') return node;
+    node = node.parentElement;
+  }
+  return el;
+}
+
 function relativeTime(value: number, language: string): string {
   const diff = value - Date.now();
   const abs = Math.abs(diff);
@@ -57,7 +67,7 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
     const cards = [...host.querySelectorAll<HTMLElement>('[data-item-id]')]
       .filter(el => el.getBoundingClientRect().bottom > top)
       .map(el => ({id: el.dataset.itemId!, offset: el.getBoundingClientRect().top - top}));
-    anchor.current = {cards, top: host.scrollTop};
+    anchor.current = {cards, top: scrollHost(host).scrollTop};
   }
   function apply(next: TaskFeedPage, older = false, replace = false) {
     remember();
@@ -134,45 +144,45 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
     if (!host) return;
     if (anchor.current) {
       const saved = anchor.current;
+      const scroller = scrollHost(host);
       const elements = [...host.querySelectorAll<HTMLElement>('[data-item-id]')];
       const survivor = saved.cards.find(card => elements.some(el => el.dataset.itemId === card.id));
       const card = elements.find(el => el.dataset.itemId === survivor?.id);
-      if (card && survivor) host.scrollTop += card.getBoundingClientRect().top - host.getBoundingClientRect().top - survivor.offset;
-      else host.scrollTop = saved.top;
+      if (card && survivor) scroller.scrollTop += card.getBoundingClientRect().top - host.getBoundingClientRect().top - survivor.offset;
+      else scroller.scrollTop = saved.top;
     }
     anchor.current = undefined;
   }, [rows]);
-  return <section className="space-y-3" data-testid="task-feed">
-    <div className="flex gap-2">
-      <Button variant="outline" size="sm" disabled={busy || denied} onClick={() => void load(false, true)}>{l('reload')}</Button>
-      {pending && <Button size="sm" disabled={busy} onClick={() => {
-        if (pending.refreshRequired) {
-          void load(false, true);
-        } else apply(pending, false, true);
-      }}>{l('updates')}</Button>}
-    </div>
-    {error && <p role="alert">{denied ? l('accessDenied') : l('error')}</p>}
+  return <section className="relative space-y-3" data-testid="task-feed">
+    {(error || pending) && <div className="absolute left-1/2 top-2 z-10 -translate-x-1/2 space-y-1 rounded-md border bg-background/95 px-3 py-2 shadow-md">
+      <div className="flex gap-2">
+        {error && <Button variant="outline" size="sm" disabled={busy || denied} onClick={() => void load(false, true)}>{l('reload')}</Button>}
+        {pending && <Button size="sm" disabled={busy} onClick={() => {
+          if (pending.refreshRequired) {
+            void load(false, true);
+          } else apply(pending, false, true);
+        }}>{l('updates')}</Button>}
+      </div>
+      {error && <p role="alert" className="text-sm">{denied ? l('accessDenied') : l('error')}</p>}
+    </div>}
     <div ref={viewport} data-testid="task-feed-scroll">
       {!visibleRows.length && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : activeOnly ? 'activeEmpty' : 'empty')}</p>}
       {visibleRows.length > 0 && <WsTable head={<>
-        <WsTh>{l('colTask')}</WsTh><WsTh>{l('project')}</WsTh><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colStatus')}</WsTh><WsTh className="text-right">{l('colUpdated')}</WsTh>
+        <WsTh>{l('colTask')}</WsTh><WsTh>{l('project')}</WsTh><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colStatus')}</WsTh><WsTh>{l('colUpdated')}</WsTh>
       </>}>
         {visibleRows.map(row => {
           const category = taskStatusCategory(row);
           const Icon = CATEGORY_ICON[category];
           return <tr key={row.item.id} data-item-id={row.item.id} data-testid="task-card" className="hover:bg-accent/40">
             <WsTd className="max-w-0">
-              <button type="button" className="break-words text-left font-medium hover:underline focus-visible:underline" onClick={() => onOpen(row)}>{row.item.title}</button>
+              <button type="button" className="break-words text-left font-semibold hover:underline focus-visible:underline" onClick={() => onOpen(row)}>{row.item.title}</button>
               <span className="ml-2 font-mono text-xs text-muted-foreground">{row.item.id.slice(0, 8)}</span>
               {row.needsAttention && <span className="ml-2 text-xs font-medium">{l('needsAttention')}</span>}
             </WsTd>
             <WsTd className="text-muted-foreground">{row.item.projectId ? projects.find(project => project.id === row.item.projectId)?.name ?? row.item.projectId : l('ungrouped')}</WsTd>
-            <WsTd className="text-muted-foreground">
-              <span className="block">{l('developer')}: {row.developerEmployeeId ?? l('unassigned')}</span>
-              <span className="block text-xs">{l('reviewer')}: {row.reviewerEmployeeId ?? l('unassigned')}{!row.reviewNoteId && row.reviewerEmployeeId && ` · ${l('pendingAssignment')}`}</span>
-            </WsTd>
+            <WsTd className="text-muted-foreground">{row.developerEmployeeId ?? row.reviewerEmployeeId ?? l('unassigned')}</WsTd>
             <WsTd><span className="sr-only">{l('stage')}: </span><StatusPill icon={Icon}>{taskStageLabel(row, key => t(key))}</StatusPill></WsTd>
-            <WsTd className="whitespace-nowrap text-right text-muted-foreground">{row.lastActivityAt != null ? relativeTime(row.lastActivityAt, i18n.resolvedLanguage ?? 'en') : '—'}</WsTd>
+            <WsTd className="whitespace-nowrap text-muted-foreground">{row.lastActivityAt != null ? relativeTime(row.lastActivityAt, i18n.resolvedLanguage ?? 'en') : '—'}</WsTd>
           </tr>;
         })}
       </WsTable>}

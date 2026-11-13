@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -45,7 +45,7 @@ export function WorkspacePage({api, client, accountKey, renderSession, onLockCha
     case 'devices': view = <DevicePage api={api}/>; break;
     case 'create-space': view = <CreateSpace api={api}/>; break;
     case 'space':
-    case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId} records={route.view === 'records'}/>; break;
+    case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId}/>; break;
     case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
     case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
@@ -109,16 +109,13 @@ function CreateSpace({api}: {api: WorkspaceApi}) {
   </form>;
 }
 
-function SpaceView({api, client, spaceId, records}: {api: WorkspaceApi; client?: PrivchatClient; spaceId: string; records: boolean}) {
+function SpaceView({api, client, spaceId}: {api: WorkspaceApi; client?: PrivchatClient; spaceId: string}) {
   const l = usePageLabels();
   const [space, setSpace] = useState<Workspace>();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
   const [statusFilter, setStatusFilter] = useState<TaskStatusCategory | 'all'>('all');
   const [search, setSearch] = useState('');
-  const [historyEmployee, setHistoryEmployee] = useState('');
-  const [unprojected, setUnprojected] = useState(false);
-  const [recordsVisited, setRecordsVisited] = useState(records);
   const [error, setError] = useState(false);
   const [denied, setDenied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -137,42 +134,26 @@ function SpaceView({api, client, spaceId, records}: {api: WorkspaceApi; client?:
     } finally {if (live.current) setBusy(false);}
   }
   useEffect(() => {live.current = true; void load(); return () => {live.current = false;};}, [api, spaceId]);
-  useEffect(() => {if (records) setRecordsVisited(true);}, [records]);
   const open = (row: WorkspaceActivity) => navigateWorkspace({view: 'item', spaceId, itemId: row.item.id, executionId: row.latestExecution?.executionId ?? undefined});
   return <section data-testid="workspace-detail">
-    <WsPageHeader title={l('tasksTitle')} subtitle={l('tasksSub')} actions={<>
-      <Button variant="ghost" size="sm" onClick={() => navigateWorkspace({view: 'home'})}>{l('back')}</Button>
-      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={l('manage')}><MoreHorizontal className="h-5 w-5"/></Button></DropdownMenuTrigger><DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={readOnly} onSelect={() => navigateWorkspace({view: 'create-item', spaceId})}>{l('createItem')}</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => navigateWorkspace({view: 'employees', spaceId})}>{l('manageEmployees')}</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => navigateWorkspace({view: 'projects', workspaceId: spaceId})}>{l('projects')}</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => navigateWorkspace({view: 'settings', spaceId})}>{l('settings')}</DropdownMenuItem>
-      </DropdownMenuContent></DropdownMenu>
+    <WsPageHeader title={l('tasksTitle')} subtitle={l('tasksSub')} actions={
       <Button size="sm" disabled={readOnly} onClick={() => navigateWorkspace({view: 'create-item', spaceId})}><Plus className="h-4 w-4" />{l('newTask')}</Button>
-    </>} />
+    } />
     {error && <p role="alert">{l(denied ? 'accessDenied' : 'error')}</p>}
     {!space && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
     {space && <>
       {readOnly && <p className="mb-3 text-sm text-muted-foreground">{l('readOnly')}</p>}
-      <WorkspaceInbox key={`inbox:${spaceId}`} api={api} workspaceId={spaceId}/>
+      <WorkspaceInbox key={`inbox:${spaceId}`} api={api} workspaceId={spaceId} hideWhenEmpty/>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <WsChipGroup label={l('colStatus')}>
+          {([['all', 'statusAll'], ['pending', 'statusPending'], ['running', 'statusRunning'], ['review', 'statusReview'], ['done', 'statusDone']] as const).map(([key, label]) => <WsChip key={key} active={statusFilter === key} onClick={() => setStatusFilter(key)}>{l(label)}</WsChip>)}
+        </WsChipGroup>
         <div className="flex flex-wrap items-center gap-2">
-          <WsChipGroup label={l('taskViews')}>
-            <WsChip active={!records} onClick={() => navigateWorkspace({view: 'space', spaceId})}>{l('unfinished')}</WsChip>
-            <WsChip active={records} onClick={() => navigateWorkspace({view: 'records', spaceId})}>{l('taskRecords')}</WsChip>
-          </WsChipGroup>
-          <WsChipGroup label={l('colStatus')}>
-            {([['all', 'statusAll'], ['pending', 'statusPending'], ['running', 'statusRunning'], ['review', 'statusReview'], ['done', 'statusDone']] as const).map(([key, label]) => <WsChip key={key} active={statusFilter === key} onClick={() => setStatusFilter(key)}>{l(label)}</WsChip>)}
-          </WsChipGroup>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select aria-label={l('project')} className={`${workspaceField} w-auto`} value={projectId} onChange={e => {setProjectId(e.target.value); setUnprojected(false);}}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+          <select aria-label={l('project')} className={`${workspaceField} w-auto`} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
           <input aria-label={l('searchTasks')} placeholder={l('searchTasks')} className={`${workspaceField} w-48`} value={search} onChange={e => setSearch(e.target.value)}/>
         </div>
       </div>
-      {records && <div className="mb-3 flex flex-wrap items-center gap-3"><label className="flex items-center gap-2 text-sm">{l('employeeFilter')}<input className={`${workspaceField} w-40`} value={historyEmployee} onChange={e => setHistoryEmployee(e.target.value)}/></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={unprojected} onChange={e => {setUnprojected(e.target.checked); setProjectId('');}}/>{l('ungrouped')}</label></div>}
-      <div hidden={records}><TaskFeed key={`active:${spaceId}:${projectId}`} api={api} client={client} workspaceId={spaceId} projectId={projectId || undefined} view="active" enabled={!records} projects={projects} onOpen={open} statusFilter={statusFilter} search={search}/></div>
-      {recordsVisited && <div hidden={!records}><TaskFeed key={`records:${spaceId}:${projectId}:${historyEmployee}:${unprojected}`} api={api} client={client} workspaceId={spaceId} projectId={unprojected ? undefined : projectId || undefined} employeeId={historyEmployee || undefined} unprojected={unprojected} view="history" enabled={records} projects={projects} onOpen={open} statusFilter={statusFilter} search={search}/></div>}
+      <TaskFeed key={`${spaceId}:${projectId}`} api={api} client={client} workspaceId={spaceId} projectId={projectId || undefined} view="history" projects={projects} onOpen={open} statusFilter={statusFilter} search={search}/>
     </>}
   </section>;
 }

@@ -84,7 +84,7 @@ test('feed pagination keeps one card per item and the newest version of overlapp
   const cursors: (string | null)[] = [];
   await routes(page, {activity: (route, url) => {
     expect(url.searchParams.get('limit')).toBe('20');
-    expect(url.searchParams.get('view')).toBe('active_tasks_v1');
+    expect(url.searchParams.get('view')).toBe('history_tasks_v1');
     const cursor = url.searchParams.get('cursor'); cursors.push(cursor);
     return reply(route, cursor ? feedPage([activity('31', 'succeeded'), activity('30', null)]) : feedPage([activity('31')], '31'));
   }});
