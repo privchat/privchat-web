@@ -96,6 +96,7 @@ test('project edit submits version, description and round-end rules without lega
   const requests = await mock(page); await openProjects(page);
   await page.getByRole('button', {name: 'Project', exact: true}).click();
   await expect(page.getByTestId('project-detail')).toBeVisible();
+  await page.getByTestId('project-manage').locator('summary').click(); // Edit form lives in the collapsed management section.
   await page.getByLabel('Name', {exact: true}).fill('Renamed');
   await page.getByLabel('Round-end steps', {exact: true}).fill('commit and push');
   await page.getByRole('button', {name: 'Save', exact: true}).click();
@@ -142,6 +143,7 @@ test('project creation requires a manageable workspace and sends no legacy field
 for (const manageable of [true, false]) test(`project detail editing follows fresh manageable permission (${manageable})`, async ({page}) => {
   await mock(page, path => path === '/workspace/project/get/p' ? {...project, manageable} : undefined);
   await openProjectDetail(page);
+  await page.getByTestId('project-manage').locator('summary').click(); // Edit/archive controls live in the collapsed management section.
   const detail = page.getByTestId('project-detail');
   if (manageable) {
     await expect(detail.getByLabel('Name', {exact: true})).toBeEnabled();
@@ -156,6 +158,7 @@ test('save conflicts lock the form until reload; revoked management hides editin
   let manageable = true;
   const requests = await mock(page, path => path === '/workspace/project/get/p' ? {...project, manageable} : path === '/workspace/project/update' ? 'abort' : undefined);
   await openProjectDetail(page);
+  await page.getByTestId('project-manage').locator('summary').click(); // Edit/reload live in the collapsed management section.
   await page.getByRole('button', {name: 'Save', exact: true}).click();
   await expect(page.getByRole('alert')).toContainText('Reload before editing again');
   await expect(page.getByLabel('Name', {exact: true})).toBeDisabled();
@@ -173,6 +176,7 @@ test('member binding saves directories with access, notes and own reviewer; othe
     if (path === '/workspace/project/get/p') return {...project, bindings: saved ? [{...myBinding, notes: 'Handle with care', reviewerEmployeeId: 'reviewer'}, other] : [other]};
   });
   await openProjectDetail(page);
+  await page.getByTestId('project-manage').locator('summary').click(); // The binding editor lives in the collapsed management section.
   const detail = page.getByTestId('project-detail');
   const binding = detail.locator('section[aria-label="Directory binding"]');
   await expect(detail).toContainText('No binding yet');
@@ -200,6 +204,7 @@ test('binding edit carries its version; delete keeps history and asks first', as
   });
   page.on('dialog', dialog => dialog.accept());
   await openProjectDetail(page);
+  await page.getByTestId('project-manage').locator('summary').click(); // The binding editor lives in the collapsed management section.
   const detail = page.getByTestId('project-detail');
   const binding = detail.locator('section[aria-label="Directory binding"]');
   await binding.getByRole('button', {name: 'Edit', exact: true}).click();
@@ -213,6 +218,32 @@ test('binding edit carries its version; delete keeps history and asks first', as
   const removal = requests.find(r => r.path === '/workspace/project/binding/delete')!;
   expect(removal.method).toBe('DELETE');
   expect(Object.fromEntries(removal.query.searchParams)).toEqual({id: 'b1'});
+});
+
+test('project detail shows my device directory table and bind dialog saves a verified directory', async ({page}) => {
+  let saved = false;
+  const requests = await mock(page, (path, _q, body) => {
+    if (path === '/workspace/project/binding/save') {saved = true; return {...myBinding, directories: body.directories.map((d: any) => ({workdirBindingId: d.workdirBindingId, label: 'Repository', access: d.access}))};}
+    if (path === '/workspace/project/get/p') return {...project, description: 'Personal assistant and node collaboration', bindings: saved ? [{...myBinding, directories: [{workdirBindingId: 'dir', label: 'Repository', access: 'read'}]}] : []};
+  });
+  await openProjectDetail(page);
+  const detail = page.getByTestId('project-detail');
+  await expect(detail.getByRole('heading', {name: 'Project', exact: true})).toBeVisible();
+  await expect(detail).toContainText('Personal assistant and node collaboration');
+  await expect(detail.getByRole('heading', {name: 'My device directories', exact: true})).toBeVisible();
+  await expect(detail).toContainText('No binding yet');
+  await expect(detail).toContainText('Other members can see task conversations and employee output, which may include paths.');
+  await detail.getByRole('button', {name: 'Bind my directories', exact: true}).click();
+  const dialog = page.getByRole('dialog').filter({hasText: 'Directories are verified by the selected device.'});
+  await expect(dialog.getByRole('heading', {name: 'Bind my directories', exact: true})).toBeVisible();
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+  await dialog.getByRole('combobox', {name: 'Directory path', exact: true}).selectOption('dir');
+  await dialog.getByRole('combobox', {name: 'Access', exact: true}).selectOption('read');
+  await dialog.getByRole('button', {name: 'Save binding', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/project/binding/save').length).toBe(1);
+  expect(requests.find(r => r.path === '/workspace/project/binding/save')?.body).toEqual({projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'read'}], notes: ''});
+  await expect(detail.getByRole('cell', {name: 'Repository', exact: true})).toBeVisible();
+  await expect(detail.getByRole('cell', {name: 'Read', exact: true})).toBeVisible();
 });
 
 test('space settings manage members by role through their own APIs', async ({page}) => {
@@ -361,6 +392,7 @@ test('project task list reads all permitted spaces without reverse workspace loo
   ], false) : undefined);
   await openProjects(page); const start = requests.length;
   await page.getByRole('button', {name: 'Project', exact: true}).click();
+  await page.getByTestId('project-manage').locator('summary').click(); // Task records lives in the collapsed management section.
   await page.getByRole('button', {name: 'Task records', exact: true}).click();
   const history = page.getByTestId('task-history'); await expect(history.getByTestId('task-card')).toHaveCount(2);
   const read = requests.filter(r => r.path === '/workspace/activity/page').at(-1)!;

@@ -3,6 +3,7 @@ const en = {
   activeEmpty: 'No ongoing work',
   acceptance: 'Acceptance criteria', acceptedExecution: 'Accepted execution identity (not proof of delivery)',
   access: 'Access', accessDenied: 'You no longer have access to these tasks.', accessRead: 'Read', accessWrite: 'Write',
+  bindMyDirs: 'Bind my directories', bindMyDirsHint: 'Directories are verified by the selected device.', myDeviceDirs: 'My device directories', colDirectory: 'Directory', accessPermission: 'Access', dirPath: 'Directory path', saveBinding: 'Save binding', bindingPrivacyNote: 'Other members can see task conversations and employee output, which may include paths.', projectManage: 'Project management', deviceNode: 'Device node',
   acknowledgeInspect: 'Inspect the previous session first', acknowledgeRerun: 'Rerun despite the unknown result', acknowledgeUnknown: 'Previous result not confirmed',
   activity: 'Last activity', addDirectory: 'Add directory', addMember: 'Add member', allProjects: 'All projects / ungrouped', archived: 'Archived',
   assign: 'Create and assign', autoReview: 'Automatic review', autoReviewHint: 'After each round the reviewer checks the result and sends corrections back automatically.', available: 'Available',
@@ -46,7 +47,8 @@ type Labels = typeof en;
 const zh: Labels = {
   activeEmpty: '暂无进行中的工作',
   acceptance: '验收条件', acceptedExecution: '已受理执行标识（不代表已投递）',
-  access: '权限', accessDenied: '你已无权读取这些任务。', accessRead: '只读', accessWrite: '可写',
+  access: '权限', accessDenied: '你已无权读取这些任务。', accessRead: '只读', accessWrite: '可修改',
+  bindMyDirs: '绑定我的目录', bindMyDirsHint: '目录由所选设备验证。', myDeviceDirs: '我的设备目录', colDirectory: '目录', accessPermission: '访问权限', dirPath: '目录路径', saveBinding: '保存绑定', bindingPrivacyNote: '其他成员可查看任务对话和员工输出，其中可能出现路径。', projectManage: '项目管理', deviceNode: '设备节点',
   acknowledgeInspect: '先检查上次会话', acknowledgeRerun: '结果未知仍重新执行', acknowledgeUnknown: '上一次结果未确认',
   activity: '最近业务活动', addDirectory: '添加目录', addMember: '添加成员', allProjects: '全部项目／含未分组事项', archived: '已归档',
   assign: '创建并交办', autoReview: '自动评审', autoReviewHint: '每轮结束后评审员工自动检查结果，并把修改意见发回开发员工。', available: '当前可用',
@@ -89,7 +91,8 @@ const zh: Labels = {
 const zhTW: Labels = {
   activeEmpty: '暫無進行中的工作',
   acceptance: '驗收條件', acceptedExecution: '已受理執行識別碼（不代表已投遞）',
-  access: '權限', accessDenied: '你已無權讀取這些任務。', accessRead: '唯讀', accessWrite: '可寫',
+  access: '權限', accessDenied: '你已無權讀取這些任務。', accessRead: '唯讀', accessWrite: '可修改',
+  bindMyDirs: '綁定我的目錄', bindMyDirsHint: '目錄由所選裝置驗證。', myDeviceDirs: '我的裝置目錄', colDirectory: '目錄', accessPermission: '存取權限', dirPath: '目錄路徑', saveBinding: '儲存綁定', bindingPrivacyNote: '其他成員可檢視任務對話與員工輸出，其中可能出現路徑。', projectManage: '專案管理', deviceNode: '裝置節點',
   acknowledgeInspect: '先檢查上次工作階段', acknowledgeRerun: '結果未知仍重新執行', acknowledgeUnknown: '上一次結果未確認',
   activity: '最近業務活動', addDirectory: '新增目錄', addMember: '新增成員', allProjects: '全部專案／含未分組事項', archived: '已封存',
   assign: '建立並交辦', autoReview: '自動評審', autoReviewHint: '每輪結束後評審員工自動檢查結果，並把修改意見發回開發員工。', available: '目前可用',
@@ -132,7 +135,8 @@ const zhTW: Labels = {
 const vi: Labels = {
   activeEmpty: 'Không có công việc đang tiến hành',
   acceptance: 'Tiêu chí nghiệm thu', acceptedExecution: 'Định danh thực thi đã tiếp nhận (không chứng minh đã chuyển lệnh)',
-  access: 'Quyền', accessDenied: 'Bạn không còn quyền đọc các công việc này.', accessRead: 'Chỉ đọc', accessWrite: 'Ghi',
+  access: 'Quyền', accessDenied: 'Bạn không còn quyền đọc các công việc này.', accessRead: 'Chỉ đọc', accessWrite: 'Có thể sửa',
+  bindMyDirs: 'Liên kết thư mục của tôi', bindMyDirsHint: 'Thư mục được xác minh bởi thiết bị đã chọn.', myDeviceDirs: 'Thư mục thiết bị của tôi', colDirectory: 'Thư mục', accessPermission: 'Quyền truy cập', dirPath: 'Đường dẫn thư mục', saveBinding: 'Lưu liên kết', bindingPrivacyNote: 'Các thành viên khác có thể xem hội thoại công việc và đầu ra của nhân viên, trong đó có thể xuất hiện đường dẫn.', projectManage: 'Quản lý dự án', deviceNode: 'Nút thiết bị',
   acknowledgeInspect: 'Kiểm tra phiên trước trước', acknowledgeRerun: 'Chạy lại dù kết quả chưa rõ', acknowledgeUnknown: 'Kết quả trước đó chưa xác nhận',
   activity: 'Hoạt động gần nhất', addDirectory: 'Thêm thư mục', addMember: 'Thêm thành viên', allProjects: 'Tất cả dự án / chưa phân nhóm', archived: 'Đã lưu trữ',
   assign: 'Tạo và giao việc', autoReview: 'Tự động đánh giá', autoReviewHint: 'Sau mỗi vòng, nhân viên đánh giá tự kiểm tra kết quả và gửi yêu cầu sửa lại cho nhân viên phát triển.', available: 'Khả dụng',

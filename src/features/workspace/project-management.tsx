@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Employee, Node, Project, ProjectBindingDirectoryWrite, Workspace, WorkspaceApi } from './api';
 import { BINDING_DIRECTORY_LIMIT, BINDING_NOTES_LIMIT, ROUND_END_LIMIT } from './api';
 import { TaskHistory } from './task-history';
 import { usePageLabels } from './page-labels';
 import { navigateWorkspace } from './routes';
 import { roomFailure } from './room-observer';
-import { WsPageHeader, WsTable, WsTd, WsTh } from './shell';
+import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh } from './shell';
 export const workspaceField = 'block w-full min-w-0 rounded-[7px] border bg-background px-2.5 py-2 text-sm';
 
 export function ProjectList({api, workspaceId}: {api: WorkspaceApi; workspaceId?: string}) {
@@ -91,6 +92,10 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [edit, setEdit] = useState<{name: string; description: string; roundEnd: string}>();
   const [draft, setDraft] = useState<BindingDraft>();
+  const [bindOpen, setBindOpen] = useState(false);
+  const [bindNodeId, setBindNodeId] = useState('');
+  const [bindDirId, setBindDirId] = useState('');
+  const [bindAccess, setBindAccess] = useState<'write' | 'read'>('write');
   const [history, setHistory] = useState(false);
   const [error, setError] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -121,20 +126,37 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
   const workdirs = nodes.find(n => n.nodeId === draft?.nodeId)?.workdirs ?? [];
   const reviewerCandidates = employees.filter(e => e.nodeId === draft?.nodeId && draft?.directories.some(d => d.workdirBindingId === e.workdirBindingId));
   const accessLabel = (access: string) => access === 'write' ? l('accessWrite') : l('accessRead');
-  return <section data-testid="project-detail" className="space-y-3">
-    <WsPageHeader title={project?.name ?? projectId} subtitle={project ? `v${project.version}${project.archived !== 0 ? ` · ${l('archived')}` : ''}` : undefined} actions={<>
-      <Button variant="ghost" size="sm" disabled={busy} onClick={() => navigateWorkspace({view: 'projects', workspaceId: project?.workspaceId})}>{l('back')}</Button>
-      <Button variant="outline" size="sm" disabled={busy || !project} onClick={() => void load().catch(() => setError(true))}>{l('reload')}</Button>
-    </>} />
-    {error && <p role="alert">{l(denied ? 'accessDenied' : stale ? 'conflict' : 'error')}</p>}
+  const bindWorkdirs = nodes.find(n => n.nodeId === bindNodeId)?.workdirs ?? [];
+  function openBind() {setBindNodeId(mine?.nodeId ?? ''); setBindDirId(''); setBindAccess('write'); setBindOpen(true);}
+  async function saveBind() {
+    if (!project || !bindNodeId || !bindDirId) return;
+    const existing = (mine?.directories ?? []).filter(d => d.workdirBindingId).map(d => ({workdirBindingId: d.workdirBindingId!, access: d.access}));
+    const directories = existing.some(d => d.workdirBindingId === bindDirId) ? existing.map(d => d.workdirBindingId === bindDirId ? {...d, access: bindAccess} : d) : [...existing, {workdirBindingId: bindDirId, access: bindAccess}];
+    await act(async () => {await api.saveProjectBinding({projectId: project.id, nodeId: bindNodeId, directories: directories.slice(0, BINDING_DIRECTORY_LIMIT), notes: mine?.notes ?? '', reviewerEmployeeId: mine?.reviewerEmployeeId ?? null, ...(mine?.version === undefined ? {} : {version: mine.version})}); setBindOpen(false);}, true);
+  }
+  return <section data-testid="project-detail" className="w-full min-w-0">
+    <WsPageHeader title={project?.name ?? projectId} subtitle={project?.description || undefined} actions={canBind ? <Button disabled={busy || !project} onClick={openBind}><Plus className="h-4 w-4" />{l('bindMyDirs')}</Button> : undefined} />
+    {error && <p role="alert" className="mb-3 text-sm text-destructive">{l(denied ? 'accessDenied' : stale ? 'conflict' : 'error')}</p>}
     {!project && !error && <p role="status">{l('loading')}</p>}
     {project && <>
-      <p className="text-sm text-muted-foreground">v{project.version}{project.archived !== 0 && ` · ${l('archived')}`}</p>
-      {project.description && <p className="whitespace-pre-wrap break-words text-sm">{project.description}</p>}
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={busy} onClick={() => setHistory(true)}>{l('taskRecords')}</Button>
-        {project.manageable && <Button variant="outline" disabled={busy} onClick={() => void act(() => api.projectStatus(project.id, project.archived ? 0 : 1, project.version), true)}>{l('archived')}</Button>}
-      </div>
+      <h3 className="mb-4 text-[17px] font-semibold">{l('myDeviceDirs')}</h3>
+      {mine && mine.directories.length > 0 ? <WsTable head={<><WsTh>{l('colDirectory')}</WsTh><WsTh>{l('accessPermission')}</WsTh></>}>
+        {mine.directories.map((d, i) => <tr key={`${d.label}-${i}`}>
+          <WsTd className="break-words">{d.label}</WsTd>
+          <WsTd><StatusPill><span aria-hidden="true" className="h-[3px] w-[3px] rounded-full bg-current" />{accessLabel(d.access)}</StatusPill></WsTd>
+        </tr>)}
+      </WsTable> : <p role="status" className="py-6 text-sm text-muted-foreground">{l('noBinding')}</p>}
+      <p className="mt-[22px] rounded-[9px] border px-4 py-3 text-sm text-muted-foreground">{l('bindingPrivacyNote')}</p>
+      <details data-testid="project-manage" className="mt-6 rounded-[9px] border px-4 py-3">
+        <summary className="cursor-pointer select-none text-sm font-medium text-muted-foreground hover:text-foreground">{l('projectManage')}</summary>
+        <div className="mt-4 space-y-[22px]">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => navigateWorkspace({view: 'projects', workspaceId: project.workspaceId})}>{l('back')}</Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => void load().catch(() => setError(true))}>{l('reload')}</Button>
+            <Button variant="outline" disabled={busy} onClick={() => setHistory(true)}>{l('taskRecords')}</Button>
+            {project.manageable && <Button variant="outline" disabled={busy} onClick={() => void act(() => api.projectStatus(project.id, project.archived ? 0 : 1, project.version), true)}>{l('archived')}</Button>}
+          </div>
+          <p className="text-sm text-muted-foreground">v{project.version}{project.archived !== 0 && ` · ${l('archived')}`}</p>
       {project.manageable && edit && <form className="space-y-3 rounded border p-3" onSubmit={e => {e.preventDefault(); if (!edit.name.trim()) return; void act(() => api.updateProject({id: project.id, name: edit.name, version: project.version, description: edit.description, roundEnd: edit.roundEnd}), true);}}>
         <fieldset disabled={busy || stale || project.archived !== 0} className="space-y-3">
           <label>{l('name')}<input required maxLength={64} className={workspaceField} value={edit.name} onChange={e => setEdit({...edit, name: e.target.value})}/></label>
@@ -182,6 +204,31 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
           <p className="text-sm text-muted-foreground">{binding.directories.map(d => `${d.label} · ${accessLabel(d.access)}`).join('; ')}</p>
         </article>)}
       </section>
+        </div>
+      </details>
     </>}
+    <Dialog open={bindOpen} onOpenChange={open => {if (!busy) setBindOpen(open);}}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{l('bindMyDirs')}</DialogTitle>
+          <DialogDescription>{l('bindMyDirsHint')}</DialogDescription>
+        </DialogHeader>
+        <form className="space-y-4" onSubmit={e => {e.preventDefault(); void saveBind();}}>
+          <label className="grid gap-1.5 text-sm font-medium">{l('deviceNode')}
+            <select required className={workspaceField} value={bindNodeId} disabled={busy} onChange={e => {setBindNodeId(e.target.value); setBindDirId('');}}><option value="">{l('none')}</option>{nodes.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select>
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium">{l('dirPath')}
+            <select required className={`${workspaceField} appearance-none`} value={bindDirId} disabled={busy || !bindNodeId} onChange={e => setBindDirId(e.target.value)}><option value=""></option>{bindWorkdirs.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select>
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium">{l('accessPermission')}
+            <select className={workspaceField} value={bindAccess} disabled={busy} onChange={e => setBindAccess(e.target.value as 'write' | 'read')}><option value="write">{l('accessWrite')}</option><option value="read">{l('accessRead')}</option></select>
+          </label>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setBindOpen(false)}>{l('cancel')}</Button>
+            <Button type="submit" disabled={busy || stale || !bindNodeId || !bindDirId}>{l('saveBinding')}</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   </section>;
 }
