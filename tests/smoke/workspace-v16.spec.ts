@@ -226,12 +226,16 @@ test('space settings manage members by role through their own APIs', async ({pag
   });
   page.on('dialog', dialog => dialog.accept());
   const settings = await openSettings(page);
-  await expect(settings.locator('article')).toHaveCount(2);
-  await settings.locator('article').getByLabel('Role', {exact: true}).selectOption('admin');
+  await expect(settings.getByRole('heading', {name: 'Members', exact: true})).toBeVisible();
+  await expect(settings.locator('tbody tr')).toHaveCount(2);
+  await expect(settings.locator('tbody tr').first()).toContainText('Owner');
+  await settings.getByRole('button', {name: 'member-user', exact: true}).click();
+  await settings.getByLabel('Role', {exact: true}).selectOption('admin');
   await expect.poll(() => requests.find(r => r.path === '/workspace/member/update-role')?.body).toEqual({id: 'm2', role: 'admin'});
   await settings.getByRole('button', {name: 'Remove', exact: true}).click();
-  await expect(settings.locator('article')).toHaveCount(1);
+  await expect(settings.locator('tbody tr')).toHaveCount(1);
   expect(requests.find(r => r.path === '/workspace/member/delete/m2')?.method).toBe('DELETE');
+  await settings.getByRole('button', {name: 'Invite member', exact: true}).click();
   await settings.getByLabel('User ID', {exact: true}).fill('new-user');
   await settings.getByRole('button', {name: 'Add member', exact: true}).click();
   await expect.poll(() => requests.find(r => r.path === '/workspace/member/create')?.body).toEqual({workspaceId: 'w', userId: 'new-user', role: 'member'});
@@ -240,10 +244,11 @@ test('space settings manage members by role through their own APIs', async ({pag
 for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) test(`settings cannot manage members without workspace management ${JSON.stringify(extras)}`, async ({page}) => {
   const requests = await mock(page, path => path === '/workspace/get/w' ? space('w', extras) : path === '/workspace/member/list' ? [{id: 'm2', workspaceId: 'w', userId: 'member-user', role: 'member'}] : undefined);
   const settings = await openSettings(page);
-  await expect(settings.locator('article')).toHaveCount(1);
+  await expect(settings.locator('tbody tr')).toHaveCount(1);
   await expect(settings.getByLabel('Role', {exact: true})).toHaveCount(0);
   await expect(settings.getByRole('button', {name: 'Remove', exact: true})).toHaveCount(0);
   await expect(settings.getByRole('button', {name: 'Add member', exact: true})).toHaveCount(0);
+  await expect(settings.getByRole('button', {name: 'Invite member', exact: true})).toHaveCount(0);
   expect(requests.some(r => r.method !== 'GET')).toBe(false);
 });
 

@@ -49,7 +49,7 @@ export function WorkspacePage({api, client, accountKey, renderSession, onLockCha
     case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
     case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
-    case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})}/>; break;
+    case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId}/>; break;
     default: view = <SpaceHome api={api}/>;
   }
   return <WorkspaceShell api={api} route={route}>{view}</WorkspaceShell>;

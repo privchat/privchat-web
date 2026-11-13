@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Member, Workspace, WorkspaceApi } from './api';
 import { usePageLabels } from './page-labels';
 import { workspaceField } from './project-management';
 import { roomFailure } from './room-observer';
+import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh } from './shell';
 
-export function SpaceSettings({api, workspaceId, onBack}: {api: WorkspaceApi; workspaceId: string; onBack: () => void}) {
+export function SpaceSettings({api, workspaceId}: {api: WorkspaceApi; workspaceId: string}) {
   const l = usePageLabels();
   const [space, setSpace] = useState<Workspace>();
   const [members, setMembers] = useState<Member[]>([]);
+  const [invite, setInvite] = useState(false);
+  const [manageId, setManageId] = useState<string>();
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState('member');
   const [busy, setBusy] = useState(false);
@@ -16,6 +20,7 @@ export function SpaceSettings({api, workspaceId, onBack}: {api: WorkspaceApi; wo
   const [denied, setDenied] = useState(false);
   const live = useRef(true);
   const manager = !!space && space.archived === 0 && ['owner', 'admin'].includes(space.myRole);
+  const managed = members.find(m => m.id === manageId);
   const roleLabel = (value: string) => value === 'owner' ? l('roleOwner') : value === 'admin' ? l('roleAdmin') : l('roleMember');
   async function load() {
     setBusy(true);
@@ -35,26 +40,34 @@ export function SpaceSettings({api, workspaceId, onBack}: {api: WorkspaceApi; wo
     setBusy(true); setError(false);
     try {await action(); await load();} catch {if (live.current) setError(true);} finally {if (live.current) setBusy(false);}
   }
-  return <section data-testid="space-settings" className="space-y-3">
-    <header className="flex items-center justify-between gap-2"><Button variant="ghost" disabled={busy} onClick={onBack}>{l('back')}</Button><h2 className="font-semibold">{l('settings')}</h2><Button variant="outline" disabled={busy} onClick={() => void load()}>{l('reload')}</Button></header>
+  return <section data-testid="space-settings">
+    <WsPageHeader title={l('membersTitle')} subtitle={l('membersSub')} actions={manager && <Button size="sm" disabled={busy} onClick={() => {setInvite(v => !v); setManageId(undefined);}}><Plus className="h-4 w-4" />{l('inviteMember')}</Button>} />
     {error && <p role="alert">{l(denied ? 'accessDenied' : 'error')}</p>}
-    {space && <p className="text-sm text-muted-foreground">{space.name}{space.archived !== 0 && ` · ${l('archived')}`}</p>}
-    <h3>{l('members')}</h3>
-    {!members.length && <p role="status">{l(busy ? 'loading' : 'empty')}</p>}
-    {members.map(member => <article key={member.id} className="flex flex-wrap items-center gap-2 rounded border p-3">
-      <span className="min-w-0 flex-1 break-words">{member.userId}</span>
-      {manager && member.role !== 'owner'
-        ? <select aria-label={l('memberRole')} className={workspaceField} disabled={busy} value={member.role} onChange={e => void act(() => api.updateMemberRole(member.id, e.target.value))}>
-            <option value="member">{l('roleMember')}</option><option value="admin">{l('roleAdmin')}</option>
-          </select>
-        : <span className="text-sm text-muted-foreground">{roleLabel(member.role)}</span>}
-      {manager && member.role !== 'owner' && <Button variant="outline" disabled={busy} onClick={() => {if (window.confirm(l('removeMemberConfirm'))) void act(() => api.removeMember(member.id));}}>{l('removeMember')}</Button>}
-    </article>)}
-    {manager && <form className="space-y-2 rounded border p-3" onSubmit={e => {e.preventDefault(); if (!userId.trim()) return; void act(async () => {await api.addMember(workspaceId, userId.trim(), role); setUserId('');});}}>
-      <h4>{l('addMember')}</h4>
-      <label>{l('userId')}<input className={workspaceField} required value={userId} onChange={e => setUserId(e.target.value)}/></label>
-      <label>{l('memberRole')}<select className={workspaceField} value={role} onChange={e => setRole(e.target.value)}><option value="member">{l('roleMember')}</option><option value="admin">{l('roleAdmin')}</option></select></label>
-      <Button type="submit" disabled={busy || !userId.trim()}>{l('addMember')}</Button>
+    {manager && invite && <form className="space-y-3 rounded border p-3" onSubmit={e => {e.preventDefault(); if (!userId.trim()) return; void act(async () => {await api.addMember(workspaceId, userId.trim(), role); setUserId(''); setInvite(false);});}}>
+      <h3 className="font-semibold">{l('inviteMember')}</h3>
+      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('userId')}</span><input className={workspaceField} required value={userId} onChange={e => setUserId(e.target.value)}/></label>
+      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('memberRole')}</span><select aria-label={l('memberRole')} className={workspaceField} value={role} onChange={e => setRole(e.target.value)}><option value="member">{l('roleMember')}</option><option value="admin">{l('roleAdmin')}</option></select></label>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" type="button" disabled={busy} onClick={() => setInvite(false)}>{l('cancel')}</Button>
+        <Button type="submit" disabled={busy || !userId.trim()}>{l('addMember')}</Button>
+      </div>
     </form>}
+    {manager && managed && <section className="space-y-3 rounded border p-3" aria-label={l('manage')}>
+      <h3 className="font-semibold">{managed.userId}</h3>
+      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('memberRole')}</span><select aria-label={l('memberRole')} className={workspaceField} disabled={busy} value={managed.role} onChange={e => void act(() => api.updateMemberRole(managed.id, e.target.value))}><option value="member">{l('roleMember')}</option><option value="admin">{l('roleAdmin')}</option></select></label>
+      <div className="flex gap-2">
+        <Button variant="destructive" disabled={busy} onClick={() => {if (window.confirm(l('removeMemberConfirm'))) void act(async () => {await api.removeMember(managed.id); setManageId(undefined);});}}>{l('removeMember')}</Button>
+        <Button variant="ghost" disabled={busy} onClick={() => setManageId(undefined)}>{l('cancel')}</Button>
+      </div>
+    </section>}
+    {!members.length && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
+    {members.length > 0 && <WsTable head={<><WsTh>{l('members')}</WsTh><WsTh>{l('memberRole')}</WsTh></>}>
+      {members.map(member => <tr key={member.id} className="hover:bg-accent/40">
+        <WsTd>{manager && member.role !== 'owner'
+          ? <button type="button" className="font-semibold hover:underline focus-visible:underline" onClick={() => {setManageId(member.id); setInvite(false);}}>{member.userId}</button>
+          : <span className="font-semibold">{member.userId}</span>}</WsTd>
+        <WsTd><StatusPill><span aria-hidden="true" className="h-[3px] w-[3px] rounded-full bg-current" />{roleLabel(member.role)}</StatusPill></WsTd>
+      </tr>)}
+    </WsTable>}
   </section>;
 }
