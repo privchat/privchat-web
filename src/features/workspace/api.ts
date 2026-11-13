@@ -3,6 +3,8 @@ import { getActiveAccessToken } from '@/lib/active-access-token';
 import { getPlatformBaseUrl } from '@/lib/account-mode';
 import { normalizePlatformBaseUrl } from '@/lib/platform-base-url';
 import { PlatformApiError } from '@/lib/platform-errors';
+import { isSessionExpiredError } from '@/lib/platform-error-message';
+import { refreshActivePlatformToken } from '@/lib/auth-refresh-provider';
 
 export interface Workspace { id: string; name: string; description: string; archived: number; myRole: string }
 export interface WorkItem { id: string; workspaceId: string; title: string; description: string; acceptance?: string; projectId?: string | null; status: string; version: number; createdAt?: number; closedAt?: number | null }
@@ -82,14 +84,35 @@ export class WorkspaceApi {
     if (!token) throw new PlatformApiError(401, 'NOT_AUTHENTICATED');
     return token;
   }
+  /** Run an authed request; on an auth rejection (access token expired
+   *  after its 1h TTL) refresh once — single-flight across concurrent
+   *  401s — and retry with the new token. The SDK-driven refresh only
+   *  fires on SDK RPC failures, so without this the workspace HTTP path
+   *  stays permanently 401 while the SDK is idle. A terminal refresh
+   *  failure surfaces the original auth error. */
+  private async authed<T>(run: (token: string) => Promise<T>): Promise<T> {
+    const token = this.access();
+    try {
+      return await run(token);
+    } catch (err) {
+      if (!isSessionExpiredError(err)) throw err;
+      let fresh: string;
+      try {
+        fresh = await refreshActivePlatformToken();
+      } catch {
+        throw err;
+      }
+      return await run(fresh);
+    }
+  }
   async get<T>(path: string): Promise<T> {
-    return requireData(await getEnvelope<T>(`${this.base}${path}`, this.access()), path);
+    return this.authed(async (token) => requireData(await getEnvelope<T>(`${this.base}${path}`, token), path));
   }
   async post<T>(path: string, body: unknown): Promise<T> {
-    return requireData(await postAuthedEnvelope<T>(`${this.base}${path}`, this.access(), body), path);
+    return this.authed(async (token) => requireData(await postAuthedEnvelope<T>(`${this.base}${path}`, token, body), path));
   }
   async put<T>(path: string, body: unknown): Promise<T> {
-    return requireData(await putEnvelope<T>(`${this.base}${path}`, this.access(), body), path);
+    return this.authed(async (token) => requireData(await putEnvelope<T>(`${this.base}${path}`, token, body), path));
   }
   grantNode(nodeId: string, capabilities: string[]) { return this.post<Node>('/agent/nodes/grant', {nodeId, capabilities}); }
   revokeNode(nodeId: string) { return this.post<Node>('/agent/nodes/revoke', {nodeId}); }
@@ -100,7 +123,7 @@ export class WorkspaceApi {
   members(workspaceId: string) { return this.get<Member[]>(`/workspace/member/list?workspaceId=${encodeURIComponent(workspaceId)}`); }
   addMember(workspaceId: string, userId: string, role: string) { return this.post<Member>('/workspace/member/create', {workspaceId, userId, role}); }
   updateMemberRole(id: string, role: string) { return this.put<Member>('/workspace/member/update-role', {id, role}); }
-  async removeMember(id: string) { await deleteAuthedEnvelope<unknown>(`${this.base}/workspace/member/delete/${encodeURIComponent(id)}`, this.access()); }
+  async removeMember(id: string) { await this.authed((token) => deleteAuthedEnvelope<unknown>(`${this.base}/workspace/member/delete/${encodeURIComponent(id)}`, token)); }
   projects(workspaceId: string) { return this.get<Project[]>(`/workspace/project/list?workspaceId=${encodeURIComponent(workspaceId)}`); }
   projectPage(pageNo = 1, workspaceId?: string) { return this.get<Page<Project>>(`/workspace/project/page?pageNo=${pageNo}&pageSize=20${workspaceId ? `&workspaceId=${encodeURIComponent(workspaceId)}` : ''}`); }
   project(id: string) { return this.get<Project>(`/workspace/project/get/${encodeURIComponent(id)}`); }
@@ -120,7 +143,7 @@ export class WorkspaceApi {
       ...(body.reviewerEmployeeId ? {reviewerEmployeeId: body.reviewerEmployeeId} : {}),
       ...(body.version === undefined ? {} : {version: body.version})});
   }
-  async deleteProjectBinding(id: string) { await deleteAuthedEnvelope<unknown>(`${this.base}/workspace/project/binding/delete?${new URLSearchParams({id})}`, this.access()); }
+  async deleteProjectBinding(id: string) { await this.authed((token) => deleteAuthedEnvelope<unknown>(`${this.base}/workspace/project/binding/delete?${new URLSearchParams({id})}`, token)); }
   workspaceEmployees(workspaceId: string, projectId?: string) { return this.get<WorkspaceEmployee[]>(`/workspace/employee/list?workspaceId=${encodeURIComponent(workspaceId)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); }
   employeeCandidates(workspaceId: string, projectId?: string) { return this.get<WorkspaceEmployee[]>(`/workspace/employee/candidates?workspaceId=${encodeURIComponent(workspaceId)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); }
   employeePage(workspaceId: string, projectId?: string, cursor?: string) {
@@ -130,7 +153,7 @@ export class WorkspaceApi {
     return this.get<WorkspaceEmployeePage>(`/workspace/employee/page?${query}`);
   }
   associateEmployee(workspaceId: string, employeeId: string) { return this.post<WorkspaceEmployee>('/workspace/employee/create', {workspaceId, employeeId}); }
-  async removeEmployeeAssociation(id: string) { await deleteAuthedEnvelope<unknown>(`${this.base}/workspace/employee/delete/${encodeURIComponent(id)}`, this.access()); }
+  async removeEmployeeAssociation(id: string) { await this.authed((token) => deleteAuthedEnvelope<unknown>(`${this.base}/workspace/employee/delete/${encodeURIComponent(id)}`, token)); }
   async tasks(view: 'active_tasks_v1' | 'history_tasks_v1', scope: TaskScope, cursor?: string): Promise<TaskFeedPage> {
     if (view === 'active_tasks_v1' && !scope.workspaceId) throw new Error('Active tasks require a workspace');
     if (scope.projectId && scope.unprojected) throw new Error('Conflicting project filters');

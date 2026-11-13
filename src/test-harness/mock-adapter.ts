@@ -1198,6 +1198,21 @@ export interface TestHarnessControls {
       platform_base_url?: string;
     }>
   >;
+  /** Exercise the workspace HTTP auth-refresh recovery path end to end:
+   *  force PLATFORM mode + `baseUrl`, seed a platform session, reset the
+   *  cached provider, then run `WorkspaceApi.get(path)`. Specs `page.route()`
+   *  the workspace endpoint (401 then 200) and `/auth/refresh-token` to prove
+   *  the request refreshes once and retries with the new token. Restores the
+   *  prior forced mode + session afterwards so nothing leaks between tests. */
+  workspaceAuthRefreshRetry(args: {
+    baseUrl: string;
+    url: string;
+    userId: string;
+    deviceId: string;
+    accessToken: string;
+    refreshToken: string;
+    path: string;
+  }): Promise<PlatformInvokeResult<unknown>>;
   /** R8.4b — construct `PlatformRequiredActionsProvider(baseUrl, getToken)`
    *  and call `list()`. Specs mock `${baseUrl}/account/required-actions`. */
   platformListRequiredActions(args: {
@@ -1762,6 +1777,45 @@ export function installTestControls(): TestHarnessControls {
         };
         return provider.refreshToken(session);
       });
+    },
+    async workspaceAuthRefreshRetry(args) {
+      const w = window as unknown as {
+        __privchatForcedMode?: string;
+        __privchatForcedPlatformBaseUrl?: string;
+      };
+      const prevMode = w.__privchatForcedMode;
+      const prevBase = w.__privchatForcedPlatformBaseUrl;
+      w.__privchatForcedMode = 'platform';
+      w.__privchatForcedPlatformBaseUrl = args.baseUrl;
+      try {
+        return await runPlatformInvoke(async () => {
+          const { __resetAuthProviderForTests } = await import(
+            '@/lib/account-auth-provider'
+          );
+          __resetAuthProviderForTests();
+          const { saveSession } = await import('@/lib/session-storage');
+          await saveSession({
+            url: args.url,
+            user_id: args.userId,
+            access_token: args.accessToken,
+            device_id: args.deviceId,
+            account_mode: 'platform',
+            platform_base_url: args.baseUrl,
+            refresh_token: args.refreshToken,
+          });
+          const { WorkspaceApi } = await import('@/features/workspace/api');
+          return await new WorkspaceApi(args.baseUrl).get<unknown>(args.path);
+        });
+      } finally {
+        w.__privchatForcedMode = prevMode;
+        w.__privchatForcedPlatformBaseUrl = prevBase;
+        const { __resetAuthProviderForTests } = await import(
+          '@/lib/account-auth-provider'
+        );
+        __resetAuthProviderForTests();
+        const { clearSession } = await import('@/lib/session-storage');
+        clearSession();
+      }
     },
     async platformListRequiredActions(args) {
       return runPlatformInvoke(async () => {

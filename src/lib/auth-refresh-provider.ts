@@ -96,3 +96,41 @@ export function buildAuthRefresh(client: PrivchatClient): AuthRefreshConfig {
     },
   };
 }
+
+let inflightPlatformRefresh: Promise<string> | null = null;
+
+/** Single-flight refresh of the active PLATFORM session's access token,
+ *  independent of the SDK connection. The workspace HTTP path
+ *  (`WorkspaceApi`) calls this when a request is rejected with an auth
+ *  error: the SDK-driven refresh above only fires on SDK RPC/reconnect
+ *  failures, so an idle SDK would otherwise leave workspace HTTP
+ *  permanently 401 once the 1h access token expires. Concurrent 401s
+ *  share one refresh round-trip. Persists the rotated tokens (so
+ *  `getActiveAccessToken()` reads the new one) and returns it. Throws
+ *  `SessionExpiredError` on terminal failure — the caller surfaces the
+ *  original auth error. */
+export function refreshActivePlatformToken(): Promise<string> {
+  if (inflightPlatformRefresh === null) {
+    inflightPlatformRefresh = doRefreshActivePlatformToken().finally(() => {
+      inflightPlatformRefresh = null;
+    });
+  }
+  return inflightPlatformRefresh;
+}
+
+async function doRefreshActivePlatformToken(): Promise<string> {
+  const current = loadSession();
+  if (current === null) {
+    throw new SessionExpiredError('no active session to refresh');
+  }
+  if (sessionAccountMode(current) !== 'platform') {
+    throw new SessionExpiredError('active session is not platform mode');
+  }
+  const provider = await getAuthProvider();
+  if (typeof provider.refreshToken !== 'function') {
+    throw new SessionExpiredError('platform provider does not support refresh');
+  }
+  const updated = await provider.refreshToken(current);
+  await persistSessionForAccount(updated);
+  return updated.access_token;
+}

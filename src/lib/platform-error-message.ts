@@ -10,7 +10,7 @@
 // NOT for PrivChat IM-server errors (RpcError / protocol ErrorCode);
 // those go through `features/chat/error-text.ts`.
 
-import { PlatformApiError, type PlatformFieldError } from './platform-errors';
+import { PlatformApiError, PlatformHttpError, type PlatformFieldError } from './platform-errors';
 
 export interface PlatformErrorTranslator {
   (key: string, opts?: Record<string, unknown>): string;
@@ -331,6 +331,17 @@ export function describePlatformError(
   const copy = resolvePlatformError(err);
   if (copy === null) return null;
   return copy.params === undefined ? t(copy.key) : t(copy.key, copy.params);
+}
+
+/** True when a platform error means the access token is no longer
+ *  accepted (expired / revoked / absent): the recovery is a token
+ *  refresh, or a fresh sign-in when refresh is terminal. Reuses the
+ *  session-expired classification (machine code + numeric fallback);
+ *  a bare HTTP 401 with a non-envelope body (e.g. gateway) counts too. */
+export function isSessionExpiredError(err: unknown): boolean {
+  if (err instanceof PlatformHttpError) return err.status === 401;
+  const copy = resolvePlatformError(err);
+  return copy !== null && copy.key === K.sessionExpired;
 }
 
 /** QR scene codes after which the only recovery is a fresh QR code. */
