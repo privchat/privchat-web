@@ -94,7 +94,7 @@ test('project filter starts fresh tail; readonly disables creation but keeps res
 });
 test('project edit submits version, description and round-end rules without legacy fields', async ({page}) => {
   const requests = await mock(page); await openProjects(page);
-  await page.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByRole('button', {name: 'Project', exact: true}).click();
   await expect(page.getByTestId('project-detail')).toBeVisible();
   await page.getByLabel('Name', {exact: true}).fill('Renamed');
   await page.getByLabel('Round-end steps', {exact: true}).fill('commit and push');
@@ -109,7 +109,7 @@ async function openProjects(page: Page) {
 }
 async function openProjectDetail(page: Page) {
   await openProjects(page);
-  await page.getByRole('button', {name: 'Edit', exact: true}).click();
+  await page.getByRole('button', {name: 'Project', exact: true}).click();
   await expect(page.getByTestId('project-detail')).toBeVisible();
 }
 async function openSettings(page: Page) {
@@ -355,6 +355,7 @@ test('project task list reads all permitted spaces without reverse workspace loo
     {...row('22', 'done'), item: {...item('22', 'done'), projectId: 'p'}},
   ], false) : undefined);
   await openProjects(page); const start = requests.length;
+  await page.getByRole('button', {name: 'Project', exact: true}).click();
   await page.getByRole('button', {name: 'Task records', exact: true}).click();
   const history = page.getByTestId('task-history'); await expect(history.getByTestId('task-card')).toHaveCount(2);
   const read = requests.filter(r => r.path === '/workspace/activity/page').at(-1)!;

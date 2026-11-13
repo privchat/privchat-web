@@ -39,7 +39,7 @@ export function WorkspacePage({api, client, accountKey, renderSession, onLockCha
   }, [accountKey]);
   let view: ReactNode;
   switch (route.view) {
-    case 'projects': view = <ProjectList key={workspaceHref(route)} api={api} workspaceId={route.workspaceId} renderSession={renderSession}/>; break;
+    case 'projects': view = <ProjectList key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>; break;
     case 'create-project': view = <ProjectCreate key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>; break;
     case 'project': view = <ProjectDetail key={route.projectId} api={api} projectId={route.projectId} renderSession={renderSession}/>; break;
     case 'devices': view = <DevicePage api={api}/>; break;

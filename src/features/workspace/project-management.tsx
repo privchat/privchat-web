@@ -10,13 +10,11 @@ import { roomFailure } from './room-observer';
 import { WsPageHeader, WsTable, WsTd, WsTh } from './shell';
 export const workspaceField = 'block w-full min-w-0 rounded-[7px] border bg-background px-2.5 py-2 text-sm';
 
-export function ProjectList({api, workspaceId, renderSession}: {api: WorkspaceApi; workspaceId?: string; renderSession?: (id: string) => ReactNode}) {
+export function ProjectList({api, workspaceId}: {api: WorkspaceApi; workspaceId?: string}) {
   const l = usePageLabels();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [spaces, setSpaces] = useState<Workspace[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [history, setHistory] = useState<Project>();
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
@@ -30,35 +28,24 @@ export function ProjectList({api, workspaceId, renderSession}: {api: WorkspaceAp
     finally {if (generation.current === current) setBusy(false);}
   }
   useEffect(() => {void load(); return () => {generation.current++;};}, [api, workspaceId]);
-  useEffect(() => {void api.list().then(rows => setSpaces(rows)).catch(() => {});}, [api]);
-  if (history) return <TaskHistory api={api} scope={{projectId: history.id}} projects={[history]} renderSession={renderSession} onBack={() => setHistory(undefined)}/>;
   return <section data-testid="project-management">
-    <WsPageHeader title={l('projectsTitle')} subtitle={l('projectsSub')} actions={<>
-      <Button variant="ghost" size="sm" disabled={busy} onClick={() => navigateWorkspace(workspaceId ? {view: 'space', spaceId: workspaceId} : {view: 'home'})}>{l('back')}</Button>
-      <Button variant="outline" size="sm" disabled={busy} onClick={() => void load()}>{l('reload')}</Button>
+    <WsPageHeader title={l('projectsTitle')} subtitle={l('projectsSub')} actions={
       <Button size="sm" disabled={busy} onClick={() => navigateWorkspace({view: 'create-project', workspaceId})}><Plus className="h-4 w-4" />{l('createProject')}</Button>
-    </>} />
+    } />
     {error && <p role="alert">{l('error')}</p>}
-    <div className="mb-4"><select aria-label={l('workspace')} className={`${workspaceField} w-auto`} value={workspaceId ?? ''} onChange={e => navigateWorkspace({view: 'projects', workspaceId: e.target.value || undefined})}><option value="">{l('allProjects')}</option>{spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
     {!projects.length && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
     {projects.length > 0 && <WsTable head={<>
-      <WsTh>{l('project')}</WsTh><WsTh>{l('description')}</WsTh><WsTh>{l('colMyDirs')}</WsTh><WsTh className="text-right">{l('manage')}</WsTh>
+      <WsTh>{l('project')}</WsTh><WsTh>{l('description')}</WsTh><WsTh>{l('colMyDirs')}</WsTh>
     </>}>
       {projects.map(project => {
         const mine = project.bindings.find(b => b.mine);
         return <tr key={project.id} className="hover:bg-accent/40">
-          <WsTd className="font-medium">{project.name}{project.archived !== 0 && <span className="ml-2 text-xs text-muted-foreground">{l('archived')}</span>}</WsTd>
-          <WsTd className="text-muted-foreground">
-            {project.description && <span className="block whitespace-pre-wrap break-words">{project.description}</span>}
-            <span className="block text-xs">{spaces.find(s => s.id === project.workspaceId)?.name ?? project.workspaceId} · v{project.version}</span>
+          <WsTd className="max-w-0">
+            <button type="button" className="break-words text-left font-semibold hover:underline focus-visible:underline" onClick={() => navigateWorkspace({view: 'project', projectId: project.id})}>{project.name}</button>
+            {project.archived !== 0 && <span className="ml-2 text-xs text-muted-foreground">{l('archived')}</span>}
           </WsTd>
-          <WsTd>{mine ? mine.directories.length : '—'}</WsTd>
-          <WsTd className="text-right">
-            <span className="inline-flex gap-2">
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => navigateWorkspace({view: 'project', projectId: project.id})}>{l('edit')}</Button>
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => setHistory(project)}>{l('taskRecords')}</Button>
-            </span>
-          </WsTd>
+          <WsTd>{project.description ? <span className="block whitespace-pre-wrap break-words">{project.description}</span> : <span className="text-muted-foreground">—</span>}</WsTd>
+          <WsTd className="whitespace-nowrap">{mine ? mine.directories.length : 0}{l('dirCountUnit')}</WsTd>
         </tr>;
       })}
     </WsTable>}
