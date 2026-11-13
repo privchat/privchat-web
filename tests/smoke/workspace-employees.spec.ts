@@ -246,19 +246,19 @@ test('binding candidates dedupe native sessions and exclude every busy, unknown 
   expect(result).toEqual(['latest']);
 });
 
-test('executor selection requires grant and current availability; missing capability reports fail closed', async ({page}) => {
+test('executor selection lists device-available executors regardless of grant; unavailable, revoked and missing fail closed', async ({page}) => {
   await page.goto('/');
   const result = await page.evaluate(async node => {
     const {availableEmployeeExecutors} = await import('/src/features/workspace/employees.tsx');
     return [
       availableEmployeeExecutors(node),
-      availableEmployeeExecutors({...node, granted: ['agent.codex']}),
-      availableEmployeeExecutors({...node, capabilities: [{name: 'agent.codex', available: false}, {name: 'agent.claude', available: true}]}),
-      availableEmployeeExecutors({...node, capabilities: undefined}),
       availableEmployeeExecutors({...node, granted: []}),
+      availableEmployeeExecutors({...node, capabilities: [{name: 'agent.codex', available: false}, {name: 'agent.claude', available: true}]}),
+      availableEmployeeExecutors({...node, revokedCapabilities: ['agent.codex']}),
+      availableEmployeeExecutors({...node, capabilities: undefined}),
     ];
   }, nodes[0]);
-  expect(result).toEqual([['codex', 'claude'], ['codex'], ['claude'], [], []]);
+  expect(result).toEqual([['codex', 'claude'], ['codex', 'claude'], ['claude'], ['claude'], []]);
 });
 
 test('selecting an employee opens its existing console without sending or starting work', async ({page}) => {

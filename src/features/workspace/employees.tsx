@@ -24,8 +24,11 @@ export function employeeExecutor(capability: string): string | undefined {
   if (capability === 'agent.codex') return 'codex';
   return undefined;
 }
+// Executors the device reports available, minus any the owner revoked. Choosing one grants its
+// capability on create (WEEY_AGENT_SPEC §9.2.1), so a freshly paired node offers them before any grant.
 export function availableEmployeeExecutors(node?: Node): string[] {
-  return [...new Set(node?.granted.flatMap(c => node.capabilities?.some(a => a.name === c && a.available === true) ? employeeExecutor(c) ?? [] : []) ?? [])];
+  const revoked = new Set(node?.revokedCapabilities ?? []);
+  return [...new Set((node?.capabilities ?? []).flatMap(c => c.available === true && !revoked.has(c.name) ? employeeExecutor(c.name) ?? [] : []))];
 }
 export function bindingCandidates(rows: Execution[], nodeId: string, executor: string, employees: Employee[], model: string, workdirBindingId: string): Execution[] {
   const sessions = new Map<string, Execution[]>();
