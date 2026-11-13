@@ -267,8 +267,14 @@ test('space settings manage members by role through their own APIs', async ({pag
   await expect(settings.locator('tbody tr')).toHaveCount(1);
   expect(requests.find(r => r.path === '/workspace/member/delete/m2')?.method).toBe('DELETE');
   await settings.getByRole('button', {name: 'Invite member', exact: true}).click();
-  await settings.getByLabel('User ID', {exact: true}).fill('new-user');
-  await settings.getByRole('button', {name: 'Add member', exact: true}).click();
+  const inviteDialog = page.getByRole('dialog');
+  await expect(inviteDialog.getByRole('heading', {name: 'Invite member', exact: true})).toBeVisible();
+  await expect(inviteDialog).toContainText('Send the invitation to space collaborators.');
+  await inviteDialog.getByLabel('Account', {exact: true}).fill('new-user');
+  await inviteDialog.getByRole('button', {name: 'Preview invitation', exact: true}).click();
+  await expect(inviteDialog.getByRole('heading', {name: 'Preview invitation', exact: true})).toBeVisible();
+  await expect(inviteDialog).toContainText('new-user');
+  await inviteDialog.getByRole('button', {name: 'Send invitation', exact: true}).click();
   await expect.poll(() => requests.find(r => r.path === '/workspace/member/create')?.body).toEqual({workspaceId: 'w', userId: 'new-user', role: 'member'});
 });
 
@@ -278,7 +284,7 @@ for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) te
   await expect(settings.locator('tbody tr')).toHaveCount(1);
   await expect(settings.getByLabel('Role', {exact: true})).toHaveCount(0);
   await expect(settings.getByRole('button', {name: 'Remove', exact: true})).toHaveCount(0);
-  await expect(settings.getByRole('button', {name: 'Add member', exact: true})).toHaveCount(0);
+  await expect(settings.getByRole('button', {name: 'Preview invitation', exact: true})).toHaveCount(0);
   await expect(settings.getByRole('button', {name: 'Invite member', exact: true})).toHaveCount(0);
   expect(requests.some(r => r.method !== 'GET')).toBe(false);
 });

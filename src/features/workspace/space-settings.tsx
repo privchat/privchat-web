@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Member, Workspace, WorkspaceApi } from './api';
 import { usePageLabels } from './page-labels';
 import { workspaceField } from './project-management';
@@ -12,6 +13,7 @@ export function SpaceSettings({api, workspaceId}: {api: WorkspaceApi; workspaceI
   const [space, setSpace] = useState<Workspace>();
   const [members, setMembers] = useState<Member[]>([]);
   const [invite, setInvite] = useState(false);
+  const [preview, setPreview] = useState(false);
   const [manageId, setManageId] = useState<string>();
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState('member');
@@ -41,17 +43,36 @@ export function SpaceSettings({api, workspaceId}: {api: WorkspaceApi; workspaceI
     try {await action(); await load();} catch {if (live.current) setError(true);} finally {if (live.current) setBusy(false);}
   }
   return <section data-testid="space-settings">
-    <WsPageHeader title={l('membersTitle')} subtitle={l('membersSub')} actions={manager && <Button size="sm" disabled={busy} onClick={() => {setInvite(v => !v); setManageId(undefined);}}><Plus className="h-4 w-4" />{l('inviteMember')}</Button>} />
+    <WsPageHeader title={l('membersTitle')} subtitle={l('membersSub')} actions={manager && <Button size="sm" disabled={busy} onClick={() => {setUserId(''); setRole('member'); setPreview(false); setInvite(true); setManageId(undefined);}}><Plus className="h-4 w-4" />{l('inviteMember')}</Button>} />
     {error && <p role="alert">{l(denied ? 'accessDenied' : 'error')}</p>}
-    {manager && invite && <form className="space-y-3 rounded border p-3" onSubmit={e => {e.preventDefault(); if (!userId.trim()) return; void act(async () => {await api.addMember(workspaceId, userId.trim(), role); setUserId(''); setInvite(false);});}}>
-      <h3 className="font-semibold">{l('inviteMember')}</h3>
-      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('userId')}</span><input className={workspaceField} required value={userId} onChange={e => setUserId(e.target.value)}/></label>
-      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('memberRole')}</span><select aria-label={l('memberRole')} className={workspaceField} value={role} onChange={e => setRole(e.target.value)}><option value="member">{l('roleMember')}</option><option value="admin">{l('roleAdmin')}</option></select></label>
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" type="button" disabled={busy} onClick={() => setInvite(false)}>{l('cancel')}</Button>
-        <Button type="submit" disabled={busy || !userId.trim()}>{l('addMember')}</Button>
-      </div>
-    </form>}
+    {manager && <Dialog open={invite} onOpenChange={open => {if (!busy) {setInvite(open); if (!open) setPreview(false);}}}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{l(preview ? 'previewInvite' : 'inviteMember')}</DialogTitle>
+          <DialogDescription>{l('inviteMemberHint')}</DialogDescription>
+        </DialogHeader>
+        {preview ? <form className="space-y-4" onSubmit={e => {e.preventDefault(); if (!userId.trim()) return; void act(async () => {await api.addMember(workspaceId, userId.trim(), role); setUserId(''); setPreview(false); setInvite(false);});}}>
+          <div className="grid gap-1.5 text-sm font-medium">{l('account')}
+            <p className="break-words rounded-[7px] border bg-background px-2.5 py-2 text-sm font-normal">{userId.trim()}</p>
+          </div>
+          <label className="grid gap-1.5 text-sm font-medium">{l('memberRole')}
+            <select aria-label={l('memberRole')} className={workspaceField} value={role} disabled={busy} onChange={e => setRole(e.target.value)}><option value="member">{l('roleMember')}</option><option value="admin">{l('roleAdmin')}</option></select>
+          </label>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setPreview(false)}>{l('back')}</Button>
+            <Button type="submit" disabled={busy || !userId.trim()}>{l('sendInvite')}</Button>
+          </DialogFooter>
+        </form> : <form className="space-y-4" onSubmit={e => {e.preventDefault(); if (userId.trim()) setPreview(true);}}>
+          <label className="grid gap-1.5 text-sm font-medium">{l('account')}
+            <input autoFocus className={`${workspaceField} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background`} required value={userId} disabled={busy} onChange={e => setUserId(e.target.value)}/>
+          </label>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setInvite(false)}>{l('cancel')}</Button>
+            <Button type="submit" disabled={busy || !userId.trim()}>{l('previewInvite')}</Button>
+          </DialogFooter>
+        </form>}
+      </DialogContent>
+    </Dialog>}
     {manager && managed && <section className="space-y-3 rounded border p-3" aria-label={l('manage')}>
       <h3 className="font-semibold">{managed.userId}</h3>
       <label className="block space-y-1.5"><span className="text-sm font-medium">{l('memberRole')}</span><select aria-label={l('memberRole')} className={workspaceField} disabled={busy} value={managed.role} onChange={e => void act(() => api.updateMemberRole(managed.id, e.target.value))}><option value="member">{l('roleMember')}</option><option value="admin">{l('roleAdmin')}</option></select></label>
