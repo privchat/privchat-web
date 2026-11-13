@@ -24,10 +24,13 @@ test('device page pairs, limits grants, preserves unknown grants and reports pen
   });
   await page.evaluate(async () => {const {mountDevicePage} = await import('/src/test-harness/workspace-console.tsx'); mountDevicePage(`${location.origin}/__manage/app`);});
   const p = page.getByTestId('device-page');
-  await p.getByLabel('Pairing code').fill('ABC123');
-  await p.getByRole('button', {name: 'Approve pairing'}).click();
-  await expect(p.getByText('Pairing approved. Waiting for device activation.')).toBeVisible();
-  await p.getByRole('combobox', {name: /^Devices/}).selectOption('2');
+  await p.getByRole('button', {name: 'Add device'}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Pairing code').fill('ABC123');
+  await dialog.getByRole('button', {name: 'Verify device'}).click();
+  await expect(dialog.getByText('Pairing approved. Waiting for device activation.')).toBeVisible();
+  await dialog.getByRole('button', {name: 'Cancel'}).click();
+  await p.getByRole('row', {name: /Laptop/}).click();
   await expect(p.getByRole('checkbox', {name: /unverified/})).toBeDisabled();
   await p.getByRole('checkbox', {name: /agent.claude/}).check();
   await p.getByRole('button', {name: 'Save capabilities'}).click();
@@ -45,7 +48,7 @@ for (const locale of ['en', 'zh-CN', 'vi']) test(`device page mobile and localiz
   await page.route('**/__manage/app/agent/nodes', r => r.fulfill({json: {code: 0, data: [node]}}));
   await page.evaluate(async language => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage(language); const {mountDevicePage} = await import('/src/test-harness/workspace-console.tsx'); mountDevicePage(`${location.origin}/__manage/app`);}, locale);
   const p = page.getByTestId('device-page');
-  await p.getByRole('combobox').selectOption('2');
+  await p.getByRole('row', {name: /Laptop/}).click();
   await expect(p.getByRole('heading', {name: 'Laptop'})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(p).not.toContainText('agentWorkspace.');

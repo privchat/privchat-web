@@ -75,7 +75,7 @@ export function mountNormalWorkspaceConsole(baseUrl: string) {
 export function mountDevicePage(baseUrl: string) {
   const host = document.createElement('div'); document.body.replaceChildren(host);
   host.className = 'workspace-scope mx-auto max-w-3xl p-3';
-  createRoot(host).render(<DevicePage api={new WorkspaceApi(baseUrl, () => 'test')} onBack={() => {}}/>);
+  createRoot(host).render(<DevicePage api={new WorkspaceApi(baseUrl, () => 'test')}/>);
 }
 export function mountAssistantPage(baseUrl: string) {
   const host = document.createElement('div'); document.body.replaceChildren(host);

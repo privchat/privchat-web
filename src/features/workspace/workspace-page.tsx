@@ -42,13 +42,13 @@ export function WorkspacePage({api, client, accountKey, renderSession, onLockCha
     case 'projects': view = <ProjectList key={workspaceHref(route)} api={api} workspaceId={route.workspaceId} renderSession={renderSession}/>; break;
     case 'create-project': view = <ProjectCreate key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>; break;
     case 'project': view = <ProjectDetail key={route.projectId} api={api} projectId={route.projectId} renderSession={renderSession}/>; break;
-    case 'devices': view = <DevicePage api={api} onBack={() => navigateWorkspace({view: 'home'})}/>; break;
+    case 'devices': view = <DevicePage api={api}/>; break;
     case 'create-space': view = <CreateSpace api={api}/>; break;
     case 'space':
     case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId} records={route.view === 'records'}/>; break;
     case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
     case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
-    case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
+    case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})}/>; break;
     default: view = <SpaceHome api={api}/>;
   }
