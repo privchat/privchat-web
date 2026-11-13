@@ -7,7 +7,7 @@ import { isSessionExpiredError } from '@/lib/platform-error-message';
 import { refreshActivePlatformToken } from '@/lib/auth-refresh-provider';
 
 export interface Workspace { id: string; name: string; description: string; archived: number; myRole: string }
-export interface WorkItem { id: string; workspaceId: string; title: string; description: string; acceptance?: string; projectId?: string | null; status: string; version: number; createdAt?: number; closedAt?: number | null }
+export interface WorkItem { id: string; workspaceId: string; title: string; description: string; acceptance?: string; projectId?: string | null; status: string; version: number; createdAt?: number; closedAt?: number | null; createdBy?: string }
 export interface WorkNote { id: string; workItemId: string; kind: string; body: string; artifactRef?: string | null }
 export interface Binding { id: string; nodeId: string; capability: string; revoked: number }
 export interface Execution { executionId: string; nodeId: string; state: string; stateVersion: number; result?: unknown; capability?: string; scope?: {kind: string; ref: string}; nativeSessionId?: string | null; agentId?: string | null; params?: Record<string, unknown>; updatedAt?: number; createdAt?: number }

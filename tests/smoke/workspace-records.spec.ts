@@ -76,6 +76,7 @@ test('feed cards keep business stage independent of execution state and never su
   await expect(feed).not.toContainText('DO NOT GUESS FINAL SUMMARY');
   await expect(feed).not.toContainText(/Latest stage: (running|succeeded|failed|cancelled)/);
   await feed.getByTestId('task-card').nth(1).getByRole('button', {name: 'Task 32', exact: true}).click();
+  await page.getByTestId('task-manage').locator('summary').click(); // The editable work-item panel lives in the collapsed management section.
   await expect(page.getByTestId('work-item-panel').getByRole('heading', {name: 'Task 32'})).toBeVisible();
   expect(writes).toEqual([]);
 });
@@ -94,6 +95,7 @@ test('feed pagination keeps one card per item and the newest version of overlapp
   await expect(feed.getByTestId('task-card').first()).toContainText('Task 31');
   expect(cursors).toEqual([null, '31']);
   await feed.getByTestId('task-card').last().getByRole('button', {name: 'Task 30', exact: true}).click();
+  await page.getByTestId('task-manage').locator('summary').click(); // The editable work-item panel lives in the collapsed management section.
   await expect(page.getByTestId('work-item-panel').getByRole('heading', {name: 'Task 30'})).toBeVisible();
 });
 

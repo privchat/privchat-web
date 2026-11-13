@@ -442,6 +442,7 @@ for (const authorized of [true, false]) test(`default review selection uses the 
     if (path === '/workspace/employee/page') return {items: authorized ? [employee, {...employee, id: 'review-ref', employeeId: 'reviewer', name: 'Reviewer'}] : [employee], nextCursor: null, hasMore: false};
   });
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Task 21', exact: true}).click();
+  await page.getByTestId('task-manage').locator('summary').click(); // Assignment/review live in the collapsed management section.
   const workflow = page.getByTestId('workflow-panel'); const selectDefault = workflow.getByRole('button', {name: 'Default review employee: reviewer', exact: true});
   if (authorized) {
     await expect(selectDefault).toBeEnabled(); await selectDefault.click();

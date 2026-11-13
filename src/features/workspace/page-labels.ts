@@ -40,6 +40,7 @@ const en = {
   colTask: 'Task', colEmployee: 'Employee', colStatus: 'Status', colUpdated: 'Updated', colMyDirs: 'My directories', dirCountUnit: '', colDevice: 'Device', colSystem: 'System', colLastOnline: 'Last online', colExecutor: 'Executor', colWorkdir: 'Work directory', deviceOnline: 'Online', deviceOffline: 'Offline',
   newTaskHint: 'Describe what needs doing; you can assign an employee later.', addEmployeeHint: 'Pick an executor available on the device; the model follows the executor configuration.', addDeviceHint: 'Enter the pairing code shown by WeeyAgent. Pairing does not grant execution permission.', taskTitleLabel: 'Task title', taskReqLabel: 'Requirements', assignEmployeeLabel: 'Assign employee', employeeNameLabel: 'Employee name', deviceNodeLabel: 'Device node', executorLabel: 'Executor', workdirLabel: 'Work directory', createTaskBtn: 'Create task', createEmployeeBtn: 'Create employee', verifyDeviceBtn: 'Verify device',
   taskConversation: 'Task conversation', taskInfo: 'Task info', creatorLabel: 'Creator', devEmployeeLabel: 'Development employee', reviewEmployeeLabel: 'Review employee', execProcess: 'Execution process', composerPlaceholder: 'Add instructions or context…', pauseBtn: 'Pause', sendBtn: 'Send',
+  creatorBubble: 'Created task', devRound: 'Development round', taskManage: 'Task management',
 };
 type Labels = typeof en;
 const zh: Labels = {
@@ -83,6 +84,7 @@ const zh: Labels = {
   colTask: '任务', colEmployee: '员工', colStatus: '状态', colUpdated: '更新', colMyDirs: '我的目录', dirCountUnit: ' 个', colDevice: '设备', colSystem: '系统', colLastOnline: '最后在线', colExecutor: '执行器', colWorkdir: '工作目录', deviceOnline: '在线', deviceOffline: '离线',
   newTaskHint: '写清要做的事，也可以稍后再分配员工。', addEmployeeHint: '选择设备上可用的执行器，模型默认沿用执行器配置。', addDeviceHint: '输入 WeeyAgent 显示的配对码。配对不会授予执行权限。', taskTitleLabel: '任务标题', taskReqLabel: '任务要求', assignEmployeeLabel: '分配员工', employeeNameLabel: '员工名称', deviceNodeLabel: '设备节点', executorLabel: '执行器', workdirLabel: '工作目录', createTaskBtn: '创建任务', createEmployeeBtn: '创建员工', verifyDeviceBtn: '核对设备',
   taskConversation: '任务对话', taskInfo: '任务信息', creatorLabel: '创建者', devEmployeeLabel: '开发员工', reviewEmployeeLabel: '评审员工', execProcess: '执行过程', composerPlaceholder: '补充指令或说明…', pauseBtn: '暂停', sendBtn: '发送',
+  creatorBubble: '创建任务', devRound: '开发轮次', taskManage: '任务管理',
 };
 const zhTW: Labels = {
   activeEmpty: '暫無進行中的工作',
@@ -125,6 +127,7 @@ const zhTW: Labels = {
   colTask: '任務', colEmployee: '員工', colStatus: '狀態', colUpdated: '更新', colMyDirs: '我的目錄', dirCountUnit: ' 個', colDevice: '裝置', colSystem: '系統', colLastOnline: '最後上線', colExecutor: '執行器', colWorkdir: '工作目錄', deviceOnline: '在線', deviceOffline: '離線',
   newTaskHint: '寫清要做的事，也可以稍後再分配員工。', addEmployeeHint: '選擇裝置上可用的執行器，模型預設沿用執行器設定。', addDeviceHint: '輸入 WeeyAgent 顯示的配對碼。配對不會授予執行權限。', taskTitleLabel: '任務標題', taskReqLabel: '任務要求', assignEmployeeLabel: '分配員工', employeeNameLabel: '員工名稱', deviceNodeLabel: '裝置節點', executorLabel: '執行器', workdirLabel: '工作目錄', createTaskBtn: '建立任務', createEmployeeBtn: '建立員工', verifyDeviceBtn: '核對裝置',
   taskConversation: '任務對話', taskInfo: '任務資訊', creatorLabel: '建立者', devEmployeeLabel: '開發員工', reviewEmployeeLabel: '評審員工', execProcess: '執行過程', composerPlaceholder: '補充指令或說明…', pauseBtn: '暫停', sendBtn: '傳送',
+  creatorBubble: '建立任務', devRound: '開發輪次', taskManage: '任務管理',
 };
 const vi: Labels = {
   activeEmpty: 'Không có công việc đang tiến hành',
@@ -167,6 +170,7 @@ const vi: Labels = {
   colTask: 'Công việc', colEmployee: 'Nhân viên', colStatus: 'Trạng thái', colUpdated: 'Cập nhật', colMyDirs: 'Thư mục của tôi', dirCountUnit: ' thư mục', colDevice: 'Thiết bị', colSystem: 'Hệ điều hành', colLastOnline: 'Trực tuyến lần cuối', colExecutor: 'Trình thực thi', colWorkdir: 'Thư mục làm việc', deviceOnline: 'Trực tuyến', deviceOffline: 'Ngoại tuyến',
   newTaskHint: 'Mô tả việc cần làm; có thể phân công nhân viên sau.', addEmployeeHint: 'Chọn trình thực thi khả dụng trên thiết bị; mô hình theo cấu hình trình thực thi.', addDeviceHint: 'Nhập mã ghép nối hiển thị trên WeeyAgent. Ghép nối không cấp quyền thực thi.', taskTitleLabel: 'Tiêu đề công việc', taskReqLabel: 'Yêu cầu', assignEmployeeLabel: 'Phân công nhân viên', employeeNameLabel: 'Tên nhân viên', deviceNodeLabel: 'Nút thiết bị', executorLabel: 'Trình thực thi', workdirLabel: 'Thư mục làm việc', createTaskBtn: 'Tạo công việc', createEmployeeBtn: 'Tạo nhân viên', verifyDeviceBtn: 'Đối chiếu thiết bị',
   taskConversation: 'Hội thoại công việc', taskInfo: 'Thông tin công việc', creatorLabel: 'Người tạo', devEmployeeLabel: 'Nhân viên phát triển', reviewEmployeeLabel: 'Nhân viên đánh giá', execProcess: 'Quá trình thực thi', composerPlaceholder: 'Bổ sung chỉ dẫn hoặc ngữ cảnh…', pauseBtn: 'Tạm dừng', sendBtn: 'Gửi',
+  creatorBubble: 'Đã tạo công việc', devRound: 'Vòng phát triển', taskManage: 'Quản lý công việc',
 };
 export const workspacePageLocales = {en, 'zh-CN': zh, 'zh-TW': zhTW, vi};
 export function usePageLabels() {
