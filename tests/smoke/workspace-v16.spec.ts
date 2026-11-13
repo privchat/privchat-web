@@ -270,7 +270,7 @@ test('employee management exposes reference 101 through load more and retains al
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
   const panel = page.getByTestId('space-employees'); await expect(panel.locator('tbody tr')).toHaveCount(100);
   await panel.getByRole('button', {name: 'Load more', exact: true}).click(); await expect(panel.locator('tbody tr')).toHaveCount(101);
-  await expect(panel.getByRole('cell', {name: 'Employee 101', exact: true})).toBeVisible(); await expect(panel.locator('tbody tr').first()).toContainText('offline');
+  await expect(panel.getByRole('cell', {name: 'Employee 101', exact: true})).toBeVisible(); await expect(panel.locator('tbody tr').first()).toContainText('Offline');
   expect(requests.filter(r => r.path === '/workspace/employee/page').map(r => r.query.searchParams.get('cursor'))).toEqual([null, 'reference-tail-100']);
 });
 test('create-item discovers available employee 101 after an entirely unavailable first page without starting work', async ({page}) => {
@@ -376,7 +376,9 @@ test('employee task list is scoped by employee across visible spaces, not by the
   const requests = await mock(page, path => path === '/workspace/activity/page' ? feed([row('21'), row('22', 'done')], false) : undefined);
   await mount(page); await page.getByTestId('workspace-card').first().click();
   await page.getByTestId('ws-nav-navEmployees').click();
-  await page.getByTestId('space-employees').locator('tbody tr').first().getByRole('button', {name: 'Task records', exact: true}).click();
+  await expect(page.getByTestId('space-employees').locator('tbody tr').first()).toContainText('Idle');
+  await page.getByTestId('space-employees').locator('tbody tr').first().getByRole('button', {name: 'Engineer', exact: true}).click();
+  await page.getByTestId('space-employees').getByRole('button', {name: 'Task records', exact: true}).click();
   await expect(page.getByTestId('task-history').getByTestId('task-card')).toHaveCount(2);
   expect(Object.fromEntries(requests.filter(r => r.path === '/workspace/activity/page').at(-1)!.query.searchParams)).toEqual({view: 'history_tasks_v1', employeeId: 'emp', limit: '20'});
 });

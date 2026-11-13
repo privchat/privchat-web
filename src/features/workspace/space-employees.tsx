@@ -1,10 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Bot, Plus } from 'lucide-react';
+import { Bot, Circle, LoaderCircle, Plus } from 'lucide-react';
 import {TaskHistory} from './task-history';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
-import type { Employee, Node, Workspace, WorkspaceApi } from './api';
+import type { Employee, Node, Workspace, WorkspaceApi, WorkspaceEmployee } from './api';
 import { availableEmployeeExecutors, employeeExecutor } from './employees';
 import { usePageLabels } from './page-labels';
 import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh, wsField } from './shell';
@@ -20,11 +19,18 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
   const [space, setSpace] = useState<Workspace | null>(null);
   const [owned, setOwned] = useState<Employee[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
-  const [employee, setEmployee] = useState('');
   const [adding, setAdding] = useState(false);
+  const [manageId, setManageId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const readOnly = !space || space.archived !== 0 || !['owner', 'admin', 'member'].includes(space.myRole);
+  const managed = rows.find(r => r.id === manageId);
+  const candidates = owned.filter(e => !rows.some(r => r.employeeId === e.agentId));
+  const status = (row: WorkspaceEmployee) => row.available
+    ? {icon: Circle, text: l('idle')}
+    : row.unavailableReason === 'offline' ? {icon: Circle, text: l('deviceOffline')}
+    : row.unavailableReason === 'busy' ? {icon: LoaderCircle, text: l('statusRunning')}
+    : {icon: Circle, text: `${l('busy')}: ${row.unavailableReason ?? l('unavailable')}`};
   async function reload() {
     const [, e, n] = await Promise.all([employeePages.refresh(), api.employees(), api.nodes()]);
     setOwned(e); setNodes(n);
@@ -38,46 +44,45 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
     } />
     {space && readOnly && <p className="mb-3 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm text-muted-foreground">{l('readOnly')}</p>}
     {(error || employeePages.error) && <p role="alert" className="mb-3 text-sm text-destructive">{l(employeePages.errorCode ?? 'error')}</p>}
-    {rows.length > 0 && <WsTable head={<><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colExecutor')}</WsTh><WsTh>{l('colDevice')}</WsTh><WsTh>{l('colWorkdir')}</WsTh><WsTh>{l('colStatus')}</WsTh><WsTh /></>}>
-      {rows.map(row => <tr key={row.id}>
-        <WsTd>{row.name ?? row.employeeId}</WsTd>
-        <WsTd className="text-muted-foreground">{executorDisplay(employeeExecutor(row.capability ?? '') ?? row.capability ?? '')}</WsTd>
-        <WsTd className="text-muted-foreground">{nodes.find(n => n.nodeId === row.nodeId)?.name ?? row.nodeId ?? '—'}</WsTd>
-        <WsTd className="text-muted-foreground">{nodes.find(n => n.nodeId === row.nodeId)?.workdirs?.find(w => w.id === row.workdirBindingId)?.label ?? row.workdirBindingId ?? l('unavailable')}</WsTd>
-        <WsTd><StatusPill><span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', row.available ? 'bg-current' : 'border border-current')} />{row.available ? l('available') : `${l('busy')}: ${row.unavailableReason ?? l('unavailable')}`}</StatusPill></WsTd>
-        <WsTd><div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => setHistory(row.employeeId)}>{l('taskRecords')}</Button>
-          <Button variant="ghost" size="sm" disabled={readOnly || busy} onClick={() => void act(() => api.removeEmployeeAssociation(row.id))}>{l('unlink')}</Button>
-        </div></WsTd>
-      </tr>)}
+    {managed && <section className="mb-3 space-y-3 rounded border p-3" aria-label={l('manage')}>
+      <h3 className="font-semibold">{managed.name ?? managed.employeeId}</h3>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => setHistory(managed.employeeId)}>{l('taskRecords')}</Button>
+        {!readOnly && <Button variant="destructive" size="sm" disabled={busy} onClick={() => void act(async () => {await api.removeEmployeeAssociation(managed.id); setManageId(undefined);})}>{l('unlink')}</Button>}
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => setManageId(undefined)}>{l('cancel')}</Button>
+      </div>
+    </section>}
+    {rows.length > 0 && <WsTable head={<><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colExecutor')}</WsTh><WsTh>{l('colDevice')}</WsTh><WsTh>{l('colWorkdir')}</WsTh><WsTh>{l('colStatus')}</WsTh></>}>
+      {rows.map(row => {const s = status(row); return <tr key={row.id} className="hover:bg-accent/40">
+        <WsTd><button type="button" className="font-semibold hover:underline focus-visible:underline" onClick={() => setManageId(row.id)}>{row.name ?? row.employeeId}</button></WsTd>
+        <WsTd>{executorDisplay(employeeExecutor(row.capability ?? '') ?? row.capability ?? '')}</WsTd>
+        <WsTd>{nodes.find(n => n.nodeId === row.nodeId)?.name ?? row.nodeId ?? '—'}</WsTd>
+        <WsTd>{nodes.find(n => n.nodeId === row.nodeId)?.workdirs?.find(w => w.id === row.workdirBindingId)?.label ?? row.workdirBindingId ?? l('unavailable')}</WsTd>
+        <WsTd><StatusPill icon={s.icon}>{s.text}</StatusPill></WsTd>
+      </tr>;})}
     </WsTable>}
     {!rows.length && <div className="rounded-[9px] border py-[58px] text-center text-muted-foreground">
       <Bot className="mx-auto h-6 w-6" aria-hidden="true" />
       <p className="mt-2 text-sm">{l('empty')}</p>
     </div>}
     {employeePages.hasMore && <div className="mt-3"><Button variant="outline" disabled={busy || employeePages.busy} onClick={() => void employeePages.more()}>{l('more')}</Button></div>}
-    <div className="mt-[22px] rounded-[9px] border bg-card p-4">
-      <label className="grid max-w-sm gap-1.5 text-sm font-medium">{l('link')}
-        <select className={wsField} value={employee} disabled={readOnly || busy} onChange={e => setEmployee(e.target.value)}><option value="">{l('none')}</option>{owned.filter(e => !rows.some(r => r.employeeId === e.agentId)).map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select>
-      </label>
-      <div className="mt-3"><Button disabled={readOnly || busy || !employee} onClick={() => void act(async () => {await api.associateEmployee(workspaceId, employee); setEmployee('');})}>{l('link')}</Button></div>
-    </div>
-    <AddEmployeeDialog api={api} nodes={nodes} workspaceId={workspaceId} open={adding} onClose={() => setAdding(false)} onCreated={() => {setAdding(false); void reload();}} onLockChange={onLockChange}/>
+    <AddEmployeeDialog api={api} nodes={nodes} workspaceId={workspaceId} candidates={candidates} readOnly={readOnly} open={adding} onClose={() => setAdding(false)} onCreated={() => {setAdding(false); void reload();}} onAssociated={() => void reload()} onLockChange={onLockChange}/>
   </section>;
 }
 
-function AddEmployeeDialog({api, nodes, workspaceId, open, onClose, onCreated, onLockChange}: {api: WorkspaceApi; nodes: Node[]; workspaceId: string; open: boolean; onClose: () => void; onCreated: () => void; onLockChange: (locked: boolean) => void}) {
+function AddEmployeeDialog({api, nodes, workspaceId, candidates, readOnly, open, onClose, onCreated, onAssociated, onLockChange}: {api: WorkspaceApi; nodes: Node[]; workspaceId: string; candidates: Employee[]; readOnly: boolean; open: boolean; onClose: () => void; onCreated: () => void; onAssociated: () => void; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
   const [name, setName] = useState('');
   const [nodeId, setNodeId] = useState('');
   const [executor, setExecutor] = useState('');
   const [workdirBindingId, setWorkdirBindingId] = useState('');
+  const [associateId, setAssociateId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const node = nodes.find(n => n.nodeId === nodeId);
   const executors = availableEmployeeExecutors(node);
   const valid = !!name.trim() && !!nodeId && !!executor && !!workdirBindingId;
-  function reset() {setName(''); setNodeId(''); setExecutor(''); setWorkdirBindingId(''); setError(false);}
+  function reset() {setName(''); setNodeId(''); setExecutor(''); setWorkdirBindingId(''); setAssociateId(''); setError(false);}
   function close() {if (busy) return; reset(); onClose();}
   async function submit() {
     if (busy || !valid) return;
@@ -87,6 +92,12 @@ function AddEmployeeDialog({api, nodes, workspaceId, open, onClose, onCreated, o
       await api.associateEmployee(workspaceId, created.agentId);
       reset(); onCreated();
     } catch {setError(true);}
+    finally {setBusy(false); onLockChange(false);}
+  }
+  async function associate() {
+    if (busy || readOnly || !associateId) return;
+    setBusy(true); setError(false); onLockChange(true);
+    try {await api.associateEmployee(workspaceId, associateId); setAssociateId(''); onAssociated();} catch {setError(true);}
     finally {setBusy(false); onLockChange(false);}
   }
   return <Dialog open={open} onOpenChange={o => {if (!o) close();}}>
@@ -117,6 +128,12 @@ function AddEmployeeDialog({api, nodes, workspaceId, open, onClose, onCreated, o
             {node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
           </select>
         </label>
+        <div className="space-y-2 border-t pt-4">
+          <label className="grid gap-1.5 text-sm font-medium">{l('link')}
+            <select className={wsField} value={associateId} disabled={busy || readOnly} onChange={e => setAssociateId(e.target.value)}><option value="">{l('none')}</option>{candidates.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select>
+          </label>
+          <Button type="button" variant="outline" disabled={busy || readOnly || !associateId} onClick={() => void associate()}>{l('link')}</Button>
+        </div>
         {error && <p role="alert" className="text-sm text-destructive">{l('error')}</p>}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={close}>{l('cancel')}</Button>
