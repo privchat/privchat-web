@@ -276,6 +276,10 @@ test('space settings manage members by role through their own APIs', async ({pag
   await expect(inviteDialog).toContainText('new-user');
   await inviteDialog.getByRole('button', {name: 'Send invitation', exact: true}).click();
   await expect.poll(() => requests.find(r => r.path === '/workspace/member/create')?.body).toEqual({workspaceId: 'w', userId: 'new-user', role: 'member'});
+  await settings.getByRole('button', {name: 'Invite member', exact: true}).click();
+  await inviteDialog.getByLabel('Account', {exact: true}).fill('cancel-check');
+  await inviteDialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
 for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) test(`settings cannot manage members without workspace management ${JSON.stringify(extras)}`, async ({page}) => {
