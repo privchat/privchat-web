@@ -250,7 +250,7 @@ test('binding candidates dedupe native sessions and exclude every busy, unknown 
   expect(result).toEqual(['latest']);
 });
 
-test('executor selection lists device-available executors regardless of grant; unavailable, revoked and missing fail closed', async ({page}) => {
+test('executor selection lists device-available executors regardless of grant, revoked ones included; unavailable and missing fail closed', async ({page}) => {
   await page.goto('/');
   const result = await page.evaluate(async node => {
     const {availableEmployeeExecutors} = await import('/src/features/workspace/employees.tsx');
@@ -265,7 +265,7 @@ test('executor selection lists device-available executors regardless of grant; u
       availableEmployeeExecutors({...node, capabilities: [{name: 'agent.qoder', available: true}], revokedCapabilities: ['agent.qoder']}),
     ];
   }, nodes[0]);
-  expect(result).toEqual([['codex', 'claude'], ['codex', 'claude'], ['claude'], ['claude'], [], ['qoder'], []]);
+  expect(result).toEqual([['codex', 'claude'], ['codex', 'claude'], ['claude'], ['codex', 'claude'], [], ['qoder'], ['qoder']]);
 });
 
 test('a device reporting only Qoder offers it as a selectable executor and creates with executor qoder', async ({page}) => {

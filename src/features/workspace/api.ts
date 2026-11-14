@@ -11,12 +11,12 @@ export interface WorkItem { id: string; workspaceId: string; title: string; desc
 export interface WorkNote { id: string; workItemId: string; kind: string; body: string; artifactRef?: string | null }
 export interface Binding { id: string; nodeId: string; capability: string; revoked: number }
 export interface Execution { executionId: string; nodeId: string; state: string; stateVersion: number; result?: unknown; capability?: string; scope?: {kind: string; ref: string}; nativeSessionId?: string | null; agentId?: string | null; params?: Record<string, unknown>; updatedAt?: number; createdAt?: number }
-export interface WorkExecution { id: string; executionId: string | null; state: string | null; employeeId?: string | null; workItemVersion?: number | null; deliveryBlockedReason?: string | null }
+export interface WorkExecution { id: string; executionId: string | null; state: string | null; employeeId?: string | null; workItemVersion?: number | null; deliveryBlockedReason?: string | null; createdAt?: number; projectBindingId?: string | null }
 export interface WorkReview { noteId: string; workItemId: string; workItemVersion: number; sourceWorkExecutionId: string; sourceExecutionId: string; evidenceNoteIds: string[]; evidenceDescription: string; reviewerEmployeeId: string; reviewerExecution: WorkExecution; requestedBy: string; createdAt: number; conclusion?: string | null; conclusionNoteId?: string | null; conclusionBody?: string | null; conclusionSource?: string | null }
 export interface Node { nodeId: string; name: string; state: string; platform?: string; runtimeVersion?: string; lastReportAt?: number | null; revokedAt?: number | null; deviceRevocation?: string | null; granted: string[]; revokedCapabilities?: string[]; capabilities?: {name: string; available: boolean; version?: string; reason?: string | null}[]; workdirs?: {id: string; label: string}[]; sessionDiscovery?: {external: boolean; reason: string} }
 export interface PairingView { pairingId: string; deviceName: string; platform: string; runtimeVersion: string; expiresAt: number }
-export interface Employee { agentId: string; name: string; executor: string; config: Record<string, unknown>; createdAt: number; nodeId?: string; roleDescription: string; title: string; model: string; workdirBindingId: string; executionId?: string }
-export interface EmployeeConfig { name: string; executor: string; nodeId: string; roleDescription: string; title: string; model: string; workdirBindingId: string; bindExecutionId?: string }
+export interface Employee { agentId: string; name: string; executor: string; config: Record<string, unknown>; createdAt: number; nodeId?: string; roleDescription: string; title: string; model: string; workdirBindingId: string; executionId?: string; bindingVersion?: number }
+export interface EmployeeConfig { name: string; executor: string; nodeId: string; roleDescription: string; title: string; model: string; workdirBindingId: string; bindExecutionId?: string; authorizeCapability?: boolean }
 export type EmployeeCreateRequest = EmployeeConfig & {requestId: string};
 export type EmployeeUpdateRequest = EmployeeConfig & {requestId: string; agentId: string};
 export interface EmployeeSendRequest { agentId: string; requestId: string; text: string }
@@ -145,7 +145,6 @@ export class WorkspaceApi {
   }
   async deleteProjectBinding(id: string) { await this.authed((token) => deleteAuthedEnvelope<unknown>(`${this.base}/workspace/project/binding/delete?${new URLSearchParams({id})}`, token)); }
   workspaceEmployees(workspaceId: string, projectId?: string) { return this.get<WorkspaceEmployee[]>(`/workspace/employee/list?workspaceId=${encodeURIComponent(workspaceId)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); }
-  employeeCandidates(workspaceId: string, projectId?: string) { return this.get<WorkspaceEmployee[]>(`/workspace/employee/candidates?workspaceId=${encodeURIComponent(workspaceId)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`); }
   employeePage(workspaceId: string, projectId?: string, cursor?: string) {
     const query = new URLSearchParams({workspaceId, limit: '100'});
     if (projectId) query.set('projectId', projectId);

@@ -12,6 +12,7 @@ export type WorkspaceRoute =
   | {view: 'create-item'; spaceId: string}
   | {view: 'item'; spaceId: string; itemId: string; executionId?: string}
   | {view: 'employees'; spaceId: string}
+  | {view: 'employee'; spaceId: string; employeeId: string; panel?: 'profile' | 'rebind'}
   | {view: 'settings'; spaceId: string};
 
 const ROOT = '/workspace';
@@ -48,6 +49,10 @@ export function parseWorkspaceRoute(hash: string): WorkspaceRoute | null {
       const executionId = params.get('execution') || undefined;
       return {view: 'item', spaceId, itemId: segments[3], ...(executionId ? {executionId} : {})};
     }
+    if (segments.length === 4 && segments[2] === 'employee' && segments[3]) {
+      const panel = params.get('panel');
+      return {view: 'employee', spaceId, employeeId: segments[3], ...(panel === 'profile' || panel === 'rebind' ? {panel} : {})};
+    }
   }
   return {view: 'home'};
 }
@@ -70,6 +75,10 @@ export function workspaceHref(route: WorkspaceRoute): string {
       if (route.executionId) query.set('execution', route.executionId);
       break;
     case 'employees': path += `/space/${encodeURIComponent(route.spaceId)}/employees`; break;
+    case 'employee':
+      path += `/space/${encodeURIComponent(route.spaceId)}/employee/${encodeURIComponent(route.employeeId)}`;
+      if (route.panel) query.set('panel', route.panel);
+      break;
     case 'settings': path += `/space/${encodeURIComponent(route.spaceId)}/settings`; break;
   }
   const suffix = query.toString();

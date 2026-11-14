@@ -126,8 +126,10 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
   const workdirs = nodes.find(n => n.nodeId === draft?.nodeId)?.workdirs ?? [];
   const reviewerCandidates = employees.filter(e => e.nodeId === draft?.nodeId && draft?.directories.some(d => d.workdirBindingId === e.workdirBindingId));
   const accessLabel = (access: string) => access === 'write' ? l('accessWrite') : l('accessRead');
+  const employeeName = (id: string) => employees.find(e => e.agentId === id)?.name || l('unnamedEmployee');
   const bindWorkdirs = nodes.find(n => n.nodeId === bindNodeId)?.workdirs ?? [];
-  function openBind() {setBindNodeId(mine?.nodeId ?? ''); setBindDirId(''); setBindAccess('write'); setBindOpen(true);}
+  // The first directory of a binding is changeable, the others read-only until switched (§20.3).
+  function openBind() {setBindNodeId(mine?.nodeId ?? ''); setBindDirId(''); setBindAccess(mine?.directories.length ? 'read' : 'write'); setBindOpen(true);}
   async function saveBind() {
     if (!project || !bindNodeId || !bindDirId) return;
     const existing = (mine?.directories ?? []).filter(d => d.workdirBindingId).map(d => ({workdirBindingId: d.workdirBindingId!, access: d.access}));
@@ -173,7 +175,7 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
           <p>{mine.nodeName}</p>
           <p className="text-sm">{mine.directories.map(d => `${d.label} · ${accessLabel(d.access)}`).join('; ')}</p>
           {mine.notes && <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{mine.notes}</p>}
-          {mine.reviewerEmployeeId && <p className="text-sm">{l('defaultReviewer')}: {mine.reviewerEmployeeId}</p>}
+          {mine.reviewerEmployeeId && <p className="text-sm">{l('defaultReviewer')}: {employeeName(mine.reviewerEmployeeId)}</p>}
           {canBind && <Button variant="outline" disabled={busy} onClick={() => setDraft({id: mine.id, version: mine.version, nodeId: mine.nodeId ?? '', directories: mine.directories.filter(d => d.workdirBindingId).map(d => ({workdirBindingId: d.workdirBindingId!, access: d.access})), notes: mine.notes ?? '', reviewerEmployeeId: mine.reviewerEmployeeId ?? ''})}>{l('edit')}</Button>}
         </article>}
         {!draft && !mine && <p>{l('noBinding')}</p>}
@@ -187,9 +189,9 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
               <select aria-label={l('access')} className={workspaceField} value={directory.access} onChange={e => setDraft({...draft, directories: draft.directories.map((d, i) => i === index ? {...d, access: e.target.value as 'write' | 'read'} : d)})}><option value="write">{l('accessWrite')}</option><option value="read">{l('accessRead')}</option></select>
               <Button type="button" variant="ghost" onClick={() => setDraft({...draft, directories: draft.directories.filter((_, i) => i !== index), reviewerEmployeeId: ''})}>{l('remove')}</Button>
             </div>)}
-            {draft.directories.length < BINDING_DIRECTORY_LIMIT && <label>{l('addDirectory')}<select className={workspaceField} value="" disabled={!draft.nodeId} onChange={e => {if (e.target.value) setDraft({...draft, directories: [...draft.directories, {workdirBindingId: e.target.value, access: 'write'}]});}}><option value="">{l('none')}</option>{workdirs.filter(w => !draft.directories.some(d => d.workdirBindingId === w.id)).map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></label>}
+            {draft.directories.length < BINDING_DIRECTORY_LIMIT && <label>{l('addDirectory')}<select className={workspaceField} value="" disabled={!draft.nodeId} onChange={e => {if (e.target.value) setDraft({...draft, directories: [...draft.directories, {workdirBindingId: e.target.value, access: draft.directories.length ? 'read' : 'write'}]});}}><option value="">{l('none')}</option>{workdirs.filter(w => !draft.directories.some(d => d.workdirBindingId === w.id)).map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></label>}
             <label>{l('notes')}<textarea className={workspaceField} rows={2} maxLength={BINDING_NOTES_LIMIT} value={draft.notes} onChange={e => setDraft({...draft, notes: e.target.value})}/></label>
-            <label>{l('defaultReviewer')}<select aria-label={l('defaultReviewer')} className={workspaceField} value={draft.reviewerEmployeeId} onChange={e => setDraft({...draft, reviewerEmployeeId: e.target.value})}><option value="">{l('none')}</option>{draft.reviewerEmployeeId && !reviewerCandidates.some(e => e.agentId === draft.reviewerEmployeeId) && <option value={draft.reviewerEmployeeId} disabled>{draft.reviewerEmployeeId} · {l('unavailable')}</option>}{reviewerCandidates.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select><span className="text-xs text-muted-foreground">{l('defaultReviewerHint')}</span></label>
+            <label>{l('defaultReviewer')}<select aria-label={l('defaultReviewer')} className={workspaceField} value={draft.reviewerEmployeeId} onChange={e => setDraft({...draft, reviewerEmployeeId: e.target.value})}><option value="">{l('none')}</option>{draft.reviewerEmployeeId && !reviewerCandidates.some(e => e.agentId === draft.reviewerEmployeeId) && <option value={draft.reviewerEmployeeId} disabled>{employeeName(draft.reviewerEmployeeId)} · {l('unavailable')}</option>}{reviewerCandidates.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select><span className="text-xs text-muted-foreground">{l('defaultReviewerHint')}</span></label>
             <Button type="submit" disabled={busy || stale || !draft.nodeId || !draft.directories.length}>{l('save')}</Button>
             {draft.id && <Button type="button" variant="destructive" disabled={busy || stale} onClick={() => {if (window.confirm(l('deleteBindingConfirm'))) void act(async () => {await api.deleteProjectBinding(draft.id!); setDraft(undefined);}, true);}}>{l('deleteBinding')}</Button>}
           </fieldset>
@@ -218,7 +220,7 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
             <select required className={workspaceField} value={bindNodeId} disabled={busy} onChange={e => {setBindNodeId(e.target.value); setBindDirId('');}}><option value="">{l('none')}</option>{nodes.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select>
           </label>
           <label className="grid gap-1.5 text-sm font-medium">{l('dirPath')}
-            <select required className={`${workspaceField} appearance-none`} value={bindDirId} disabled={busy || !bindNodeId} onChange={e => setBindDirId(e.target.value)}><option value=""></option>{bindWorkdirs.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select>
+            <select required className={`${workspaceField} appearance-none`} value={bindDirId} disabled={busy || !bindNodeId} onChange={e => {setBindDirId(e.target.value); const saved = mine?.directories.find(d => d.workdirBindingId === e.target.value); setBindAccess(saved ? saved.access : mine?.directories.length ? 'read' : 'write');}}><option value=""></option>{bindWorkdirs.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select>
           </label>
           <label className="grid gap-1.5 text-sm font-medium">{l('accessPermission')}
             <select className={workspaceField} value={bindAccess} disabled={busy} onChange={e => setBindAccess(e.target.value as 'write' | 'read')}><option value="write">{l('accessWrite')}</option><option value="read">{l('accessRead')}</option></select>

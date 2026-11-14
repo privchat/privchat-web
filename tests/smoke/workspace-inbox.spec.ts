@@ -20,7 +20,7 @@ async function mock(page: Page, override?: (path: string, query: URL, body: any)
     if (path.startsWith('/workspace/get/')) data = space(path.split('/').at(-1)!);
     if (path === '/workspace/inbox/list') data = {entries: []};
     if (path === '/agent/agents') data = [{agentId: 'reviewer', name: 'Reviewer', executor: 'codex'}, {agentId: 'other-reviewer', name: 'Other reviewer', executor: 'codex'}]; if (path === '/agent/nodes') data = [node]; if (path === '/workspace/agent-binding/list') data = [{id: 'b', nodeId: 'n', capability: 'agent.codex', revoked: 0}];
-    if (path === '/workspace/employee/candidates' || path === '/workspace/employee/list') data = [employee]; if (path === '/workspace/work-item/create') data = item('42');
+    if (path === '/workspace/employee/list') data = [employee]; if (path === '/workspace/work-item/create') data = item('42');
     if (path === '/workspace/employee/page') data = {items: [employee], nextCursor: null, hasMore: false};
     if (path === '/workspace/room/join') data = {channelId: '400', channelType: 3, ticket: 'fixture-room', expiresAt: Date.now() + 60000, eventProtocolVersion: 1};
     if (path === '/workspace/activity/page') {

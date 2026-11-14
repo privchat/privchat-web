@@ -22,7 +22,7 @@ async function mock(page: Page, override?: (path: string, query: URL, body: any)
     if (path === '/workspace/inbox/list') data = {entries: []};
     if (path === '/workspace/member/list') data = [{id: 'm1', workspaceId: 'w', userId: 'owner-user', role: 'owner'}];
     if (path === '/agent/agents') data = [{agentId: 'reviewer', name: 'Reviewer', executor: 'codex', nodeId: 'n', workdirBindingId: 'dir'}, {agentId: 'other-reviewer', name: 'Other reviewer', executor: 'codex'}]; if (path === '/agent/nodes') data = [node]; if (path === '/workspace/agent-binding/list') data = [{id: 'b', nodeId: 'n', capability: 'agent.codex', revoked: 0}];
-    if (path === '/workspace/employee/candidates' || path === '/workspace/employee/list') data = [employee]; if (path === '/workspace/work-item/create') data = item('42');
+    if (path === '/workspace/employee/list') data = [employee]; if (path === '/workspace/work-item/create') data = item('42');
     if (path === '/workspace/employee/page') data = {items: [employee], nextCursor: null, hasMore: false};
     if (path === '/workspace/room/join') data = {channelId: '400', channelType: 3, ticket: 'fixture-room', expiresAt: Date.now() + 60000, eventProtocolVersion: 1};
     if (path === '/workspace/activity/page') data = url.searchParams.has('cursor') ? feed([row('1', 'done'), row('2', 'cancelled'), row('21')], false) : feed();
@@ -192,8 +192,44 @@ test('member binding saves directories with access, notes and own reviewer; othe
   await expect.poll(() => requests.filter(r => r.path === '/workspace/project/binding/save').length).toBe(1);
   expect(requests.find(r => r.path === '/workspace/project/binding/save')?.body).toEqual({projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'write'}], notes: 'Handle with care', reviewerEmployeeId: 'reviewer'});
   await expect(detail).toContainText('Handle with care');
-  await expect(detail).toContainText('Default review employee: reviewer');
+  await expect(detail).toContainText('Default review employee: Reviewer');
+  await expect(detail).not.toContainText('Default review employee: reviewer');
   expect(requests.some(r => r.path.includes('/work-note/') || r.path.includes('/work-execution/'))).toBe(false);
+});
+
+for (const bound of [false, true]) test(`the bind dialog defaults the first directory to write and later ones to read (${bound})`, async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/nodes') return [{...node, workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}];
+    if (path === '/workspace/project/get/p') return {...project, bindings: bound ? [myBinding] : []};
+    if (path === '/workspace/project/binding/save') return {...myBinding, directories: body.directories.map((d: any) => ({workdirBindingId: d.workdirBindingId, label: d.workdirBindingId === 'dir' ? 'Repository' : 'Docs', access: d.access}))};
+  });
+  await openProjectDetail(page);
+  await page.getByRole('button', {name: 'Bind my directories', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+  await dialog.getByRole('combobox', {name: 'Directory path', exact: true}).selectOption(bound ? 'docs' : 'dir');
+  await expect(dialog.getByRole('combobox', {name: 'Access', exact: true})).toHaveValue(bound ? 'read' : 'write');
+  await dialog.getByRole('button', {name: 'Save binding', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/project/binding/save').length).toBe(1);
+  expect(requests.find(r => r.path === '/workspace/project/binding/save')!.body.directories).toEqual(bound
+    ? [{workdirBindingId: 'dir', access: 'write'}, {workdirBindingId: 'docs', access: 'read'}]
+    : [{workdirBindingId: 'dir', access: 'write'}]);
+});
+
+test('the binding editor gives the first directory write access and later ones read', async ({page}) => {
+  const requests = await mock(page, path => path === '/agent/nodes' ? [{...node, workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}] : undefined);
+  await openProjectDetail(page);
+  await page.getByTestId('project-manage').locator('summary').click();
+  const binding = page.getByTestId('project-detail').locator('section[aria-label="Directory binding"]');
+  await binding.getByRole('button', {name: 'Create', exact: true}).click();
+  await binding.getByRole('combobox', {name: 'Device', exact: true}).selectOption('n');
+  await binding.getByRole('combobox', {name: 'Add directory', exact: true}).selectOption('dir');
+  await expect(binding.getByRole('combobox', {name: 'Access', exact: true}).first()).toHaveValue('write');
+  await binding.getByRole('combobox', {name: 'Add directory', exact: true}).selectOption('docs');
+  await expect(binding.getByRole('combobox', {name: 'Access', exact: true}).nth(1)).toHaveValue('read');
+  await binding.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/project/binding/save').length).toBe(1);
+  expect(requests.find(r => r.path === '/workspace/project/binding/save')!.body.directories).toEqual([{workdirBindingId: 'dir', access: 'write'}, {workdirBindingId: 'docs', access: 'read'}]);
 });
 
 test('binding edit carries its version; delete keeps history and asks first', async ({page}) => {
@@ -295,7 +331,7 @@ for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) te
 
 test('lost assignment retains saved item and original key; candidates come from associations', async ({page}) => {
   let lost = true; const requests = await mock(page, path => {if (path === '/workspace/work-execution/assign') {if (lost) {lost = false; return 'abort';} return {id: 'link', executionId: 'exec', state: 'accepted'};}}); page.on('dialog', dialog => dialog.accept());
-  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click(); await page.getByLabel('Title', {exact: true}).fill('Ship'); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click(); await expect(page.getByRole('alert')).toContainText('Work item saved; assignment not confirmed'); await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect(page.getByTestId('workspace-detail')).toBeVisible();
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click(); await page.getByLabel('Title', {exact: true}).fill('Ship'); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click(); await expect(page.getByRole('alert').filter({hasText: 'Work item saved; assignment not confirmed'})).toBeVisible(); await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect(page.getByTestId('workspace-detail')).toBeVisible();
   const creates = requests.filter(r => r.path === '/workspace/work-item/create'), assigns = requests.filter(r => r.path === '/workspace/work-execution/assign'); expect(creates).toHaveLength(1); expect(assigns).toHaveLength(2); expect(assigns[0]?.body).toEqual(assigns[1]?.body); expect(assigns[0]?.body).toMatchObject({workItemId: '42', version: 1, employeeId: 'emp', bindingId: 'b'}); expect(requests.some(r => r.path === '/agent/agents/send')).toBe(false);
 });
 test('mobile cards and scoped feed fit phone viewport', async ({page}) => {
@@ -318,7 +354,7 @@ test('create-item discovers available employee 101 after an entirely unavailable
   const requests = await mock(page, (path, query) => path === '/workspace/employee/page' ? referencePage(query.searchParams.get('cursor')) : undefined);
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click();
   const panel = page.getByTestId('create-work-item'); const select = panel.getByRole('combobox', {name: 'Employee (optional)', exact: true});
-  await expect(select.getByRole('option')).toHaveCount(101); await expect(select.getByRole('option', {name: 'Employee 1 · offline', exact: true})).toHaveJSProperty('disabled', true);
+  await expect(select.getByRole('option')).toHaveCount(101); await expect(select.getByRole('option', {name: 'Employee 1 · The device is offline. Check that it is connected.', exact: true})).toHaveJSProperty('disabled', true);
   await panel.getByRole('button', {name: 'Load more', exact: true}).click(); await expect(select.getByRole('option')).toHaveCount(102); await select.selectOption('employee-101'); await expect(select).toHaveValue('employee-101');
   expect(requests.filter(r => r.method !== 'GET')).toHaveLength(0);
 });
@@ -429,7 +465,7 @@ test('employee task list is scoped by employee across visible spaces, not by the
 test('workspace binding helpers grant only a missing binding on the owner active node that has the capability', async ({page}) => {
   await page.goto('/');
   const result = await page.evaluate(async ({node, employee}) => {
-    const {workspaceBindingGrant, grantableWorkspaceBinding} = await import('/src/features/workspace/employees.tsx');
+    const {workspaceBindingGrant, grantableWorkspaceBinding} = await import('/src/features/workspace/employee-access.ts');
     const bound = {id: 'b', nodeId: 'n', capability: 'agent.codex', revoked: 0};
     const unavailable = {...employee, available: false, unavailableReason: 'agent_capability_not_granted'};
     return {
@@ -471,6 +507,7 @@ test('creating a workspace employee grants the workspace binding before associat
   await page.getByTestId('space-employees').getByRole('button', {name: 'Add AI employee', exact: true}).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('textbox', {name: 'Employee name', exact: true}).fill('New dev');
+  await dialog.getByRole('textbox', {name: 'Responsibility', exact: true}).fill('Implement and test the workspace console');
   await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
   await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
   await dialog.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('dir');
@@ -483,6 +520,44 @@ test('creating a workspace employee grants the workspace binding before associat
   expect(grantAt).toBeLessThan(linkAt);
   expect(posts[grantAt].body).toEqual({workspaceId: 'w', nodeId: 'n', capability: 'agent.codex'});
   expect(posts[linkAt].body).toEqual({workspaceId: 'w', employeeId: 'new-emp'});
+  const created = posts.find(r => r.path === '/agent/agents')!.body;
+  expect(created).toMatchObject({name: 'New dev', roleDescription: 'Implement and test the workspace console', title: '', model: '', nodeId: 'n', executor: 'codex', workdirBindingId: 'dir'});
+  expect(created).not.toHaveProperty('authorizeCapability');
+  expect(created).not.toHaveProperty('bindExecutionId');
+  expect(created.requestId).toHaveLength(36);
+});
+
+for (const accept of [true, false]) test(`a revoked executor stays selectable and is only re-granted after the owner confirms (${accept})`, async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/nodes') return [{...node, granted: [], revokedCapabilities: ['agent.codex']}];
+    if (path === '/workspace/agent-binding/list') return [];
+    if (path === '/agent/agents' && body) return {agentId: 'new-emp', name: body.name, nodeId: body.nodeId, executor: body.executor, workdirBindingId: body.workdirBindingId, config: {}, createdAt: 1, roleDescription: '', title: '', model: ''};
+    if (path === '/workspace/agent-binding/create') return {id: 'new-b', workspaceId: body.workspaceId, nodeId: body.nodeId, capability: body.capability, grantedBy: 'me', revoked: 0, createdAt: 1};
+    if (path === '/workspace/employee/create') return {id: 'ref-new', workspaceId: body.workspaceId, employeeId: body.employeeId, name: 'New dev', nodeId: 'n', capability: 'agent.codex', available: true, projectIds: []};
+    return undefined;
+  });
+  page.on('dialog', dialog => void (accept ? dialog.accept() : dialog.dismiss()));
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+  await page.getByTestId('space-employees').getByRole('button', {name: 'Add AI employee', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', {name: 'Employee name', exact: true}).fill('New dev');
+  await dialog.getByRole('textbox', {name: 'Responsibility', exact: true}).fill('Implement and test the workspace console');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+  await expect(dialog.getByRole('combobox', {name: 'Executor', exact: true}).getByRole('option', {name: 'Codex · revoked, needs re-authorization', exact: true})).toHaveCount(1);
+  await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
+  await dialog.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('dir');
+  await expect(dialog.getByTestId('employee-grant-notice')).toHaveText('You revoked this capability in device management. Saving authorizes Codex on this device again.');
+  await dialog.getByRole('button', {name: 'Create employee', exact: true}).click();
+  if (accept) {
+    await expect.poll(() => requests.filter(r => r.path === '/workspace/employee/create').length).toBe(1);
+    const created = requests.find(r => r.path === '/agent/agents' && r.method === 'POST')!.body;
+    expect(created).toMatchObject({name: 'New dev', nodeId: 'n', executor: 'codex', workdirBindingId: 'dir', authorizeCapability: true});
+  } else {
+    // Closing needs the form unlocked, so it also proves the dismissed confirm never started a create.
+    await dialog.getByRole('button', {name: 'Cancel', exact: true}).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(requests.filter(r => r.method === 'POST')).toEqual([]);
+  }
 });
 
 test('associating an owned employee grants its missing workspace binding first', async ({page}) => {
@@ -531,6 +606,112 @@ test('an available employee with an existing binding offers no workspace authori
   await panel.locator('tbody tr').first().getByRole('button', {name: 'Engineer', exact: true}).click();
   await expect(panel.getByRole('button', {name: 'Task records', exact: true})).toBeVisible();
   await expect(panel.getByRole('button', {name: 'Authorize for workspace', exact: true})).toHaveCount(0);
+  expect(requests.some(r => r.path === '/workspace/agent-binding/create')).toBe(false);
+});
+
+const ownedEmployee = {agentId: 'emp', name: 'Engineer', title: 'Developer', roleDescription: 'Implement', nodeId: 'n', executor: 'codex', model: '', workdirBindingId: 'dir', bindingVersion: 3, config: {}, createdAt: 1};
+async function openEmployeeDetail(page: Page) {
+  await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+  const panel = page.getByTestId('space-employees');
+  await panel.locator('tbody tr').first().getByRole('button', {name: 'Engineer', exact: true}).click();
+  await panel.getByRole('button', {name: 'Details', exact: true}).click();
+  await expect(page.getByTestId('employee-detail')).toBeVisible();
+}
+
+test('employee detail edits only the profile and keeps the work binding untouched', async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/agents' && !body) return [ownedEmployee];
+    if (path === '/agent/agents/update') return {...ownedEmployee, name: body.name, roleDescription: body.roleDescription, title: body.title};
+  });
+  await mount(page); await openEmployeeDetail(page);
+  const detail = page.getByTestId('employee-detail');
+  await expect(detail).toContainText('Mac'); await expect(detail).toContainText('Codex'); await expect(detail).toContainText('Repository');
+  await detail.getByRole('button', {name: 'Edit profile', exact: true}).click();
+  await detail.getByRole('textbox', {name: 'Employee name', exact: true}).fill('Engineer II');
+  await detail.getByRole('textbox', {name: 'Responsibility', exact: true}).fill('Own the workspace console');
+  await detail.getByRole('textbox', {name: 'Title', exact: true}).fill('Lead');
+  await detail.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(detail.getByRole('status')).toHaveText('Profile saved.');
+  const update = requests.find(r => r.path === '/agent/agents/update')!;
+  expect(update.body).toMatchObject({agentId: 'emp', name: 'Engineer II', roleDescription: 'Own the workspace console', title: 'Lead', model: '', nodeId: 'n', executor: 'codex', workdirBindingId: 'dir'});
+  expect(update.body.requestId).toHaveLength(36);
+  expect(update.body).not.toHaveProperty('bindExecutionId');
+  expect(update.body).not.toHaveProperty('expectedBindingVersion');
+  expect(update.body).not.toHaveProperty('authorizeCapability');
+  expect(requests.some(r => r.path === '/agent/employees/rebind')).toBe(false);
+});
+
+for (const honest of [true, false]) test(`rebinding carries the expected binding version and only accepts a matching receipt (${honest})`, async ({page}) => {
+  page.on('dialog', dialog => dialog.accept());
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/agents' && !body) return [ownedEmployee];
+    if (path === '/agent/nodes') return [{...node, workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}];
+    if (path === '/agent/employees/rebind') return {...ownedEmployee, bindingVersion: 4, workdirBindingId: honest ? 'docs' : 'dir'};
+  });
+  await mount(page); await openEmployeeDetail(page);
+  const detail = page.getByTestId('employee-detail');
+  await detail.getByRole('button', {name: 'Change work binding', exact: true}).click();
+  await expect(detail.getByTestId('rebind-preview')).toContainText('Mac · Codex · Repository');
+  await detail.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('docs');
+  await expect(detail.getByTestId('rebind-preview')).toContainText('Mac · Codex · Docs');
+  await detail.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/agent/employees/rebind').length).toBe(1);
+  const first = requests.find(r => r.path === '/agent/employees/rebind')!.body;
+  expect(first).toMatchObject({agentId: 'emp', expectedBindingVersion: 3, nodeId: 'n', executor: 'codex', model: '', workdirBindingId: 'docs', bindExecutionId: null});
+  expect(first).not.toHaveProperty('authorizeCapability');
+  if (honest) {
+    await expect(detail.getByRole('status')).toHaveText('Work binding changed.');
+    await expect(detail.getByTestId('employee-pending')).toHaveCount(0);
+  } else {
+    await expect(detail.getByTestId('employee-pending')).toBeVisible();
+    await expect(detail.getByRole('status')).toHaveCount(0);
+    await detail.getByTestId('employee-pending').getByRole('button', {name: 'Retry', exact: true}).click();
+    await expect.poll(() => requests.filter(r => r.path === '/agent/employees/rebind').length).toBe(2);
+    const attempts = requests.filter(r => r.path === '/agent/employees/rebind');
+    expect(attempts[1].body).toEqual(attempts[0].body);
+    await expect(detail.getByTestId('employee-pending')).toBeVisible();
+  }
+});
+
+test('rebinding onto a revoked capability asks for re-authorization and carries the explicit grant flag', async ({page}) => {
+  const messages: string[] = [];
+  page.on('dialog', dialog => {messages.push(dialog.message()); void dialog.accept();});
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/agents' && !body) return [ownedEmployee];
+    if (path === '/agent/nodes') return [{...node, granted: [], revokedCapabilities: ['agent.codex'], workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}];
+    if (path === '/agent/employees/rebind') return {...ownedEmployee, bindingVersion: 4, workdirBindingId: 'docs'};
+  });
+  await mount(page); await openEmployeeDetail(page);
+  const detail = page.getByTestId('employee-detail');
+  await detail.getByRole('button', {name: 'Change work binding', exact: true}).click();
+  await expect(detail.getByTestId('employee-grant-notice')).toHaveText('You revoked this capability in device management. Saving authorizes Codex on this device again.');
+  await detail.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('docs');
+  await detail.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(detail.getByRole('status')).toHaveText('Work binding changed.');
+  const body = requests.find(r => r.path === '/agent/employees/rebind')!.body;
+  expect(body).toMatchObject({agentId: 'emp', expectedBindingVersion: 3, nodeId: 'n', executor: 'codex', workdirBindingId: 'docs', bindExecutionId: null, authorizeCapability: true});
+  expect(messages.some(m => m.includes('Saving authorizes Codex on this device again.'))).toBe(true);
+});
+
+test('a revoked employee is re-authorized in place without touching its device, directory or session', async ({page}) => {
+  page.on('dialog', dialog => dialog.accept());
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/agents' && !body) return [ownedEmployee];
+    if (path === '/agent/nodes') return [{...node, granted: [], revokedCapabilities: ['agent.codex']}];
+    if (path === '/workspace/employee/page') return {items: [{...employee, available: false, unavailableReason: 'agent_capability_revoked'}], nextCursor: null, hasMore: false};
+    if (path === '/agent/agents/update') return ownedEmployee;
+  });
+  await mount(page); await openEmployeeDetail(page);
+  const detail = page.getByTestId('employee-detail');
+  await expect(detail.getByTestId('employee-unavailable')).toContainText('Access to this agent was revoked');
+  await expect(detail.getByRole('button', {name: 'Authorize for workspace', exact: true})).toHaveCount(0);
+  await detail.getByRole('button', {name: 'Re-authorize this agent', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/agent/agents/update').length).toBe(1);
+  const body = requests.find(r => r.path === '/agent/agents/update')!.body;
+  expect(body).toMatchObject({agentId: 'emp', name: 'Engineer', roleDescription: 'Implement', title: 'Developer', model: '', nodeId: 'n', executor: 'codex', workdirBindingId: 'dir', authorizeCapability: true});
+  expect(body.requestId).toHaveLength(36);
+  expect(body).not.toHaveProperty('bindExecutionId');
+  expect(requests.some(r => r.path === '/agent/employees/rebind')).toBe(false);
   expect(requests.some(r => r.path === '/workspace/agent-binding/create')).toBe(false);
 });
 
@@ -594,7 +775,8 @@ for (const authorized of [true, false]) test(`default review selection uses the 
   });
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Task 21', exact: true}).click();
   await page.getByTestId('task-manage').click();
-  const workflow = page.getByTestId('workflow-panel'); const selectDefault = workflow.getByRole('button', {name: 'Default review employee: reviewer', exact: true});
+  const workflow = page.getByTestId('workflow-panel'); const selectDefault = workflow.getByTestId('default-reviewer');
+  await expect(selectDefault).toContainText(authorized ? 'Default review employee: Reviewer' : 'Default review employee: Unnamed employee');
   if (authorized) {
     await expect(selectDefault).toBeEnabled(); await selectDefault.click();
     await expect(workflow.getByRole('combobox').first()).toHaveValue('reviewer');

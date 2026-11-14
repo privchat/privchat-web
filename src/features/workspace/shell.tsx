@@ -62,7 +62,7 @@ const NAV: {group: 'groupWorkspace' | 'groupResources'; items: {key: NavKey; ico
   ]},
   {group: 'groupResources', items: [
     {key: 'navDevices', icon: Monitor, views: ['devices'], go: () => ({view: 'devices'})},
-    {key: 'navEmployees', icon: Bot, views: ['employees'], go: sid => sid ? {view: 'employees', spaceId: sid} : {view: 'home'}},
+    {key: 'navEmployees', icon: Bot, views: ['employees', 'employee'], go: sid => sid ? {view: 'employees', spaceId: sid} : {view: 'home'}},
   ]},
 ];
 
@@ -70,7 +70,7 @@ function sectionKey(route: WorkspaceRoute): NavKey | 'createSpace' | null {
   switch (route.view) {
     case 'space': case 'records': case 'create-item': case 'item': return 'navTasks';
     case 'projects': case 'create-project': case 'project': return 'navProjects';
-    case 'employees': return 'navEmployees';
+    case 'employees': case 'employee': return 'navEmployees';
     case 'settings': return 'navMembers';
     case 'devices': return 'navDevices';
     case 'create-space': return 'createSpace';
@@ -92,7 +92,7 @@ export function WorkspaceShell({api, route, children}: {api: WorkspaceApi; route
   const spaceId = routeSpaceId(route) ?? spaces[0]?.id;
   const space = spaces.find(s => s.id === spaceId);
   const section = sectionKey(route);
-  const detail = route.view === 'item' || route.view === 'project';
+  const detail = route.view === 'item' || route.view === 'project' || route.view === 'employee';
   const initial = (brandConfig.appName || 'W').charAt(0).toUpperCase();
   return <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground md:flex-row">
     <aside className="flex min-w-0 shrink-0 flex-col border-b bg-sidebar px-3 pt-2 md:w-[224px] md:border-b-0 md:border-r md:py-3.5">

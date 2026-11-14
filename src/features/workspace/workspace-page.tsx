@@ -11,6 +11,7 @@ import { DevicePage } from './devices';
 import { TaskFeed } from './task-feed-view';
 import { CreateItem } from './create-item';
 import { SpaceEmployees } from './space-employees';
+import { EmployeeDetail } from './employee-detail';
 import { WorkDetails } from './work-details';
 import { WorkspaceInbox } from './inbox';
 import { roomFailure } from './room-observer';
@@ -49,6 +50,7 @@ export function WorkspacePage({api, client, accountKey, viewerId = client?.sessi
     case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
     case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} client={client} viewerId={viewerId} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
+    case 'employee': view = <EmployeeDetail key={`${route.spaceId}:${route.employeeId}:${route.panel ?? ''}`} api={api} workspaceId={route.spaceId} employeeId={route.employeeId} panel={route.panel} onLockChange={onLockChange}/>; break;
     case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId}/>; break;
     default: view = <SpaceHome api={api}/>;
   }
