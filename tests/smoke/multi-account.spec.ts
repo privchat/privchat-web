@@ -233,8 +233,13 @@ test.describe('multi-account UI (R7.5)', () => {
     await expect(trigger).toHaveAttribute('data-switching', '0');
     await expect(trigger).not.toBeDisabled();
 
-    await trigger.click();
-    await page.getByTestId('account-switcher-trigger').click();
+    // Verify after a fresh keyboard open, independent of pointer hover and
+    // the submenu's focus restoration during the disabled transition.
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await trigger.press('Enter');
+    await page.getByTestId('account-switcher-trigger').press('ArrowRight');
     await expect(page.getByTestId('account-switcher-entry').filter({ hasText: 'Bob' }))
       .toHaveAttribute('data-account-active', '1');
   });

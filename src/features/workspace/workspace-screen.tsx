@@ -16,7 +16,7 @@ export default function WorkspaceScreen({ client, accountKey }: {
       api={api}
       client={client}
       accountKey={accountKey}
-      renderSession={id => <SessionConsole key={id} api={api} executionId={id} />}
+      renderSession={(id, task) => <SessionConsole key={id} api={api} executionId={id} task={task} />}
       onLockChange={ignoreLockChange}
     />
   );

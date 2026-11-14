@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react';
 import type { PrivchatClient } from '@privchat/sdk';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import type { Project, Workspace, WorkspaceActivity, WorkspaceApi, WorkspaceSummary } from './api';
+import type { Project, Workspace, WorkItem, WorkspaceActivity, WorkspaceApi, WorkspaceSummary } from './api';
 import { usePageLabels } from './page-labels';
 import { ProjectCreate, ProjectDetail, ProjectList, workspaceField } from './project-management';
 import { SpaceSettings } from './space-settings';
@@ -22,7 +22,7 @@ import type { TaskStatusCategory } from './task-stage';
 // page refresh, so deep links survive reload while a switch drops scoped routes.
 let lastWorkspaceAccount: string | null | undefined;
 
-export function WorkspacePage({api, client, accountKey, renderSession, onLockChange}: {api: WorkspaceApi; client?: PrivchatClient; accountKey?: string | null; renderSession: (id: string) => ReactNode; onLockChange: (locked: boolean) => void}) {
+export function WorkspacePage({api, client, accountKey, viewerId = client?.sessionSnapshot?.().user_id, renderSession, onLockChange}: {api: WorkspaceApi; client?: PrivchatClient; accountKey?: string | null; viewerId?: string; renderSession: (id: string, task?: {readOnly: boolean}) => ReactNode; onLockChange: (locked: boolean) => void}) {
   const [route, setRoute] = useState<WorkspaceRoute>(() => parseWorkspaceRoute(location.hash) ?? {view: 'home'});
   useEffect(() => {
     const change = () => setRoute(parseWorkspaceRoute(location.hash) ?? {view: 'home'});
@@ -47,7 +47,7 @@ export function WorkspacePage({api, client, accountKey, renderSession, onLockCha
     case 'space':
     case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId}/>; break;
     case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
-    case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
+    case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} client={client} viewerId={viewerId} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId}/>; break;
     default: view = <SpaceHome api={api}/>;
@@ -158,9 +158,9 @@ function SpaceView({api, client, spaceId}: {api: WorkspaceApi; client?: Privchat
   </section>;
 }
 
-function ItemRoute({api, spaceId, itemId, executionId, renderSession, onLockChange}: {api: WorkspaceApi; spaceId: string; itemId: string; executionId?: string; renderSession: (id: string) => ReactNode; onLockChange: (locked: boolean) => void}) {
+function ItemRoute({api, client, viewerId, spaceId, itemId, executionId, renderSession, onLockChange}: {api: WorkspaceApi; client?: PrivchatClient; viewerId?: string; spaceId: string; itemId: string; executionId?: string; renderSession: (id: string, task?: {readOnly: boolean}) => ReactNode; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
-  const [row, setRow] = useState<WorkspaceActivity>();
+  const [row, setRow] = useState<WorkItem>();
   const [space, setSpace] = useState<Workspace>();
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -169,7 +169,7 @@ function ItemRoute({api, spaceId, itemId, executionId, renderSession, onLockChan
       if (!live) return;
       if (item.workspaceId !== spaceId) throw new Error('Work item unavailable');
       setSpace(current);
-      setRow({item, latestExecution: executionId ? {id: '', executionId, state: null} : null, executionCount: 0});
+      setRow(item);
     }).catch(() => {if (live) setError(true);});
     return () => {live = false;};
   }, [api, spaceId, itemId, executionId]);
@@ -177,5 +177,5 @@ function ItemRoute({api, spaceId, itemId, executionId, renderSession, onLockChan
   if (error) return <section className="space-y-3"><Button variant="ghost" onClick={back}>{l('back')}</Button><p role="alert">{l('error')}</p></section>;
   if (!row || !space) return <section className="space-y-3"><Button variant="ghost" onClick={back}>{l('back')}</Button><p role="status">{l('loading')}</p></section>;
   const readOnly = space.archived !== 0 || !['owner', 'admin', 'member'].includes(space.myRole);
-  return <WorkDetails key={itemId} api={api} row={row} readOnly={readOnly} onBack={back} renderSession={renderSession} onLockChange={onLockChange}/>;
+  return <WorkDetails key={itemId} api={api} client={client} viewerId={viewerId} initial={row} executionId={executionId} readOnly={readOnly} onBack={back} renderSession={renderSession} onLockChange={onLockChange}/>;
 }

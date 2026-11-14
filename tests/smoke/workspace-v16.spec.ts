@@ -5,7 +5,7 @@ const node = {nodeId: 'n', name: 'Mac', state: 'active', granted: ['agent.codex'
 const employee = {id: 'ref', workspaceId: 'w', employeeId: 'emp', name: 'Engineer', nodeId: 'n', capability: 'agent.codex', workdirBindingId: 'dir', available: true, projectIds: ['p']};
 const myBinding = {id: 'b1', projectId: 'p', userId: 'me', mine: true, nodeId: 'n', nodeName: 'Mac', directories: [{workdirBindingId: 'dir', label: 'Repository', access: 'write'}], notes: '', reviewerEmployeeId: null, version: 1};
 const project = {id: 'p', workspaceId: 'w', name: 'Project', archived: 0, version: 7, description: '', manageable: true, roundEnd: '', bindings: []};
-const item = (id: string, status = 'open', version = 1) => ({id, workspaceId: 'w', title: `Task ${id}`, description: '', status, version, createdAt: Number(id), closedAt: ['done', 'cancelled'].includes(status) ? Number(id) : null});
+const item = (id: string, status = 'open', version = 1) => ({id, workspaceId: 'w', title: `Task ${id}`, createdBy: 'test-owner', description: '', status, version, createdAt: Number(id), closedAt: ['done', 'cancelled'].includes(status) ? Number(id) : null});
 const row = (id: string, status = 'open', version = 1) => ({item: item(id, status, version), latestExecution: {id: `link-${id}`, executionId: `exec-${id}`, employeeId: 'emp', state: 'succeeded'}, executionCount: 2, developerEmployeeId: 'emp', reviewerEmployeeId: null, reviewNoteId: null, stage: ['done', 'cancelled'].includes(status) ? 'closed' : 'development', lastActivityAt: Number(id), needsAttention: false});
 const feed = (items: WorkspaceActivity[] = [row('21'), row('22')], more = true) => ({items, olderCursor: more ? 'opaque-w' : null, hasOlder: more, refreshRequired: false});
 async function mount(page: Page) {
@@ -411,7 +411,8 @@ test('project task list reads all permitted spaces without reverse workspace loo
   await history.getByRole('button', {name: 'Task 21', exact: true}).click();
   await expect.poll(() => requests.some(r => r.path === '/workspace/work-item/get/21')).toBe(true);
   expect(requests.some(r => r.path === '/workspace/work-item/list')).toBe(false);
-  await expect(page.getByTestId('workflow-panel')).toHaveCount(1);
+  await expect(history.getByTestId('task-conversation-page')).toBeVisible();
+  await expect(history.getByTestId('workflow-panel')).toHaveCount(0);
 });
 
 test('employee task list is scoped by employee across visible spaces, not by the currently selected workspace', async ({page}) => {
@@ -484,7 +485,7 @@ for (const authorized of [true, false]) test(`default review selection uses the 
     if (path === '/workspace/employee/page') return {items: authorized ? [employee, {...employee, id: 'review-ref', employeeId: 'reviewer', name: 'Reviewer'}] : [employee], nextCursor: null, hasMore: false};
   });
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'Task 21', exact: true}).click();
-  await page.getByTestId('task-manage').locator('summary').click(); // Assignment/review live in the collapsed management section.
+  await page.getByTestId('task-manage').click();
   const workflow = page.getByTestId('workflow-panel'); const selectDefault = workflow.getByRole('button', {name: 'Default review employee: reviewer', exact: true});
   if (authorized) {
     await expect(selectDefault).toBeEnabled(); await selectDefault.click();

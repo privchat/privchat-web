@@ -10,7 +10,7 @@ import { usePageLabels } from './page-labels';
 import { deliveryReceipt, retainBlockedDelivery, isBlocked } from './delivery-receipt';
 
 const field = 'block w-full min-w-0 rounded-[7px] border bg-background px-2.5 py-2 text-sm';
-export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLockChange, onExecution}: {api: WorkspaceApi; item: WorkItem; nodes: Node[]; bindings: Binding[]; notes: WorkNote[]; readOnly: boolean; onLockChange: (locked: boolean) => void; onExecution: (id: string) => void}) {
+export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assignmentOnly = false, onLockChange, onExecution}: {api: WorkspaceApi; item: WorkItem; nodes: Node[]; bindings: Binding[]; notes: WorkNote[]; readOnly: boolean; assignmentOnly?: boolean; onLockChange: (locked: boolean) => void; onExecution: (id: string) => void}) {
   const {t} = useTranslation();
   const label = (key: string) => t(`agentWorkspace.${key}`);
   const pageLabel = usePageLabels();
@@ -104,6 +104,7 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
       {autoReview && <label className="grid gap-1.5 text-sm font-medium">{pageLabel('correctionLimit')}<input className={field} inputMode="numeric" placeholder={pageLabel('correctionLimitUnlimited')} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}/><span className="text-xs text-muted-foreground">{pageLabel('correctionLimitHint')}</span></label>}
       {needsAcknowledge && <label className="grid gap-1.5 text-sm font-medium">{pageLabel('acknowledgeUnknown')}<select className={field} value={acknowledge} onChange={e => setAcknowledge(e.target.value as '' | 'inspect' | 'rerun')}><option value="">{label('none')}</option><option value="inspect">{pageLabel('acknowledgeInspect')}</option><option value="rerun">{pageLabel('acknowledgeRerun')}</option></select></label>}
       <Button disabled={!text.trim() || !authorizedEmployee || !candidates.some(b => b.id === bindingId) || ['done', 'cancelled'].includes(item.status) || !limitValid || (needsAcknowledge && !acknowledge)} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-execution/assign', {workItemId: item.id, version: item.version, bindingId, employeeId, text, autoReview, ...(autoReview ? {correctionLimit: correctionLimit.trim() === '' ? null : Number(correctionLimit.trim())} : {}), ...(needsAcknowledge && acknowledge ? {acknowledgeUnknown: acknowledge} : {})});}}>{label('assignEmployee')}</Button>
+      {!assignmentOnly && <>
       <h4>{label('requestReview')}</h4>
       {defaultReviewer && <Button type="button" variant="outline" disabled={!authorized.some(row => row.employeeId === defaultReviewer && row.available)} onClick={() => {setEmployeeId(defaultReviewer); setBindingId(''); setAcknowledge('');}}>{pageLabel('defaultReviewer')}: {defaultReviewer}</Button>}
       <ReviewEvidenceFields links={links} notes={notes} source={source} onSource={setSource} description={description} onDescription={setDescription} evidence={evidence} onEvidence={setEvidence}/>
@@ -115,6 +116,7 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, onLo
       <label className="grid gap-1.5 text-sm font-medium">{label('reviewConclusion')}<select className={field} value={conclusion} onChange={e => setConclusion(e.target.value)}><option value="changes_requested">{label('changesRequested')}</option><option value="passed" disabled={selectedReview?.reviewerExecution.state !== 'succeeded'}>{label('reviewPassed')}</option></select></label>
       <label className="grid gap-1.5 text-sm font-medium">{label('reviewReason')}<textarea className={field} maxLength={20000} value={verdict} onChange={e => setVerdict(e.target.value)}/></label>
       <Button disabled={!canRecord || !verdict.trim() || (conclusion === 'passed' && selectedReview?.reviewerExecution.state !== 'succeeded')} onClick={() => {if (window.confirm(label('verdictConfirm'))) void submit('/workspace/work-note/record-review', {reviewNoteId: reviewId, conclusion, body: verdict});}}>{label('recordReview')}</Button>
+      </>}
     </fieldset>
   </section>;
 }

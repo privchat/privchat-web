@@ -13,6 +13,6 @@ export function TaskHistory({api, scope, projects, onBack, renderSession = () =>
   return <section className="space-y-3" data-testid="task-history">
     <header><Button variant="ghost" disabled={locked} onClick={onBack}>{l('back')}</Button><h2>{l('taskRecords')}</h2></header>
     <div hidden={!!detail}><TaskFeed api={api} {...scope} view="history" enabled={!detail} projects={projects} onOpen={setDetail}/></div>
-    {detail && <WorkDetails key={detail.item.id} api={api} row={detail} readOnly onBack={() => setDetail(undefined)} renderSession={renderSession} onLockChange={setLocked}/>}
+    {detail && <WorkDetails key={detail.item.id} api={api} initial={detail.item} readOnly onBack={() => setDetail(undefined)} renderSession={renderSession} onLockChange={setLocked}/>}
   </section>;
 }

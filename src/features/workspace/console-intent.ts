@@ -38,10 +38,10 @@ export class ConsoleIntent {
     const {[idKey]: _id, ...input} = body;
     return this.run(api, path, input, idKey, retain);
   }
-  async run<T>(api: WorkspaceApi, path: string, body: Record<string, unknown>, idKey = 'commandId', retain?: (result: T) => boolean): Promise<T> {
+  async run<T>(api: WorkspaceApi, path: string, body: Record<string, unknown>, idKey = 'commandId', retain?: (result: T) => boolean, confirmedRequestId?: string): Promise<T> {
     if (this.recoveryError) throw this.recoveryError;
     this.store?.assertScope(api);
-    if (!this.pending) { this.pending = JSON.parse(JSON.stringify({path, body: {...body, [idKey]: crypto.randomUUID()}, idKey})); this.maybeCommitted = false; }
+    if (!this.pending) { this.pending = JSON.parse(JSON.stringify({path, body: {...body, [idKey]: confirmedRequestId ?? crypto.randomUUID()}, idKey})); this.maybeCommitted = false; }
     const pending = this.pending!;
     // pending is JSON-normalized (undefined keys dropped); compare normalized bodies so an optional undefined field doesn't falsely trip the key-count guard.
     const normalized = JSON.parse(JSON.stringify(body)) as Record<string, unknown>;

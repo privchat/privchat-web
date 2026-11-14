@@ -1,7 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { enWorkspace, zhWorkspace, zhTWWorkspace, viWorkspace } from '../../src/i18n/workspace';
 
-const task = (id = '31', status = 'in_progress') => ({id, workspaceId: '21', title: `Task ${id}`, description: 'Real task description', status, version: 2});
+const task = (id = '31', status = 'in_progress') => ({id, workspaceId: '21', title: `Task ${id}`, createdBy: 'test-owner', description: 'Real task description', status, version: 2});
 const activity = (id = '31', state: string | null = 'running') => ({item: task(id), latestExecution: state === null ? null : {id: `link-${id}`, executionId: `execution-${id}`, state}, executionCount: state === null ? 0 : 2, stage: 'development'});
 const event = (seq: number, executionId = '1', text = `Public event ${seq}`) => ({protocolVersion: 1, executionId, eventId: `${executionId}-${seq}`, seq, kind: 'output', payload: {items: [{kind: 'assistant_text', text}]}});
 const archive = (items = [event(1)], nextCursor: string | null = null, snapshotRequired = false) => ({items, nextCursor, snapshotRequired, lastArchivedSeq: items.at(-1)?.seq ?? 0, coverage: 'normalized_events_only'});
@@ -76,7 +76,7 @@ test('feed cards keep business stage independent of execution state and never su
   await expect(feed).not.toContainText('DO NOT GUESS FINAL SUMMARY');
   await expect(feed).not.toContainText(/Latest stage: (running|succeeded|failed|cancelled)/);
   await feed.getByTestId('task-card').nth(1).getByRole('button', {name: 'Task 32', exact: true}).click();
-  await page.getByTestId('task-manage').locator('summary').click(); // The editable work-item panel lives in the collapsed management section.
+  await page.getByTestId('task-manage').click();
   await expect(page.getByTestId('work-item-panel').getByRole('heading', {name: 'Task 32'})).toBeVisible();
   expect(writes).toEqual([]);
 });
@@ -95,7 +95,7 @@ test('feed pagination keeps one card per item and the newest version of overlapp
   await expect(feed.getByTestId('task-card').first()).toContainText('Task 31');
   expect(cursors).toEqual([null, '31']);
   await feed.getByTestId('task-card').last().getByRole('button', {name: 'Task 30', exact: true}).click();
-  await page.getByTestId('task-manage').locator('summary').click(); // The editable work-item panel lives in the collapsed management section.
+  await page.getByTestId('task-manage').click();
   await expect(page.getByTestId('work-item-panel').getByRole('heading', {name: 'Task 30'})).toBeVisible();
 });
 

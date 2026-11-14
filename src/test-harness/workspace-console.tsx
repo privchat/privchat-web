@@ -36,7 +36,7 @@ export function mountWorkspacePage(baseUrl: string, hash = '#/workspace', client
   host.className = 'h-screen w-full';
   location.hash = hash;
   const root = createRoot(host);
-  root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} client={client} accountKey={accountKey} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
+  root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} client={client} viewerId="test-owner" accountKey={accountKey} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
   return () => {root.unmount(); host.remove();};
 }
 
