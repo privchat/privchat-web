@@ -43,6 +43,27 @@ test('device page pairs, limits grants, preserves unknown grants and reports pen
   expect(posts.every(p => !p.path.includes('executions'))).toBe(true);
 });
 
+test('a device reporting Qoder can be granted agent.qoder and is not treated as an unknown capability', async ({page}) => {
+  const qoderNode = {...node, granted: [], capabilities: [{name: 'agent.qoder', available: true, version: 'qoder-cli 1.1.79'}, {name: 'agent.codex', available: false, reason: 'executor_not_logged_in'}, {name: 'unknown', available: true}]};
+  const posts: {path: string; body: any}[] = [];
+  await page.route('**/__manage/app/agent/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    const body = route.request().method() === 'POST' ? route.request().postDataJSON() : undefined;
+    if (body) posts.push({path, body});
+    const data = path.endsWith('/nodes') ? [qoderNode] : {...qoderNode, granted: body.capabilities};
+    await route.fulfill({json: {code: 0, data}});
+  });
+  await page.evaluate(async () => {const {mountDevicePage} = await import('/src/test-harness/workspace-console.tsx'); mountDevicePage(`${location.origin}/__manage/app`);});
+  const p = page.getByTestId('device-page');
+  await p.getByRole('row', {name: /Laptop/}).click();
+  await expect(p.getByRole('checkbox', {name: /agent\.qoder/})).toBeEnabled();
+  await expect(p.getByRole('checkbox', {name: /unknown/})).toBeDisabled();
+  await p.getByRole('checkbox', {name: /agent\.qoder/}).check();
+  await p.getByRole('button', {name: 'Save capabilities'}).click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0].body).toEqual({nodeId: '2', capabilities: ['agent.qoder']});
+});
+
 for (const locale of ['en', 'zh-CN', 'vi']) test(`device page mobile and localized (${locale})`, async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
   await page.route('**/__manage/app/agent/nodes', r => r.fulfill({json: {code: 0, data: [node]}}));

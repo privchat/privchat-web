@@ -19,10 +19,18 @@ function failureLabel(error: unknown): string {
 }
 
 // Only verified executor names are selectable; arbitrary grants are not executor providers.
+// codex / claude / qoder are peers (MODULE_AGENT_SPEC §176).
 export function employeeExecutor(capability: string): string | undefined {
   if (capability === 'agent.claude') return 'claude';
   if (capability === 'agent.codex') return 'codex';
+  if (capability === 'agent.qoder') return 'qoder';
   return undefined;
+}
+export function executorDisplay(value: string): string {
+  if (value === 'codex') return 'Codex';
+  if (value === 'claude') return 'Claude Code';
+  if (value === 'qoder') return 'Qoder';
+  return value || '—';
 }
 // Executors the device reports available, minus any the owner revoked. Choosing one grants its
 // capability on create (WEEY_AGENT_SPEC §9.2.1), so a freshly paired node offers them before any grant.
@@ -155,7 +163,7 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
     {ready && employees.length === 0 && <p>{label('empty')}</p>}
     {employee && <div className="space-y-2 rounded-[7px] border bg-sidebar p-3 text-sm break-words">
       <p>{employee.name} · {employee.title}</p><p className="whitespace-pre-wrap">{employee.roleDescription}</p>
-      <p>{nodeBound ? employee.nodeId : label('unconfigured')} · {employee.executor} · {employee.model} · {employee.workdirBindingId}</p>
+      <p>{nodeBound ? employee.nodeId : label('unconfigured')} · {executorDisplay(employee.executor)} · {employee.model} · {employee.workdirBindingId}</p>
       <p>{workspaceMode ? pageLabel('privateNotImported') : `${label('managedSession')}: ${nodeBound ? executionId || label('sessionOnSend') : label('unconfigured')}`}</p>
       <Button variant="outline" disabled={locked || !ready || editing || !nodeBound} onClick={() => {
         setConfig({name: employee.name, title: employee.title, roleDescription: employee.roleDescription, nodeId: employee.nodeId!, executor: employee.executor, model: employee.model, workdirBindingId: employee.workdirBindingId});
@@ -172,7 +180,7 @@ export function EmployeePanel({api, nodes, refreshNodes, renderSession, onReques
             <option value="">{label('nodes')}</option>{nodes.map(n => <option key={n.nodeId} value={n.nodeId} disabled={n.state !== 'active'}>{n.name} · {n.state} · {n.nodeId}</option>)}
           </select></label>
           <label className="grid gap-1.5 text-sm font-medium">{label('executor')}<select className={field} value={config.executor} onChange={e => {setConfig({...config, executor: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>
-            <option value="">{label('executor')}</option>{executors.map(e => <option key={e}>{e}</option>)}
+            <option value="">{label('executor')}</option>{executors.map(e => <option key={e} value={e}>{executorDisplay(e)}</option>)}
           </select></label>
           <label className="grid gap-1.5 text-sm font-medium">{label('model')}<input className={field} value={config.model} onChange={e => {setConfig({...config, model: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}/></label>
           <label className="grid gap-1.5 text-sm font-medium">{label('workdir')}<select className={field} value={config.workdirBindingId} onChange={e => {setConfig({...config, workdirBindingId: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>

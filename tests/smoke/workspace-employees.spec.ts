@@ -4,7 +4,7 @@ const employee = {agentId: 'employee-1', name: 'Alex', title: 'Reviewer', roleDe
 const execution = {executionId: 'session-1', nodeId: 'remote-1', capability: 'agent.codex', scope: {kind: 'private', ref: ''}, state: 'succeeded', stateVersion: 1, nativeSessionId: 'native-1', updatedAt: 1, createdAt: 1, params: {model: 'configured-model', workdirBindingId: 'repo', title: 'Existing review'}};
 const nodes = [{nodeId: 'remote-1', name: 'Remote laptop', state: 'active', granted: ['agent.codex', 'agent.claude', 'code.codex', 'workspace_events_read', 'unknown'], capabilities: [{name: 'agent.codex', available: true}, {name: 'agent.claude', available: true}, {name: 'code.codex', available: true}], workdirs: [{id: 'repo', label: 'Project'}], sessionDiscovery: {external: false, reason: 'executor_discovery_unverified'}}, {nodeId: 'offline', name: 'Offline laptop', state: 'offline', granted: ['agent.codex'], workdirs: []}];
 
-async function mount(page: Page, initial: unknown[] = [], sessions: unknown[] = [], reply?: (path: string, body: Record<string, unknown>, attempt: number) => unknown) {
+async function mount(page: Page, initial: unknown[] = [], sessions: unknown[] = [], reply?: (path: string, body: Record<string, unknown>, attempt: number) => unknown, nodeList: unknown[] = nodes) {
   const posts: {path: string; body: Record<string, unknown>}[] = [];
   await page.goto('/');
   await page.route('**/__employees/app/**', async route => {
@@ -13,7 +13,7 @@ async function mount(page: Page, initial: unknown[] = [], sessions: unknown[] = 
     const body = isPost ? route.request().postDataJSON() : {};
     if (isPost) posts.push({path, body});
     let data: unknown = [];
-    if (path === '/agent/nodes') data = nodes;
+    if (path === '/agent/nodes') data = nodeList;
     if (path === '/agent/agents' && !isPost) data = initial;
     if (path === '/agent/executions/list') data = sessions;
     if (path === '/agent/executions/get') data = execution;
@@ -32,7 +32,7 @@ async function mount(page: Page, initial: unknown[] = [], sessions: unknown[] = 
   });
   const panel = page.getByTestId('employee-panel');
   await expect(panel.getByRole('button', {name: 'Refresh', exact: true})).toBeEnabled();
-  await expect(panel.getByRole('combobox', {name: /^Devices/}).locator('option')).toHaveCount(3);
+  await expect(panel.getByRole('combobox', {name: /^Devices/}).locator('option')).toHaveCount(nodeList.length + 1);
   return {panel, posts};
 }
 
@@ -220,10 +220,14 @@ test('unsupported employee API has an explicit state and refresh recovers', asyn
 test('only verified agent capabilities map to executor names', async ({page}) => {
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const {employeeExecutor} = await import('/src/features/workspace/employees.tsx');
-    return ['agent.claude', 'agent.codex', 'code.claude', 'code.codex', 'agent.paseo', 'coding'].map(c => employeeExecutor(c) ?? null);
+    const {employeeExecutor, executorDisplay} = await import('/src/features/workspace/employees.tsx');
+    return {
+      mapped: ['agent.claude', 'agent.codex', 'agent.qoder', 'code.claude', 'code.codex', 'code.qoder', 'agent.paseo', 'coding'].map(c => employeeExecutor(c) ?? null),
+      display: ['codex', 'claude', 'qoder', 'unknown', ''].map(executorDisplay),
+    };
   });
-  expect(result).toEqual(['claude', 'codex', null, null, null, null]);
+  expect(result.mapped).toEqual(['claude', 'codex', 'qoder', null, null, null, null, null]);
+  expect(result.display).toEqual(['Codex', 'Claude Code', 'Qoder', 'unknown', '—']);
 });
 
 test('binding candidates dedupe native sessions and exclude every busy, unknown or owned session', async ({page}) => {
@@ -256,9 +260,32 @@ test('executor selection lists device-available executors regardless of grant; u
       availableEmployeeExecutors({...node, capabilities: [{name: 'agent.codex', available: false}, {name: 'agent.claude', available: true}]}),
       availableEmployeeExecutors({...node, revokedCapabilities: ['agent.codex']}),
       availableEmployeeExecutors({...node, capabilities: undefined}),
+      // Real mac node: only Qoder is logged in; codex/claude report executor_not_logged_in.
+      availableEmployeeExecutors({...node, granted: [], capabilities: [{name: 'agent.qoder', available: true, version: 'qoder-cli 1.1.79'}, {name: 'agent.codex', available: false}, {name: 'agent.claude', available: false}]}),
+      availableEmployeeExecutors({...node, capabilities: [{name: 'agent.qoder', available: true}], revokedCapabilities: ['agent.qoder']}),
     ];
   }, nodes[0]);
-  expect(result).toEqual([['codex', 'claude'], ['codex', 'claude'], ['claude'], ['claude'], []]);
+  expect(result).toEqual([['codex', 'claude'], ['codex', 'claude'], ['claude'], ['claude'], [], ['qoder'], []]);
+});
+
+test('a device reporting only Qoder offers it as a selectable executor and creates with executor qoder', async ({page}) => {
+  const qoderNode = {nodeId: 'mac', name: 'mac', state: 'active', granted: [], capabilities: [{name: 'agent.qoder', available: true, version: 'qoder-cli 1.1.79'}, {name: 'agent.codex', available: false, reason: 'executor_not_logged_in'}, {name: 'agent.claude', available: false, reason: 'executor_not_logged_in'}], workdirs: [{id: 'qa-node-work', label: 'qa-node-work'}], sessionDiscovery: {external: false, reason: 'executor_discovery_unverified'}};
+  const {panel, posts} = await mount(page, [], [], undefined, [qoderNode]);
+  await panel.getByRole('textbox', {name: 'Name', exact: true}).fill('测试开发');
+  await panel.getByRole('textbox', {name: 'Job title', exact: true}).fill('Developer');
+  await panel.getByRole('textbox', {name: 'Role instructions', exact: true}).fill('Develop features');
+  await panel.getByRole('combobox', {name: /^Devices/}).selectOption('mac');
+  const executor = panel.getByRole('combobox', {name: /^Executor/});
+  await expect(executor.locator('option')).toHaveCount(2);
+  await expect(executor.getByRole('option', {name: 'Qoder', exact: true})).toHaveAttribute('value', 'qoder');
+  await executor.selectOption('qoder');
+  await panel.getByRole('textbox', {name: 'Model', exact: true}).fill('configured-model');
+  await panel.getByRole('combobox', {name: /^Work directory binding/}).selectOption('qa-node-work');
+  await expect(panel.getByRole('button', {name: 'Create employee', exact: true})).toBeEnabled();
+  await panel.getByRole('button', {name: 'Create employee', exact: true}).click();
+  await expect.poll(() => posts.length).toBe(1);
+  expect(posts[0].path).toBe('/agent/agents');
+  expect(posts[0].body).toMatchObject({nodeId: 'mac', executor: 'qoder', workdirBindingId: 'qa-node-work'});
 });
 
 test('selecting an employee opens its existing console without sending or starting work', async ({page}) => {

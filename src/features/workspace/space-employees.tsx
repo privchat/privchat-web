@@ -4,12 +4,10 @@ import {TaskHistory} from './task-history';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Employee, Node, Workspace, WorkspaceApi, WorkspaceEmployee } from './api';
-import { availableEmployeeExecutors, employeeExecutor } from './employees';
+import { availableEmployeeExecutors, employeeExecutor, executorDisplay } from './employees';
 import { usePageLabels } from './page-labels';
 import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh, wsField } from './shell';
 import { useEmployeePages } from './use-employee-pages';
-
-const executorDisplay = (value: string) => value === 'codex' ? 'Codex' : value === 'claude' ? 'Claude Code' : value || '—';
 
 export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: {api: WorkspaceApi; renderSession?: (id: string) => ReactNode; workspaceId: string; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();

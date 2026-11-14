@@ -9,7 +9,7 @@ import { roomFailure } from './room-observer';
 import { usePageLabels } from './page-labels';
 import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh, wsField } from './shell';
 
-const known = new Set(['agent.codex', 'agent.claude', 'workspace_events_read']);
+const known = new Set(['agent.codex', 'agent.claude', 'agent.qoder', 'workspace_events_read']);
 
 export function DevicePage({api}: {api: WorkspaceApi}) {
   const {t, i18n} = useTranslation();
