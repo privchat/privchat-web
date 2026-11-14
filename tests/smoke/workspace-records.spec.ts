@@ -8,6 +8,8 @@ const archive = (items = [event(1)], nextCursor: string | null = null, snapshotR
 const feedPage = (items: unknown[], olderCursor: string | null = null) => ({items, olderCursor, hasOlder: olderCursor !== null, refreshRequired: false});
 type Handler = (route: Route, url: URL) => Promise<void>;
 const reply = (route: Route, data: unknown) => route.fulfill({json: {code: 0, data}});
+/** The platform only exposes get/list/cancel for executions; anything else answers 404 ROUTE_NOT_FOUND. */
+const routeNotFound = (route: Route) => route.fulfill({status: 404, json: {code: 10201, message: 'ROUTE_NOT_FOUND'}});
 
 async function routes(page: Page, handlers: {activity?: Handler; records?: Handler; executions?: Handler} = {}) {
   const writes: string[] = [];
@@ -18,7 +20,7 @@ async function routes(page: Page, handlers: {activity?: Handler; records?: Handl
     if (path.endsWith('/activity/page') && handlers.activity) return handlers.activity(route, url);
     if (path.endsWith('/sessions/records') && handlers.records) return handlers.records(route, url);
     if (path.endsWith('/executions/get') && handlers.executions) return handlers.executions(route, url);
-    let data: unknown = [];
+    let data: unknown = path.includes('/app/agent/') ? undefined : [];
     if (path.endsWith('/workspace/page')) data = {list: ['21', '22'].map(id => ({id, name: `Team ${id}`, description: '', archived: 0, myRole: 'owner', employeeCount: 0, availableEmployeeCount: 0, employeeAvailabilityKnown: true, openItemCount: 1, lastActivityAt: null})), total: 2};
     if (path.endsWith('/workspace/list')) data = [{id: '21', name: 'Team', archived: 0, myRole: 'owner'}, {id: '22', name: 'Other team', archived: 0, myRole: 'owner'}];
     if (path.includes('/workspace/get/')) data = {id: path.split('/').at(-1), name: 'Team', description: '', archived: 0, myRole: 'owner'};
@@ -30,8 +32,10 @@ async function routes(page: Page, handlers: {activity?: Handler; records?: Handl
     if (path.includes('/work-item/get/')) data = task(path.split('/').at(-1)!);
     if (path.endsWith('/activity/page')) data = feedPage([activity()]);
     if (path.endsWith('/executions/get')) data = {executionId: url.searchParams.get('executionId'), nodeId: '8', state: 'running', stateVersion: 1};
-    if (path.endsWith('/executions/children')) data = {items: [], nextCursor: null};
+    if (path.endsWith('/permissions/list')) data = [];
+    if (path.endsWith('/agent/nodes') || path.endsWith('/agent/agents')) data = [];
     if (path.endsWith('/sessions/records')) data = archive([event(1, url.searchParams.get('executionId')!)]);
+    if (data === undefined) return routeNotFound(route);
     await reply(route, data);
   });
   return writes;
@@ -181,6 +185,24 @@ for (const deniedBy of ['records', 'execution']) {
     await expect(session.getByRole('button', {name: enWorkspace.watch, exact: true})).toBeDisabled();
   });
 }
+
+test('a failed execution keeps its failure and records, and the console only calls operations the platform exposes', async ({page}) => {
+  const seen: string[] = [];
+  page.on('request', request => {const path = new URL(request.url()).pathname; if (path.includes('/app/agent/')) seen.push(path.replace('/__wf05/app', ''));});
+  const writes = await routes(page, {executions: (route, url) => reply(route, {executionId: url.searchParams.get('executionId'), nodeId: '8', state: 'failed', stateVersion: 4,
+    result: {failure: {code: 'executor_error', reason: 'AGENT_EXECUTION_INVALID', retryable: false}}})});
+  const records = await mountRecords(page);
+  const session = page.getByTestId('session-console');
+  await expect(records).toContainText('Public event 1');
+  // A denial stops polling, so surviving a second cycle proves no optional read wiped the panel.
+  await expect.poll(() => seen.filter(path => path === '/agent/executions/get').length).toBeGreaterThanOrEqual(2);
+  await expect(session.getByTestId('execution-failure')).toContainText(enWorkspace.failure_executor_error);
+  await expect(session.getByRole('status')).toHaveText('failed');
+  await expect(session).not.toContainText(enWorkspace.denied);
+  await expect(session.getByRole('button', {name: enWorkspace.watch, exact: true})).toBeEnabled();
+  expect([...new Set(seen)].filter(path => !['/agent/executions/get', '/agent/permissions/list', '/agent/sessions/records'].includes(path))).toEqual([]);
+  expect(writes).toEqual([]);
+});
 
 for (const status of [404, 405, 501]) {
   test(`archive missing API (${status}) explains partial support without invoking node history/watch`, async ({page}) => {

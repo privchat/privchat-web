@@ -17,7 +17,6 @@ async function mount(page: Page, initial: unknown[] = [], sessions: unknown[] = 
     if (path === '/agent/agents' && !isPost) data = initial;
     if (path === '/agent/executions/list') data = sessions;
     if (path === '/agent/executions/get') data = execution;
-    if (path === '/agent/executions/children') data = {items: []};
     if (isPost) {
       data = reply ? reply(path, body, posts.filter(p => p.path === path).length) : path.endsWith('/send') ? execution : {...employee, ...body};
       if (data === 'abort') {await route.abort(); return;}

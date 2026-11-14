@@ -29,9 +29,6 @@ function SessionConsoleBody({api,executionId,onContinue,employeeManaged=false,ta
   const [denied,setDenied]=useState(false);
   const [busy,setBusy]=useState(false);
   const [nextExecution,setNextExecution]=useState<string>();
-  const [children,setChildren]=useState<{childExecutionId:string;state:string}[]>([]);
-  const [childCursor,setChildCursor]=useState<string>();
-  const childrenExpanded=useRef(false);
   const pending=useRef(new Map<string,Command>());
   const applied=useRef(new Set<string>());
   const intent=useRef(new ConsoleIntent());
@@ -41,7 +38,7 @@ function SessionConsoleBody({api,executionId,onContinue,employeeManaged=false,ta
   const recovery=useRef<string | undefined>(undefined);
   const currentWatch=useRef(watch); currentWatch.current=watch;
   function denyAccess() {
-    setDenied(true); setError(true); setExecution(undefined); setPermissions([]); setHistory([]); setEvents([]); setChildren([]); setCommands([]); setNextExecution(undefined); pending.current.clear(); live.current = false;
+    setDenied(true); setError(true); setExecution(undefined); setPermissions([]); setHistory([]); setEvents([]); setCommands([]); setNextExecution(undefined); pending.current.clear(); live.current = false;
   }
   function accept(c:Command) {
     if(!live.current)return;
@@ -61,8 +58,6 @@ function SessionConsoleBody({api,executionId,onContinue,employeeManaged=false,ta
     const poll=async()=>{if(running||!live.current)return;running=true;try{
       const state=await api.execution(executionId);const perms=await api.permissions(executionId);
       if(!live.current)return;setExecution(state);setPermissions(perms);setError(false);
-      const childPage=await api.get<{items:{childExecutionId:string;state:string}[];nextCursor?:string}>(`/agent/executions/children?executionId=${encodeURIComponent(executionId)}&limit=100`);
-      if(!live.current)return;setChildren(old=>{const rows=new Map(old.map(x=>[x.childExecutionId,x]));for(const c of childPage.items??[])rows.set(c.childExecutionId,c);return [...rows.values()];});if(!childrenExpanded.current)setChildCursor(childPage.nextCursor);
       for(const c of pending.current.values()){const result=await api.command(c.executionId,c.commandId);if(!live.current)return;accept(result);}
       if(currentWatch.current){
         const page=await api.events(executionId,seq.current);if(!live.current)return;
@@ -112,6 +107,5 @@ function SessionConsoleBody({api,executionId,onContinue,employeeManaged=false,ta
     {events.map(e => <div key={e.seq}>{publicRecords(e).map((record, index) => <p key={index} className="whitespace-pre-wrap break-words text-sm">{record.text ?? t(`agentWorkspace.${record.state ? `execution_${record.state}` : `record_${record.kind}`}`)}</p>)}</div>)}
     {permissions.filter(p=>p.status==='pending').map(p=><div key={p.permissionId} className="rounded border p-3"><pre className="whitespace-pre-wrap break-all">{permissionDetails(p.summary)??p.summary}</pre><p>{t('agentWorkspace.permissionHint')}</p>{!task?.readOnly && (['allow_once','deny'] as const).map(decision=><Button key={decision} disabled={controls||p.expiresAt<=Date.now()||(!!task&&intent.current.hasPending)||(decision==='allow_once'&&!permissionDetails(p.summary))} onClick={()=>{if(window.confirm(t('agentWorkspace.confirm')))void command('permissions/resolve',{permissionId:p.permissionId,requestDigest:p.requestDigest,decision});}}>{t(decision==='allow_once'?'agentWorkspace.approve':'agentWorkspace.deny')}</Button>)}{p.expiresAt<=Date.now()&&<p>{t('agentWorkspace.expired')}</p>}</div>)}
     {nextExecution&&nextExecution!==executionId&&<Button onClick={()=>onContinue?.(nextExecution)} disabled={!onContinue}>{t('agentWorkspace.executions')} · {nextExecution}</Button>}
-    {children.length>0&&<section><h3>{t('agentWorkspace.delegation')}</h3>{children.map(c=><Button key={c.childExecutionId} variant="outline" disabled={controls||!onContinue} onClick={()=>onContinue?.(c.childExecutionId)}>{c.childExecutionId} · {c.state}</Button>)}{childCursor&&<Button disabled={controls} onClick={()=>void api.get<{items:{childExecutionId:string;state:string}[];nextCursor?:string}>(`/agent/executions/children?executionId=${encodeURIComponent(executionId)}&limit=100&cursor=${encodeURIComponent(childCursor)}`).then(p=>{if(live.current){setChildren(old=>[...old,...p.items].filter((x,i,a)=>a.findIndex(y=>y.childExecutionId===x.childExecutionId)===i));childrenExpanded.current=true;setChildCursor(p.nextCursor);}}).catch(()=>setError(true))}>{t('agentWorkspace.more')}</Button>}</section>}
   </section>;
 }
