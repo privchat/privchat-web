@@ -17,11 +17,15 @@ export function SpaceSettings({api, workspaceId}: {api: WorkspaceApi; workspaceI
   const [manageId, setManageId] = useState<string>();
   const [userId, setUserId] = useState('');
   const [role, setRole] = useState('member');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [denied, setDenied] = useState(false);
   const live = useRef(true);
-  const manager = !!space && space.archived === 0 && ['owner', 'admin'].includes(space.myRole);
+  const canManage = !!space && ['owner', 'admin'].includes(space.myRole);
+  const manager = canManage && space.archived === 0;
   const managed = members.find(m => m.id === manageId);
   const roleLabel = (value: string) => value === 'owner' ? l('roleOwner') : value === 'admin' ? l('roleAdmin') : l('roleMember');
   async function load() {
@@ -29,7 +33,7 @@ export function SpaceSettings({api, workspaceId}: {api: WorkspaceApi; workspaceI
     try {
       const [current, rows] = await Promise.all([api.space(workspaceId), api.members(workspaceId)]);
       if (!live.current) return;
-      setSpace(current); setMembers(rows); setError(false); setDenied(false);
+      setSpace(current); setMembers(rows); setName(current.name); setDescription(current.description); setError(false); setDenied(false);
     } catch (e) {
       if (!live.current) return;
       if (roomFailure(e) === 'denied') setDenied(true);
@@ -39,12 +43,38 @@ export function SpaceSettings({api, workspaceId}: {api: WorkspaceApi; workspaceI
   useEffect(() => {live.current = true; void load(); return () => {live.current = false;};}, [api, workspaceId]);
   async function act(action: () => Promise<unknown>) {
     if (busy) return;
-    setBusy(true); setError(false);
+    setBusy(true); setError(false); setSaved(false);
     try {await action(); await load();} catch {if (live.current) setError(true);} finally {if (live.current) setBusy(false);}
   }
   return <section data-testid="space-settings">
-    <WsPageHeader title={l('membersTitle')} subtitle={l('membersSub')} actions={manager && <Button size="sm" disabled={busy} onClick={() => {setUserId(''); setRole('member'); setPreview(false); setInvite(true); setManageId(undefined);}}><Plus className="h-4 w-4" />{l('inviteMember')}</Button>} />
+    <WsPageHeader title={l('settings')} subtitle={l('spaceSettingsSub')} />
     {error && <p role="alert">{l(denied ? 'accessDenied' : 'error')}</p>}
+    {space && <form data-testid="space-profile" className="mb-6 space-y-3 rounded-[9px] border px-4 py-3" onSubmit={e => {e.preventDefault(); if (!manager || !name.trim()) return; void act(async () => {await api.updateSpace({id: space.id, name: name.trim(), description: description.trim()}); setSaved(true);});}}>
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-semibold">{l('settings')}</h2>
+        {space.archived !== 0 && <StatusPill>{l('archived')}</StatusPill>}
+      </div>
+      <fieldset disabled={busy || !manager} className="space-y-3">
+        <label className="grid gap-1.5 text-sm font-medium">{l('name')}
+          <input required maxLength={64} className={workspaceField} value={name} onChange={e => {setName(e.target.value); setSaved(false);}}/>
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium">{l('description')}
+          <textarea rows={3} maxLength={500} aria-label={l('description')} className={workspaceField} value={description} onChange={e => {setDescription(e.target.value); setSaved(false);}}/>
+        </label>
+        {manager && <Button type="submit" disabled={busy || !name.trim()}>{l('save')}</Button>}
+      </fieldset>
+      {space.archived !== 0 && <p className="text-sm text-muted-foreground">{l('readOnly')}</p>}
+      {saved && <p role="status" className="text-sm text-muted-foreground">{l('spaceSaved')}</p>}
+      {canManage && <Button type="button" variant={space.archived === 0 ? 'destructive' : 'outline'} disabled={busy} onClick={() => {
+        const archiving = space.archived === 0;
+        if (window.confirm(l(archiving ? 'archiveSpaceConfirm' : 'restoreSpaceConfirm'))) void act(() => api.spaceStatus(space.id, archiving ? 1 : 0));
+      }}>{l(space.archived === 0 ? 'archiveSpace' : 'restoreSpace')}</Button>}
+    </form>}
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <h2 className="text-sm font-semibold">{l('membersTitle')}</h2>
+      {manager && <Button size="sm" disabled={busy} onClick={() => {setUserId(''); setRole('member'); setPreview(false); setInvite(true); setManageId(undefined);}}><Plus className="h-4 w-4" />{l('inviteMember')}</Button>}
+    </div>
+    <p className="mb-3 text-sm text-muted-foreground">{l('membersSub')}</p>
     {manager && <Dialog open={invite} onOpenChange={open => {if (!busy) {setInvite(open); if (!open) setPreview(false);}}}>
       <DialogContent>
         <DialogHeader>

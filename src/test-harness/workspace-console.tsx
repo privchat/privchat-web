@@ -22,7 +22,6 @@ export function mountRecordsConsole(baseUrl: string) {
 }
 
 import { WorkspacePage } from '@/features/workspace/workspace-page';
-import { EmployeePanel } from '@/features/workspace/employees';
 import type { PrivchatClient } from '@privchat/sdk';
 import { DevicePage } from '@/features/workspace/devices';
 import { AssistantPage } from '@/features/workspace/assistant';
@@ -37,18 +36,6 @@ export function mountWorkspacePage(baseUrl: string, hash = '#/workspace', client
   location.hash = hash;
   const root = createRoot(host);
   root.render(<WorkspacePage api={new WorkspaceApi(baseUrl, () => 'test')} client={client} viewerId="test-owner" accountKey={accountKey} renderSession={id => <p data-testid="focused-session">{id}</p>} onLockChange={locked => {host.dataset.locked = String(locked);}}/>);
-  return () => {root.unmount(); host.remove();};
-}
-
-/** Standalone employee panel fixture with the production node refresh and managed session console. */
-export function mountEmployeePanel(baseUrl: string) {
-  const host = document.createElement('div'); document.body.replaceChildren(host);
-  host.className = 'workspace-scope mx-auto max-w-3xl p-3';
-  const api = new WorkspaceApi(baseUrl, () => 'test');
-  const root = createRoot(host);
-  const render = (nodes: Node[]) => root.render(<EmployeePanel api={api} nodes={nodes} refreshNodes={async () => {render(await api.nodes());}} renderSession={id => <SessionConsole key={id} api={api} executionId={id} employeeManaged/>} onRequestLockChange={locked => {host.dataset.locked = String(locked);}}/>);
-  render([]);
-  void api.nodes().then(render).catch(() => {});
   return () => {root.unmount(); host.remove();};
 }
 

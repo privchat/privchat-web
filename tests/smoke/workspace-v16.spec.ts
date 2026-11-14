@@ -27,7 +27,9 @@ async function mock(page: Page, override?: (path: string, query: URL, body: any)
     if (path === '/workspace/room/join') data = {channelId: '400', channelType: 3, ticket: 'fixture-room', expiresAt: Date.now() + 60000, eventProtocolVersion: 1};
     if (path === '/workspace/activity/page') data = url.searchParams.has('cursor') ? feed([row('1', 'done'), row('2', 'cancelled'), row('21')], false) : feed();
     if (path.startsWith('/workspace/work-item/get/')) data = item(path.split('/').at(-1)!);
-    const custom = override?.(path, url, body); if (custom === 'abort') {await route.abort(); return;} await route.fulfill({json: {code: 0, data: custom === undefined ? data : custom}});
+    const custom = override?.(path, url, body); if (custom === 'abort') {await route.abort(); return;}
+    if (typeof custom === 'string' && custom.startsWith('reject:')) {await route.fulfill({json: {code: 10200, message: custom.slice('reject:'.length)}}); return;}
+    await route.fulfill({json: {code: 0, data: custom === undefined ? data : custom}});
   }); return requests;
 }
 test('cards separate association count and availability; exact management menu; no execution or room requests', async ({page}) => {
@@ -350,6 +352,27 @@ test('employee management exposes reference 101 through load more and retains al
   await expect(panel.getByRole('cell', {name: 'Employee 101', exact: true})).toBeVisible(); await expect(panel.locator('tbody tr').first()).toContainText('Offline');
   expect(requests.filter(r => r.path === '/workspace/employee/page').map(r => r.query.searchParams.get('cursor'))).toEqual([null, 'reference-tail-100']);
 });
+for (const [language, title, add, column] of [['en', 'AI employees', 'Add AI employee', 'Employee'], ['zh-CN', 'AI 员工', '添加 AI 员工', '员工'], ['vi', 'Nhân viên AI', 'Thêm nhân viên AI', 'Nhân viên']]) {
+  test(`the employees page is localized and fits a phone viewport (${language})`, async ({page}, testInfo) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await mock(page); await mount(page);
+    await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+    await page.evaluate(async language => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage(language);}, language);
+    const panel = page.getByTestId('space-employees');
+    await expect(panel.getByRole('heading', {name: title, exact: true})).toBeVisible();
+    await expect(panel.getByRole('button', {name: add, exact: true})).toBeVisible();
+    await expect(panel.getByRole('columnheader', {name: column, exact: true})).toBeVisible();
+    await expect(panel).not.toContainText('agentWorkspace.');
+    await expect.poll(async () => {const box = await panel.boundingBox(); return !!box && box.x >= 0 && box.x + box.width <= 390;}).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await panel.getByRole('button', {name: add, exact: true}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', {name: add, exact: true})).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({path: testInfo.outputPath(`employees-mobile-${language}.png`)});
+  });
+}
+
 test('create-item discovers available employee 101 after an entirely unavailable first page without starting work', async ({page}) => {
   const requests = await mock(page, (path, query) => path === '/workspace/employee/page' ? referencePage(query.searchParams.get('cursor')) : undefined);
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click();
@@ -713,6 +736,176 @@ test('a revoked employee is re-authorized in place without touching its device, 
   expect(body).not.toHaveProperty('bindExecutionId');
   expect(requests.some(r => r.path === '/agent/employees/rebind')).toBe(false);
   expect(requests.some(r => r.path === '/workspace/agent-binding/create')).toBe(false);
+});
+
+// ── 执行器模型目录（WEEY_AGENT_PROTOCOL_SPEC §7.4）─────────────────────────────
+const catalogNode = {...node, capabilities: [
+  {name: 'agent.codex', available: true, models: [{id: 'gpt-5.6-terra', name: 'Terra'}, {id: 'gpt-6-luna'}], defaultModel: 'gpt-5.6-terra'},
+  {name: 'agent.qoder', available: true, models: [{id: 'qoder-max'}], defaultModel: 'qoder-max'},
+]};
+function employeeCreateMocks(path: string, body: any) {
+  if (path === '/agent/nodes') return [catalogNode];
+  if (path === '/agent/agents' && body) return {agentId: 'new-emp', name: body.name, nodeId: body.nodeId, executor: body.executor, workdirBindingId: body.workdirBindingId, config: {}, createdAt: 1, roleDescription: '', title: '', model: body.model};
+  if (path === '/workspace/agent-binding/create') return {id: 'new-b', workspaceId: body.workspaceId, nodeId: body.nodeId, capability: body.capability, grantedBy: 'me', revoked: 0, createdAt: 1};
+  if (path === '/workspace/employee/create') return {id: 'ref-new', workspaceId: body.workspaceId, employeeId: body.employeeId, name: 'New dev', nodeId: 'n', capability: 'agent.codex', available: true, projectIds: []};
+  return undefined;
+}
+async function openEmployeeDialog(page: Page) {
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+  await page.getByTestId('space-employees').getByRole('button', {name: 'Add AI employee', exact: true}).click();
+  return page.getByRole('dialog');
+}
+async function fillEmployee(dialog: ReturnType<Page['getByRole']>) {
+  await dialog.getByRole('textbox', {name: 'Employee name', exact: true}).fill('New dev');
+  await dialog.getByRole('textbox', {name: 'Responsibility', exact: true}).fill('Implement');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+}
+
+test('the executor catalog becomes the model dropdown and resets when the executor or device changes', async ({page}) => {
+  await mock(page, (path, _query, body) => employeeCreateMocks(path, body));
+  const dialog = await openEmployeeDialog(page); await fillEmployee(dialog);
+  const model = dialog.getByTestId('employee-model-select');
+  await expect(model).toHaveCount(0);
+  await expect(dialog.getByTestId('employee-model-input')).toBeDisabled();
+  await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
+  await expect(model.locator('option')).toHaveCount(3);
+  await expect(model.locator('option').first()).toHaveText('Keep the executor’s default (gpt-5.6-terra)');
+  await expect(model.locator('option').first()).toHaveAttribute('value', '');
+  await expect(model.locator('option').nth(1)).toHaveText('Terra · gpt-5.6-terra');
+  await expect(model.locator('option').nth(2)).toHaveText('gpt-6-luna');
+  await expect(dialog.getByTestId('employee-model-input')).toHaveCount(0);
+  await model.selectOption('gpt-6-luna');
+  await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('qoder');
+  await expect(model).toHaveValue('');
+  await expect(model.locator('option')).toHaveCount(2);
+  await expect(model.locator('option').first()).toHaveText('Keep the executor’s default (qoder-max)');
+  await model.selectOption('qoder-max');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+  await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
+  await expect(model).toHaveValue('');
+});
+
+test('creating keeps the executor default with a blank model and sends the chosen model otherwise', async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => employeeCreateMocks(path, body));
+  const dialog = await openEmployeeDialog(page); await fillEmployee(dialog);
+  await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
+  await dialog.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('dir');
+  await dialog.getByRole('button', {name: 'Create employee', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/agent/agents' && r.method === 'POST').length).toBe(1);
+  expect(requests.find(r => r.path === '/agent/agents' && r.method === 'POST')!.body).toMatchObject({executor: 'codex', model: ''});
+  await page.getByTestId('space-employees').getByRole('button', {name: 'Add AI employee', exact: true}).click();
+  const again = page.getByRole('dialog'); await fillEmployee(again);
+  await again.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
+  await again.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('dir');
+  await expect(again.getByTestId('employee-model-select')).toHaveValue('');
+  await again.getByTestId('employee-model-select').selectOption('gpt-6-luna');
+  await again.getByRole('button', {name: 'Create employee', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/agent/agents' && r.method === 'POST').length).toBe(2);
+  expect(requests.filter(r => r.path === '/agent/agents' && r.method === 'POST')[1].body).toMatchObject({executor: 'codex', model: 'gpt-6-luna'});
+});
+
+test('a node that reports no catalog still takes a typed model', async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => path === '/agent/nodes' ? [node] : employeeCreateMocks(path, body));
+  const dialog = await openEmployeeDialog(page); await fillEmployee(dialog);
+  await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
+  await dialog.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('dir');
+  await expect(dialog.getByTestId('employee-model-select')).toHaveCount(0);
+  const input = dialog.getByTestId('employee-model-input');
+  await expect(input).toBeEnabled();
+  await input.fill('remembered-model');
+  await dialog.getByRole('button', {name: 'Create employee', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/agent/agents' && r.method === 'POST').length).toBe(1);
+  expect(requests.find(r => r.path === '/agent/agents' && r.method === 'POST')!.body).toMatchObject({model: 'remembered-model'});
+});
+
+test('rebinding shows a model the executor no longer offers and reports the server refusal', async ({page}) => {
+  page.on('dialog', dialog => dialog.accept());
+  const retired = {...ownedEmployee, model: 'retired-model'};
+  let refused = false;
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/agents' && !body) return [refused ? {...retired, model: '', bindingVersion: 4} : retired];
+    if (path === '/agent/nodes') return [catalogNode];
+    if (path === '/agent/employees/rebind') {
+      if (!refused) {refused = true; return 'reject:AGENT_MODEL_UNSUPPORTED';}
+      return {...retired, bindingVersion: 4, model: body.model};
+    }
+    return undefined;
+  });
+  await mount(page); await openEmployeeDetail(page);
+  const detail = page.getByTestId('employee-detail');
+  await detail.getByRole('button', {name: 'Change work binding', exact: true}).click();
+  const model = detail.getByTestId('employee-model-select');
+  await expect(model).toHaveValue('retired-model');
+  await expect(model.locator('option:checked')).toHaveText('retired-model · not in the current list');
+  await detail.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(detail.getByRole('alert')).toHaveText('This executor does not offer that model here. Pick one from the list, or keep its default.');
+  const attempts = () => requests.filter(r => r.path === '/agent/employees/rebind');
+  expect(attempts()).toHaveLength(1);
+  expect(attempts()[0].body).toMatchObject({model: 'retired-model', expectedBindingVersion: 3});
+  await model.selectOption('');
+  await expect(detail.getByTestId('rebind-preview')).toContainText('Empty = the executor’s default model');
+  await detail.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(detail.getByRole('status')).toHaveText('Work binding changed.');
+  expect(attempts()).toHaveLength(2);
+  expect(attempts()[1].body).toMatchObject({model: '', expectedBindingVersion: 3});
+});
+
+test('space settings rename the workspace and archive or restore it through their own APIs', async ({page}) => {
+  let archived = 0, name = 'Space w', description = 'One line';
+  const messages: string[] = [];
+  page.on('dialog', dialog => {messages.push(dialog.message()); void dialog.accept();});
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/workspace/get/w') return space('w', {archived, name, description});
+    if (path === '/workspace/update') {name = body.name; description = body.description; return space('w', {archived, name, description});}
+    if (path === '/workspace/update-status') {archived = body.archived; return space('w', {archived, name, description});}
+    return undefined;
+  });
+  const settings = await openSettings(page);
+  const profile = settings.getByTestId('space-profile');
+  await expect(profile.getByLabel('Name', {exact: true})).toHaveValue('Space w');
+  await expect(profile.getByLabel('Description', {exact: true})).toHaveValue('One line');
+  await profile.getByLabel('Name', {exact: true}).fill('Renamed space');
+  await profile.getByLabel('Description', {exact: true}).fill('A longer description');
+  await profile.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(profile.getByRole('status')).toHaveText('Workspace saved.');
+  const update = requests.find(r => r.path === '/workspace/update')!;
+  expect(update.method).toBe('PUT');
+  expect(update.body).toEqual({id: 'w', name: 'Renamed space', description: 'A longer description'});
+  await profile.getByRole('button', {name: 'Archive workspace', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/update-status').length).toBe(1);
+  expect(requests.find(r => r.path === '/workspace/update-status')!.body).toEqual({id: 'w', archived: 1});
+  expect(messages.some(m => m.includes('Archive this workspace?'))).toBe(true);
+  await expect(profile.getByLabel('Name', {exact: true})).toBeDisabled();
+  await expect(profile.getByRole('button', {name: 'Save', exact: true})).toHaveCount(0);
+  await expect(profile).toContainText('Archived');
+  await expect(settings.getByRole('button', {name: 'Invite member', exact: true})).toHaveCount(0);
+  // Restoring stays possible while archived: that is the only way back (§20 update-status).
+  await profile.getByRole('button', {name: 'Restore workspace', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/update-status').length).toBe(2);
+  expect(requests.filter(r => r.path === '/workspace/update-status')[1].body).toEqual({id: 'w', archived: 0});
+  await expect(profile.getByLabel('Name', {exact: true})).toBeEnabled();
+  await expect(profile.getByLabel('Name', {exact: true})).toHaveValue('Renamed space');
+});
+
+for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}]) test(`space settings stay read-only without management rights ${JSON.stringify(extras)}`, async ({page}) => {
+  const requests = await mock(page, path => path === '/workspace/get/w' ? space('w', extras) : undefined);
+  const profile = (await openSettings(page)).getByTestId('space-profile');
+  await expect(profile.getByLabel('Name', {exact: true})).toBeDisabled();
+  await expect(profile.getByLabel('Description', {exact: true})).toBeDisabled();
+  await expect(profile.getByRole('button', {name: 'Save', exact: true})).toHaveCount(0);
+  await expect(profile.getByRole('button', {name: 'Archive workspace', exact: true})).toHaveCount(0);
+  expect(requests.some(r => r.method !== 'GET')).toBe(false);
+});
+
+test('dismissing the archive confirmation changes nothing', async ({page}) => {
+  page.on('dialog', dialog => dialog.dismiss());
+  const requests = await mock(page);
+  const profile = (await openSettings(page)).getByTestId('space-profile');
+  await profile.getByRole('button', {name: 'Archive workspace', exact: true}).click();
+  await profile.getByLabel('Name', {exact: true}).fill('Still editable');
+  await expect(profile.getByRole('button', {name: 'Archive workspace', exact: true})).toBeEnabled();
+  expect(requests.some(r => r.method !== 'GET')).toBe(false);
 });
 
 test('cards use projected roles and reviewNoteId, retain server order and never expose stage codes or duplicate progress prose', async ({page}) => {

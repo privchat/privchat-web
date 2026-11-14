@@ -4,7 +4,7 @@ import {TaskHistory} from './task-history';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Binding, Employee, Node, Workspace, WorkspaceApi, WorkspaceEmployee } from './api';
-import { availableEmployeeExecutors, employeeExecutor, executorDisplay } from './employees';
+import { availableEmployeeExecutors, employeeExecutor, executorDisplay, ModelField } from './employees';
 import { employeeCause, executorGrant, grantableWorkspaceBinding, workspaceBindingGrant } from './employee-access';
 import { employeeReasonLabel, usePageLabels } from './page-labels';
 import { navigateWorkspace } from './routes';
@@ -145,13 +145,13 @@ function AddEmployeeDialog({api, nodes, bindings, workspaceId, candidates, readO
           <input className={wsField} value={title} maxLength={80} disabled={busy} onChange={e => setTitle(e.target.value)}/>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">{l('deviceNodeLabel')}
-          <select className={wsField} value={nodeId} disabled={busy} onChange={e => {setNodeId(e.target.value); setExecutor(''); setWorkdirBindingId('');}}>
+          <select className={wsField} value={nodeId} disabled={busy} onChange={e => {setNodeId(e.target.value); setExecutor(''); setWorkdirBindingId(''); setModel('');}}>
             <option value="">{l('deviceNodeLabel')}</option>
             {nodes.map(n => <option key={n.nodeId} value={n.nodeId} disabled={n.state !== 'active'}>{n.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">{l('executorLabel')}
-          <select className={wsField} value={executor} disabled={busy || !nodeId} onChange={e => setExecutor(e.target.value)}>
+          <select className={wsField} value={executor} disabled={busy || !nodeId} onChange={e => {setExecutor(e.target.value); setModel('');}}>
             <option value="">{l('executorLabel')}</option>
             {executors.map(e => {const state = executorGrant(node, e); return <option key={e} value={e}>{executorDisplay(e)}{state === 'granted' ? '' : ` · ${l(state === 'revoked' ? 'executorRevoked' : 'executorGrantOnSave')}`}</option>;})}
           </select>
@@ -163,9 +163,7 @@ function AddEmployeeDialog({api, nodes, bindings, workspaceId, candidates, readO
             {node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
           </select>
         </label>
-        <label className="grid gap-1.5 text-sm font-medium">{l('modelLabel')}
-          <input className={wsField} value={model} maxLength={120} placeholder={l('modelDefault')} disabled={busy} onChange={e => setModel(e.target.value)}/>
-        </label>
+        <ModelField node={node} executor={executor} value={model} disabled={busy || !executor} onChange={setModel}/>
         <p className="text-sm text-muted-foreground">{l('privateNotImported')}</p>
         <div className="space-y-2 border-t pt-4">
           <label className="grid gap-1.5 text-sm font-medium">{l('link')}

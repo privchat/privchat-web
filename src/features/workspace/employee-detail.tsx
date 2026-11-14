@@ -4,7 +4,7 @@ import { PlatformApiError } from '@/lib/platform-errors';
 import type { Binding, Employee, Execution, Node, Workspace, WorkspaceApi } from './api';
 import { ConsoleIntent } from './console-intent';
 import { employeeCause, executorGrant, grantableWorkspaceBinding } from './employee-access';
-import { availableEmployeeExecutors, bindingCandidates, executorDisplay } from './employees';
+import { availableEmployeeExecutors, bindingCandidates, executorDisplay, ModelField } from './employees';
 import { employeeReasonLabel, usePageLabels, type WorkspaceLabelKey } from './page-labels';
 import { navigateWorkspace } from './routes';
 import { WsPageHeader, wsField } from './shell';
@@ -15,6 +15,7 @@ import { useEmployeePages } from './use-employee-pages';
 function failureKey(e: unknown): WorkspaceLabelKey {
   const code = e instanceof PlatformApiError ? e.machineCode : undefined;
   if (code === 'AGENT_CAPABILITY_REVOKED') return 'reasonCapabilityRevoked';
+  if (code === 'AGENT_MODEL_UNSUPPORTED') return 'reasonModelUnsupported';
   if (code === 'AGENT_SESSION_BUSY') return 'reasonBusy';
   if (code === 'AGENT_EXECUTION_CONFLICT') return 'conflict';
   return 'error';
@@ -212,13 +213,13 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
         <p className="text-sm text-muted-foreground">{l('rebindHint')}</p>
         {conflict && <p role="alert" className="text-sm text-destructive" data-testid="rebind-conflict">{l('conflict')}</p>}
         <label className="grid gap-1.5 text-sm font-medium">{l('deviceNodeLabel')}
-          <select className={wsField} value={draft.nodeId} disabled={locked} onChange={e => {setDraft({nodeId: e.target.value, executor: '', workdirBindingId: '', model: draft.model, bindExecutionId: ''}); setConsent(false);}}>
+          <select className={wsField} value={draft.nodeId} disabled={locked} onChange={e => {setDraft({nodeId: e.target.value, executor: '', workdirBindingId: '', model: '', bindExecutionId: ''}); setConsent(false);}}>
             <option value="">{l('deviceNodeLabel')}</option>
             {nodes.map(n => <option key={n.nodeId} value={n.nodeId} disabled={n.state !== 'active'}>{n.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">{l('executorLabel')}
-          <select className={wsField} value={draft.executor} disabled={locked || !node} onChange={e => {setDraft({...draft, executor: e.target.value, bindExecutionId: ''}); setConsent(false);}}>
+          <select className={wsField} value={draft.executor} disabled={locked || !node} onChange={e => {setDraft({...draft, executor: e.target.value, model: '', bindExecutionId: ''}); setConsent(false);}}>
             <option value="">{l('executorLabel')}</option>
             {executors.map(x => {const state = executorGrant(node, x); return <option key={x} value={x}>{executorDisplay(x)}{state === 'granted' ? '' : ` · ${l(state === 'revoked' ? 'executorRevoked' : 'executorGrantOnSave')}`}</option>;})}
           </select>
@@ -230,9 +231,8 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
             {node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
           </select>
         </label>
-        <label className="grid gap-1.5 text-sm font-medium">{l('modelLabel')}
-          <input className={wsField} maxLength={120} placeholder={l('modelDefault')} disabled={locked || !!candidate} value={draft.model} onChange={e => {setDraft({...draft, model: e.target.value, bindExecutionId: ''}); setConsent(false);}}/>
-        </label>
+        <ModelField node={node} executor={draft.executor} value={draft.model} disabled={locked || !!candidate || !draft.executor}
+          onChange={model => {setDraft({...draft, model, bindExecutionId: ''}); setConsent(false);}}/>
         <label className="grid gap-1.5 text-sm font-medium">{l('rebindTargetSession')}
           <select className={wsField} value={existingSession ? 'existing' : 'new'} disabled={locked} onChange={e => {setExistingSession(e.target.value === 'existing'); setDraft({...draft, bindExecutionId: ''}); setConsent(false);}}>
             <option value="new">{l('rebindNewSession')}</option>

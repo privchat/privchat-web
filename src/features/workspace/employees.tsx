@@ -1,22 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
-import {TaskHistory} from './task-history';
-import { Button } from '@/components/ui/button';
-import { WorkspaceApi, type Employee, type EmployeeConfig, type Execution, type Node } from './api';
-import { ConsoleIntent } from './console-intent';
-import { roomFailure } from './room-observer';
-import { PlatformApiError, PlatformHttpError } from '@/lib/platform-errors';
+import type { Employee, Execution, Node } from './api';
 import { usePageLabels } from './page-labels';
+import { wsField } from './shell';
 
-const field = 'block min-w-0 w-full rounded-[7px] border bg-background px-2.5 py-2 text-sm';
-const emptyConfig: EmployeeConfig = {name: '', nodeId: '', executor: '', roleDescription: '', title: '', model: '', workdirBindingId: ''};
 const terminal = new Set(['succeeded', 'failed', 'cancelled']);
-function failureLabel(error: unknown): string {
-  if (roomFailure(error) === 'denied') return 'denied';
-  if ((error instanceof PlatformHttpError && [404, 405, 501].includes(error.status))
-    || (error instanceof PlatformApiError && error.machineCode?.endsWith('_UNSUPPORTED'))) return 'unsupported';
-  return 'error';
-}
 
 // Only verified executor names are selectable; arbitrary grants are not executor providers.
 // codex / claude / qoder are peers (MODULE_AGENT_SPEC §176).
@@ -37,6 +23,33 @@ export function executorDisplay(value: string): string {
 export function availableEmployeeExecutors(node?: Node): string[] {
   return [...new Set((node?.capabilities ?? []).flatMap(c => c.available === true ? employeeExecutor(c.name) ?? [] : []))];
 }
+/** The models this executor offers on this node now (§7.4); empty when the node reported no catalog. */
+export function executorModels(node: Node | undefined, executor: string): {id: string; name?: string}[] {
+  return node?.capabilities?.find(c => c.name === `agent.${executor}`)?.models ?? [];
+}
+export function executorDefaultModel(node: Node | undefined, executor: string): string {
+  return node?.capabilities?.find(c => c.name === `agent.${executor}`)?.defaultModel ?? '';
+}
+/**
+ * Choosing the executor chooses its model (WEEY_AGENT_PROTOCOL_SPEC §7.4): a reported catalog is a dropdown whose
+ * first item keeps the executor's own default (`model:""`). Only a node without a catalog still takes a typed name.
+ * A value the executor no longer offers stays visible as such, never silently turned into the default.
+ */
+export function ModelField({node, executor, value, disabled, onChange}: {node?: Node; executor: string; value: string; disabled?: boolean; onChange: (model: string) => void}) {
+  const l = usePageLabels();
+  const models = executorModels(node, executor);
+  const fallback = executorDefaultModel(node, executor);
+  const keepDefault = fallback ? l('modelDefaultChoice').replace('{model}', fallback) : l('modelDefaultChoiceUnknown');
+  return <label className="grid gap-1.5 text-sm font-medium">{l('modelLabel')}
+    {models.length
+      ? <select data-testid="employee-model-select" className={wsField} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}>
+        <option value="">{keepDefault}</option>
+        {models.map(m => <option key={m.id} value={m.id}>{m.name && m.name !== m.id ? `${m.name} · ${m.id}` : m.id}</option>)}
+        {!!value && !models.some(m => m.id === value) && <option value={value}>{`${value} · ${l('modelNotOffered')}`}</option>}
+      </select>
+      : <input data-testid="employee-model-input" className={wsField} value={value} maxLength={120} placeholder={l('modelDefault')} disabled={disabled} onChange={e => onChange(e.target.value)}/>}
+  </label>;
+}
 export function bindingCandidates(rows: Execution[], nodeId: string, executor: string, employees: Employee[], model: string, workdirBindingId: string): Execution[] {
   const sessions = new Map<string, Execution[]>();
   for (const row of rows) {
@@ -56,160 +69,4 @@ export function bindingCandidates(rows: Execution[], nodeId: string, executor: s
     && e.params?.model === model && e.params?.workdirBindingId === workdirBindingId
     && employeeExecutor(e.capability ?? '') === executor)
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
-}
-
-export function EmployeePanel({api, nodes, refreshNodes, renderSession, onRequestLockChange, workspaceMode = false}: {api: WorkspaceApi; nodes: Node[]; refreshNodes: () => Promise<void>; renderSession: (id: string) => ReactNode; onRequestLockChange: (locked: boolean) => void; workspaceMode?: boolean}) {
-  const [historyEmployee, setHistoryEmployee] = useState<string>();
-  const pageLabel = usePageLabels();
-  const {t} = useTranslation();
-  const label = (key: string) => t(`agentWorkspace.${key}`);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [selected, setSelected] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [config, setConfig] = useState<EmployeeConfig>({...emptyConfig});
-  const [rows, setRows] = useState<Execution[]>([]);
-  const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [ready, setReady] = useState(false);
-  const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const [candidatesError, setCandidatesError] = useState(false);
-  const [candidateRefresh, setCandidateRefresh] = useState(0);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [text, setText] = useState('');
-  const [executionId, setExecutionId] = useState('');
-  const intent = useRef(new ConsoleIntent());
-  const live = useRef(true);
-  const inFlight = useRef(false);
-  const pendingAction = useRef<(() => Promise<void>) | undefined>(undefined);
-  const employee = employees.find(a => a.agentId === selected);
-  const nodeBound = !!employee?.nodeId?.trim();
-  const node = nodes.find(n => n.nodeId === config.nodeId);
-  const locked = busy || intent.current.hasPending;
-  const candidates = bindingCandidates(rows, config.nodeId, config.executor, employees, config.model, config.workdirBindingId);
-  const executors = availableEmployeeExecutors(node);
-  const valid = Object.entries(config).filter(([k]) => k !== 'bindExecutionId').every(([,v]) => v.trim())
-    && (editing || (node?.state === 'active' && executors.includes(config.executor) && node.workdirs?.some(w => w.id === config.workdirBindingId)))
-    && (!config.bindExecutionId || (confirmed && candidates.some(e => e.executionId === config.bindExecutionId)));
-
-  useEffect(() => {
-    live.current = true;
-    void api.employees().then(a => {if (live.current) {setEmployees(a); setReady(true);}}).catch(e => {if (live.current) setError(failureLabel(e));}).finally(() => {if (live.current) setLoading(false);});
-    return () => {live.current = false; onRequestLockChange(false);};
-  }, [api]);
-  useEffect(() => {
-    let active = true;
-    setRows([]); setCandidatesError(false);
-    if (workspaceMode || editing || !config.nodeId || !config.executor) {setCandidatesLoading(false); return;}
-    setCandidatesLoading(true);
-    void api.executions(config.nodeId).then(r => {if (active) setRows(r);}).catch(() => {if (active) setCandidatesError(true);}).finally(() => {if (active) setCandidatesLoading(false);});
-    return () => {active = false;};
-  }, [api, config.nodeId, config.executor, editing, candidateRefresh, workspaceMode]);
-
-  function choose(id: string) {
-    if (locked) return;
-    setSelected(id); setEditing(false); setConfig({...emptyConfig}); setConfirmed(false);
-    setExecutionId(employees.find(a => a.agentId === id)?.executionId ?? '');
-    setText(''); setError(''); setSaved(false);
-  }
-  async function act(action: () => Promise<void>) {
-    if (inFlight.current) return;
-    pendingAction.current = action;
-    onRequestLockChange(true);
-    inFlight.current = true; setBusy(true); setError(''); setSaved(false);
-    try {await action();} catch (e) {
-      if (live.current) {
-        const denied = roomFailure(e) === 'denied';
-        setError(intent.current.hasPending ? 'unknown' : failureLabel(e));
-        if (!intent.current.hasPending && failureLabel(e) === 'unsupported') setReady(false);
-        if (denied) {setEmployees([]); setRows([]); setExecutionId(''); setReady(false);}
-      }
-    } finally {
-      inFlight.current = false;
-      onRequestLockChange(intent.current.hasPending);
-      if (!intent.current.hasPending) pendingAction.current = undefined;
-      if (live.current) setBusy(false);
-    }
-  }
-  async function save() {
-    const result = await intent.current.run<Employee>(api, editing ? '/agent/agents/update' : '/agent/agents',
-      {...config, ...(editing ? {agentId: selected} : {})}, 'requestId');
-    if (!live.current) return;
-    setEmployees(old => [...old.filter(a => a.agentId !== result.agentId), result]);
-    setReady(true);
-    setSelected(result.agentId); setEditing(false); setExecutionId(result.executionId ?? ''); setSaved(true);
-    setConfig({...emptyConfig}); setConfirmed(false);
-  }
-  if (historyEmployee) return <TaskHistory api={api} scope={{employeeId: historyEmployee}} renderSession={renderSession} onBack={() => setHistoryEmployee(undefined)}/>;
-  return <section data-testid="employee-panel" className="mt-[22px] min-w-0 space-y-3 rounded-[9px] border bg-card p-4">
-    {employee && <Button variant="outline" size="sm" disabled={locked} onClick={() => setHistoryEmployee(employee.agentId)}>{pageLabel('taskRecords')}</Button>}
-    <h3 className="text-[17px] font-semibold">{label('employees')}</h3>
-    <p className="text-sm text-muted-foreground">{label('employeeHint')}</p>
-    <p className="text-sm text-muted-foreground" data-testid="external-discovery-unsupported">{label('externalUnsupported')}</p>
-    {error && <p role="alert" className="text-sm text-destructive">{label(error)}</p>}
-    {intent.current.hasPending && <div className="space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5"><p className="text-sm">{label('retryRecovery')}</p><Button size="sm" disabled={busy} onClick={() => {if (pendingAction.current) void act(pendingAction.current);}}>{label('retrySame')}</Button></div>}
-    {saved && <p role="status" className="text-sm text-muted-foreground">{label('employeeSaved')}</p>}
-    {loading && <p role="status" className="text-sm text-muted-foreground">{label('loading')}</p>}
-    <Button variant="outline" size="sm" disabled={locked || loading} onClick={() => void act(async () => {
-      const [a] = await Promise.all([api.employees(), refreshNodes()]);
-      if (live.current) {setEmployees(a); setReady(true); setExecutionId(a.find(e => e.agentId === selected)?.executionId ?? ''); setCandidateRefresh(n => n + 1);}
-    })}>{label('refresh')}</Button>
-    <label className="grid gap-1.5 text-sm font-medium">{label('employees')}<select className={field} value={selected} disabled={locked || !ready} onChange={e => choose(e.target.value)}>
-      <option value="">{label('newEmployee')}</option>
-      {employees.map(a => <option key={a.agentId} value={a.agentId}>{a.name} · {a.title} · {a.agentId}</option>)}
-    </select></label>
-    {ready && employees.length === 0 && <p>{label('empty')}</p>}
-    {employee && <div className="space-y-2 rounded-[7px] border bg-sidebar p-3 text-sm break-words">
-      <p>{employee.name} · {employee.title}</p><p className="whitespace-pre-wrap">{employee.roleDescription}</p>
-      <p>{nodeBound ? employee.nodeId : label('unconfigured')} · {executorDisplay(employee.executor)} · {employee.model} · {employee.workdirBindingId}</p>
-      <p>{workspaceMode ? pageLabel('privateNotImported') : `${label('managedSession')}: ${nodeBound ? executionId || label('sessionOnSend') : label('unconfigured')}`}</p>
-      <Button variant="outline" disabled={locked || !ready || editing || !nodeBound} onClick={() => {
-        setConfig({name: employee.name, title: employee.title, roleDescription: employee.roleDescription, nodeId: employee.nodeId!, executor: employee.executor, model: employee.model, workdirBindingId: employee.workdirBindingId});
-        setEditing(true); setSaved(false);
-      }}>{label('editEmployee')}</Button>
-    </div>}
-    {(!selected || editing) && <form className="space-y-3" onSubmit={e => {e.preventDefault(); if (!busy && (valid || intent.current.hasPending)) void act(save);}}>
-      <fieldset disabled={locked || !ready} className="min-w-0 space-y-3">
-        <label className="grid gap-1.5 text-sm font-medium">{label('name')}<input className={field} value={config.name} onChange={e => setConfig({...config, name: e.target.value})}/></label>
-        <label className="grid gap-1.5 text-sm font-medium">{label('employeeTitle')}<input className={field} value={config.title} onChange={e => setConfig({...config, title: e.target.value})}/></label>
-        <label className="grid gap-1.5 text-sm font-medium">{label('roleDescription')}<textarea className={field} value={config.roleDescription} onChange={e => setConfig({...config, roleDescription: e.target.value})}/></label>
-        {editing ? <p className="text-sm">{label('routingFixed')}</p> : <>
-          <label className="grid gap-1.5 text-sm font-medium">{label('nodes')}<select className={field} value={config.nodeId} onChange={e => {setConfig({...config, nodeId: e.target.value, executor: '', workdirBindingId: '', bindExecutionId: undefined}); setConfirmed(false);}}>
-            <option value="">{label('nodes')}</option>{nodes.map(n => <option key={n.nodeId} value={n.nodeId} disabled={n.state !== 'active'}>{n.name} · {n.state} · {n.nodeId}</option>)}
-          </select></label>
-          <label className="grid gap-1.5 text-sm font-medium">{label('executor')}<select className={field} value={config.executor} onChange={e => {setConfig({...config, executor: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>
-            <option value="">{label('executor')}</option>{executors.map(e => <option key={e} value={e}>{executorDisplay(e)}</option>)}
-          </select></label>
-          <label className="grid gap-1.5 text-sm font-medium">{label('model')}<input className={field} value={config.model} onChange={e => {setConfig({...config, model: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}/></label>
-          <label className="grid gap-1.5 text-sm font-medium">{label('workdir')}<select className={field} value={config.workdirBindingId} onChange={e => {setConfig({...config, workdirBindingId: e.target.value, bindExecutionId: undefined}); setConfirmed(false);}}>
-            <option value="">{label('workdir')}</option>{node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label} · {w.id}</option>)}
-          </select></label>
-          {node && (!node.workdirs?.length || !executors.length) && <p>{label('unconfigured')}</p>}
-          <p className="text-sm">{workspaceMode ? pageLabel('privateNotImported') : label('bindingHint')}</p>
-          {candidatesLoading && <p role="status">{label('loading')}</p>}
-          {candidatesError && <p role="alert">{label('candidateError')}</p>}
-          <label className="grid gap-1.5 text-sm font-medium">{label('managedSession')}<select className={field} value={config.bindExecutionId ?? ''} disabled={workspaceMode || candidatesLoading || candidatesError} onChange={e => {setConfig({...config, bindExecutionId: e.target.value || undefined}); setConfirmed(false);}}>
-            <option value="">{label('sessionOnSend')}</option>{candidates.map(e => <option key={e.executionId} value={e.executionId}>{typeof e.params?.title === 'string' ? `${e.params.title} · ` : ''}{e.executionId} · {e.state} · {String(e.params?.model ?? '')} · {String(e.params?.workdirBindingId ?? '')}</option>)}
-          </select></label>
-          {config.bindExecutionId && <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/>{label('confirmBinding')}</label>}
-        </>}
-      </fieldset>
-      <div className="flex flex-wrap justify-end gap-2"><Button type="submit" disabled={locked || !ready || !valid}>{label(editing ? 'saveEmployee' : 'newEmployee')}</Button>
-        {editing && <Button type="button" variant="outline" disabled={locked} onClick={() => {setEditing(false); setConfig({...emptyConfig});}}>{label('back')}</Button>}
-      </div>
-    </form>}
-    {employee && !editing && !workspaceMode && <>
-      <label className="grid gap-1.5 text-sm font-medium">{label('employeeMessage')}<textarea className={field} value={text} disabled={locked || !nodeBound} onChange={e => setText(e.target.value)}/></label>
-      <Button disabled={locked || !ready || !nodeBound || !text.trim()} onClick={() => {if (!nodeBound) return; void act(async () => {
-        const result = await intent.current.run<Execution>(api, '/agent/agents/send', {agentId: employee.agentId, text}, 'requestId');
-        if (!live.current) return;
-        setExecutionId(result.executionId); setText('');
-        setSelected(employee.agentId);
-        setReady(true);
-        setEmployees(old => [...old.filter(a => a.agentId !== employee.agentId), {...employee, executionId: result.executionId}]);
-      });}}>{label('sendEmployee')}</Button>
-      {nodeBound && executionId && renderSession(executionId)}
-    </>}
-  </section>;
 }
