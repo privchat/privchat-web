@@ -426,6 +426,114 @@ test('employee task list is scoped by employee across visible spaces, not by the
   expect(Object.fromEntries(requests.filter(r => r.path === '/workspace/activity/page').at(-1)!.query.searchParams)).toEqual({view: 'history_tasks_v1', employeeId: 'emp', limit: '20'});
 });
 
+test('workspace binding helpers grant only a missing binding on the owner active node that has the capability', async ({page}) => {
+  await page.goto('/');
+  const result = await page.evaluate(async ({node, employee}) => {
+    const {workspaceBindingGrant, grantableWorkspaceBinding} = await import('/src/features/workspace/employees.tsx');
+    const bound = {id: 'b', nodeId: 'n', capability: 'agent.codex', revoked: 0};
+    const unavailable = {...employee, available: false, unavailableReason: 'agent_capability_not_granted'};
+    return {
+      missing: workspaceBindingGrant('n', 'agent.codex', [], [node]),
+      already: workspaceBindingGrant('n', 'agent.codex', [bound], [node]),
+      revoked: workspaceBindingGrant('n', 'agent.codex', [{...bound, revoked: 1}], [node]),
+      inactive: workspaceBindingGrant('n', 'agent.codex', [], [{...node, state: 'offline'}]),
+      notOwned: workspaceBindingGrant('n', 'agent.codex', [], []),
+      noNode: workspaceBindingGrant(undefined, 'agent.codex', [], [node]),
+      noCap: workspaceBindingGrant('n', null, [], [node]),
+      grantable: grantableWorkspaceBinding(unavailable, [], [node]),
+      availableRow: grantableWorkspaceBinding({...employee, available: true}, [], [node]),
+      capNotGranted: grantableWorkspaceBinding(unavailable, [], [{...node, granted: []}]),
+      alreadyBoundRow: grantableWorkspaceBinding(unavailable, [bound], [node]),
+    };
+  }, {node, employee});
+  expect(result.missing).toEqual({nodeId: 'n', capability: 'agent.codex'});
+  expect(result.already).toBeNull();
+  expect(result.revoked).toEqual({nodeId: 'n', capability: 'agent.codex'});
+  expect(result.inactive).toBeNull();
+  expect(result.notOwned).toBeNull();
+  expect(result.noNode).toBeNull();
+  expect(result.noCap).toBeNull();
+  expect(result.grantable).toEqual({nodeId: 'n', capability: 'agent.codex'});
+  expect(result.availableRow).toBeNull();
+  expect(result.capNotGranted).toBeNull();
+  expect(result.alreadyBoundRow).toBeNull();
+});
+
+test('creating a workspace employee grants the workspace binding before associating it', async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/workspace/agent-binding/list') return [];
+    if (path === '/agent/agents' && body) return {agentId: 'new-emp', name: body.name, nodeId: body.nodeId, executor: body.executor, workdirBindingId: body.workdirBindingId, config: {}, createdAt: 1, roleDescription: '', title: '', model: ''};
+    if (path === '/workspace/agent-binding/create') return {id: 'new-b', workspaceId: body.workspaceId, nodeId: body.nodeId, capability: body.capability, grantedBy: 'me', revoked: 0, createdAt: 1};
+    if (path === '/workspace/employee/create') return {id: 'ref-new', workspaceId: body.workspaceId, employeeId: body.employeeId, name: 'New dev', nodeId: 'n', capability: 'agent.codex', available: true, projectIds: []};
+    return undefined;
+  });
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+  await page.getByTestId('space-employees').getByRole('button', {name: 'Add AI employee', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', {name: 'Employee name', exact: true}).fill('New dev');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+  await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
+  await dialog.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('dir');
+  await dialog.getByRole('button', {name: 'Create employee', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/employee/create').length).toBe(1);
+  const posts = requests.filter(r => r.method === 'POST');
+  const grantAt = posts.findIndex(r => r.path === '/workspace/agent-binding/create');
+  const linkAt = posts.findIndex(r => r.path === '/workspace/employee/create');
+  expect(grantAt).toBeGreaterThanOrEqual(0);
+  expect(grantAt).toBeLessThan(linkAt);
+  expect(posts[grantAt].body).toEqual({workspaceId: 'w', nodeId: 'n', capability: 'agent.codex'});
+  expect(posts[linkAt].body).toEqual({workspaceId: 'w', employeeId: 'new-emp'});
+});
+
+test('associating an owned employee grants its missing workspace binding first', async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/workspace/agent-binding/list') return [];
+    if (path === '/workspace/agent-binding/create') return {id: 'new-b', workspaceId: body.workspaceId, nodeId: body.nodeId, capability: body.capability, grantedBy: 'me', revoked: 0, createdAt: 1};
+    if (path === '/workspace/employee/create') return {id: 'ref-rev', workspaceId: body.workspaceId, employeeId: body.employeeId, name: 'Reviewer', nodeId: 'n', capability: 'agent.codex', available: true, projectIds: []};
+    return undefined;
+  });
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+  await page.getByTestId('space-employees').getByRole('button', {name: 'Add AI employee', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('combobox', {name: 'Associate employee', exact: true}).selectOption('reviewer');
+  await dialog.getByRole('button', {name: 'Associate employee', exact: true}).click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/employee/create').length).toBe(1);
+  const posts = requests.filter(r => r.method === 'POST');
+  const grantAt = posts.findIndex(r => r.path === '/workspace/agent-binding/create');
+  const linkAt = posts.findIndex(r => r.path === '/workspace/employee/create');
+  expect(grantAt).toBeGreaterThanOrEqual(0);
+  expect(grantAt).toBeLessThan(linkAt);
+  expect(posts[grantAt].body).toEqual({workspaceId: 'w', nodeId: 'n', capability: 'agent.codex'});
+  expect(posts[linkAt].body).toEqual({workspaceId: 'w', employeeId: 'reviewer'});
+});
+
+test('an associated employee missing its workspace binding can be authorized from the manage panel', async ({page}) => {
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/workspace/employee/page') return {items: [{...employee, available: false, unavailableReason: 'agent_capability_not_granted'}], nextCursor: null, hasMore: false};
+    if (path === '/workspace/agent-binding/list') return [];
+    if (path === '/workspace/agent-binding/create') return {id: 'new-b', workspaceId: body.workspaceId, nodeId: body.nodeId, capability: body.capability, grantedBy: 'me', revoked: 0, createdAt: 1};
+    return undefined;
+  });
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+  const panel = page.getByTestId('space-employees');
+  await panel.locator('tbody tr').first().getByRole('button', {name: 'Engineer', exact: true}).click();
+  const authorize = panel.getByRole('button', {name: 'Authorize for workspace', exact: true});
+  await expect(authorize).toBeVisible();
+  await authorize.click();
+  await expect.poll(() => requests.filter(r => r.path === '/workspace/agent-binding/create').length).toBe(1);
+  expect(requests.find(r => r.path === '/workspace/agent-binding/create')!.body).toEqual({workspaceId: 'w', nodeId: 'n', capability: 'agent.codex'});
+});
+
+test('an available employee with an existing binding offers no workspace authorize action', async ({page}) => {
+  const requests = await mock(page);
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
+  const panel = page.getByTestId('space-employees');
+  await panel.locator('tbody tr').first().getByRole('button', {name: 'Engineer', exact: true}).click();
+  await expect(panel.getByRole('button', {name: 'Task records', exact: true})).toBeVisible();
+  await expect(panel.getByRole('button', {name: 'Authorize for workspace', exact: true})).toHaveCount(0);
+  expect(requests.some(r => r.path === '/workspace/agent-binding/create')).toBe(false);
+});
+
 test('cards use projected roles and reviewNoteId, retain server order and never expose stage codes or duplicate progress prose', async ({page}) => {
   await mock(page, path => path === '/workspace/activity/page' ? feed([
     {...row('21'), developerEmployeeId: 'dev-a', reviewerEmployeeId: 'reviewer-c', reviewNoteId: null, stage: 'development'},

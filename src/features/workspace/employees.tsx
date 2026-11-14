@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {TaskHistory} from './task-history';
 import { Button } from '@/components/ui/button';
-import { WorkspaceApi, type Employee, type EmployeeConfig, type Execution, type Node } from './api';
+import { WorkspaceApi, type Binding, type Employee, type EmployeeConfig, type Execution, type Node, type WorkspaceEmployee } from './api';
 import { ConsoleIntent } from './console-intent';
 import { roomFailure } from './room-observer';
 import { PlatformApiError, PlatformHttpError } from '@/lib/platform-errors';
@@ -37,6 +37,24 @@ export function executorDisplay(value: string): string {
 export function availableEmployeeExecutors(node?: Node): string[] {
   const revoked = new Set(node?.revokedCapabilities ?? []);
   return [...new Set((node?.capabilities ?? []).flatMap(c => c.available === true && !revoked.has(c.name) ? employeeExecutor(c.name) ?? [] : []))];
+}
+// Linking an employee never grants the workspace permission to use its device (MODULE_WORKSPACE_SPEC §4/§7).
+// This is the binding the owner must grant first: the employee's own device + executor capability. Null when it
+// already exists or the device is not the caller's active node, so a missing/inactive node never blocks the link.
+export function workspaceBindingGrant(nodeId: string | null | undefined, capability: string | null | undefined, bindings: Binding[], nodes: Node[]): {nodeId: string; capability: string} | null {
+  if (!nodeId || !capability) return null;
+  if (bindings.some(b => b.revoked === 0 && b.nodeId === nodeId && b.capability === capability)) return null;
+  if (!nodes.some(n => n.nodeId === nodeId && n.state === 'active')) return null;
+  return {nodeId, capability};
+}
+// The missing binding the owner can grant from an unavailable employee: only when the device is theirs, active and
+// already grants the capability, but the workspace is not authorized yet. Mirrors the App's grantableBinding.
+export function grantableWorkspaceBinding(row: WorkspaceEmployee, bindings: Binding[], nodes: Node[]): {nodeId: string; capability: string} | null {
+  if (row.available) return null;
+  const grant = workspaceBindingGrant(row.nodeId, row.capability, bindings, nodes);
+  if (!grant) return null;
+  const node = nodes.find(n => n.nodeId === grant.nodeId);
+  return (node?.granted ?? []).includes(grant.capability) ? grant : null;
 }
 export function bindingCandidates(rows: Execution[], nodeId: string, executor: string, employees: Employee[], model: string, workdirBindingId: string): Execution[] {
   const sessions = new Map<string, Execution[]>();

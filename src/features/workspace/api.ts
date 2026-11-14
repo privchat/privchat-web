@@ -171,6 +171,7 @@ export class WorkspaceApi {
     return this.get<SessionRecordsPage>(`/agent/sessions/records?executionId=${encodeURIComponent(executionId)}&afterSeq=${encodeURIComponent(afterSeq)}&limit=50`);
   }
   bindings(id: string) { return this.get<Binding[]>(`/workspace/agent-binding/list?workspaceId=${encodeURIComponent(id)}`); }
+  createBinding(workspaceId: string, nodeId: string, capability: string) { return this.post<Binding>('/workspace/agent-binding/create', {workspaceId, nodeId, capability}); }
   inbox(workspaceId: string) { return this.get<{entries: WorkspaceInboxEntry[]}>(`/workspace/inbox/list?workspaceId=${encodeURIComponent(workspaceId)}`); }
   answerDecision(decisionId: string, requestId: string, optionId: string) { return this.post<unknown>('/workspace/work-decision/answer', {decisionId, requestId, optionId}); }
   resolvePermission(executionId: string, commandId: string, permissionId: string, requestDigest: string, decision: 'allow_once' | 'deny') {

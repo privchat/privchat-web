@@ -3,8 +3,8 @@ import { Bot, Circle, LoaderCircle, Plus } from 'lucide-react';
 import {TaskHistory} from './task-history';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import type { Employee, Node, Workspace, WorkspaceApi, WorkspaceEmployee } from './api';
-import { availableEmployeeExecutors, employeeExecutor, executorDisplay } from './employees';
+import type { Binding, Employee, Node, Workspace, WorkspaceApi, WorkspaceEmployee } from './api';
+import { availableEmployeeExecutors, employeeExecutor, executorDisplay, grantableWorkspaceBinding, workspaceBindingGrant } from './employees';
 import { usePageLabels } from './page-labels';
 import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh, wsField } from './shell';
 import { useEmployeePages } from './use-employee-pages';
@@ -17,12 +17,14 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
   const [space, setSpace] = useState<Workspace | null>(null);
   const [owned, setOwned] = useState<Employee[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
+  const [bindings, setBindings] = useState<Binding[]>([]);
   const [adding, setAdding] = useState(false);
   const [manageId, setManageId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const readOnly = !space || space.archived !== 0 || !['owner', 'admin', 'member'].includes(space.myRole);
   const managed = rows.find(r => r.id === manageId);
+  const managedGrant = managed ? grantableWorkspaceBinding(managed, bindings, nodes) : null;
   const candidates = owned.filter(e => !rows.some(r => r.employeeId === e.agentId));
   const status = (row: WorkspaceEmployee) => row.available
     ? {icon: Circle, text: l('idle')}
@@ -30,10 +32,10 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
     : row.unavailableReason === 'busy' ? {icon: LoaderCircle, text: l('statusRunning')}
     : {icon: Circle, text: `${l('busy')}: ${row.unavailableReason ?? l('unavailable')}`};
   async function reload() {
-    const [, e, n] = await Promise.all([employeePages.refresh(), api.employees(), api.nodes()]);
-    setOwned(e); setNodes(n);
+    const [, e, n, b] = await Promise.all([employeePages.refresh(), api.employees(), api.nodes(), api.bindings(workspaceId)]);
+    setOwned(e); setNodes(n); setBindings(b);
   }
-  useEffect(() => {let live = true; void Promise.all([api.space(workspaceId), api.employees(), api.nodes()]).then(([s,e,n]) => {if (live) {setSpace(s); setOwned(e); setNodes(n);}}).catch(() => {if (live) setError(true);}); return () => {live = false;};}, [api, workspaceId]);
+  useEffect(() => {let live = true; void Promise.all([api.space(workspaceId), api.employees(), api.nodes(), api.bindings(workspaceId)]).then(([s,e,n,b]) => {if (live) {setSpace(s); setOwned(e); setNodes(n); setBindings(b);}}).catch(() => {if (live) setError(true);}); return () => {live = false;};}, [api, workspaceId]);
   async function act(action: () => Promise<unknown>) {if (busy) return; setBusy(true); setError(false); try {await action(); await reload();} catch {setError(true);} finally {setBusy(false);}}
   if (history) return <TaskHistory api={api} scope={{employeeId: history}} renderSession={renderSession} onBack={() => setHistory(undefined)}/>;
   return <section data-testid="space-employees" className="w-full min-w-0">
@@ -45,10 +47,12 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
     {managed && <section className="mb-3 space-y-3 rounded border p-3" aria-label={l('manage')}>
       <h3 className="font-semibold">{managed.name ?? managed.employeeId}</h3>
       <div className="flex flex-wrap gap-2">
+        {!readOnly && managedGrant && <Button size="sm" disabled={busy} onClick={() => void act(async () => {await api.createBinding(workspaceId, managedGrant.nodeId, managedGrant.capability);})}>{l('authorizeWorkspace')}</Button>}
         <Button variant="outline" size="sm" disabled={busy} onClick={() => setHistory(managed.employeeId)}>{l('taskRecords')}</Button>
         {!readOnly && <Button variant="destructive" size="sm" disabled={busy} onClick={() => void act(async () => {await api.removeEmployeeAssociation(managed.id); setManageId(undefined);})}>{l('unlink')}</Button>}
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => setManageId(undefined)}>{l('cancel')}</Button>
       </div>
+      {!readOnly && managedGrant && <p className="text-sm text-muted-foreground">{l('authorizeWorkspaceHint')}</p>}
     </section>}
     {rows.length > 0 && <WsTable head={<><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colExecutor')}</WsTh><WsTh>{l('colDevice')}</WsTh><WsTh>{l('colWorkdir')}</WsTh><WsTh>{l('colStatus')}</WsTh></>}>
       {rows.map(row => {const s = status(row); return <tr key={row.id} className="hover:bg-accent/40">
@@ -64,11 +68,11 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
       <p className="mt-2 text-sm">{l('empty')}</p>
     </div>}
     {employeePages.hasMore && <div className="mt-3"><Button variant="outline" disabled={busy || employeePages.busy} onClick={() => void employeePages.more()}>{l('more')}</Button></div>}
-    <AddEmployeeDialog api={api} nodes={nodes} workspaceId={workspaceId} candidates={candidates} readOnly={readOnly} open={adding} onClose={() => setAdding(false)} onCreated={() => {setAdding(false); void reload();}} onAssociated={() => void reload()} onLockChange={onLockChange}/>
+    <AddEmployeeDialog api={api} nodes={nodes} bindings={bindings} workspaceId={workspaceId} candidates={candidates} readOnly={readOnly} open={adding} onClose={() => setAdding(false)} onCreated={() => {setAdding(false); void reload();}} onAssociated={() => void reload()} onLockChange={onLockChange}/>
   </section>;
 }
 
-function AddEmployeeDialog({api, nodes, workspaceId, candidates, readOnly, open, onClose, onCreated, onAssociated, onLockChange}: {api: WorkspaceApi; nodes: Node[]; workspaceId: string; candidates: Employee[]; readOnly: boolean; open: boolean; onClose: () => void; onCreated: () => void; onAssociated: () => void; onLockChange: (locked: boolean) => void}) {
+function AddEmployeeDialog({api, nodes, bindings, workspaceId, candidates, readOnly, open, onClose, onCreated, onAssociated, onLockChange}: {api: WorkspaceApi; nodes: Node[]; bindings: Binding[]; workspaceId: string; candidates: Employee[]; readOnly: boolean; open: boolean; onClose: () => void; onCreated: () => void; onAssociated: () => void; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
   const [name, setName] = useState('');
   const [nodeId, setNodeId] = useState('');
@@ -87,6 +91,8 @@ function AddEmployeeDialog({api, nodes, workspaceId, candidates, readOnly, open,
     setBusy(true); setError(false); onLockChange(true);
     try {
       const created = await api.createEmployee({requestId: crypto.randomUUID(), name: name.trim(), nodeId, executor, workdirBindingId, title: '', roleDescription: '', model: ''});
+      const grant = workspaceBindingGrant(nodeId, `agent.${executor}`, bindings, nodes);
+      if (grant) await api.createBinding(workspaceId, grant.nodeId, grant.capability);
       await api.associateEmployee(workspaceId, created.agentId);
       reset(); onCreated();
     } catch {setError(true);}
@@ -95,7 +101,12 @@ function AddEmployeeDialog({api, nodes, workspaceId, candidates, readOnly, open,
   async function associate() {
     if (busy || readOnly || !associateId) return;
     setBusy(true); setError(false); onLockChange(true);
-    try {await api.associateEmployee(workspaceId, associateId); setAssociateId(''); onAssociated();} catch {setError(true);}
+    try {
+      const candidate = candidates.find(c => c.agentId === associateId);
+      const grant = candidate ? workspaceBindingGrant(candidate.nodeId, `agent.${candidate.executor}`, bindings, nodes) : null;
+      if (grant) await api.createBinding(workspaceId, grant.nodeId, grant.capability);
+      await api.associateEmployee(workspaceId, associateId); setAssociateId(''); onAssociated();
+    } catch {setError(true);}
     finally {setBusy(false); onLockChange(false);}
   }
   return <Dialog open={open} onOpenChange={o => {if (!o) close();}}>
