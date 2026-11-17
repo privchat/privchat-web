@@ -29,6 +29,7 @@ export function WorkspacePage({api, client, accountKey, viewerId = client?.sessi
   const preferenceKey = accountKey || viewerId
     ? 'privchat.workspace.last.' + JSON.stringify([api.base, accountKey, viewerId]) : undefined;
   const [preferred, setPreferred] = useState<string>();
+  const [spaceRevision, setSpaceRevision] = useState(0);
   useEffect(() => {
     try {setPreferred(preferenceKey ? localStorage.getItem(preferenceKey) ?? undefined : undefined);}
     catch {setPreferred(undefined);}
@@ -53,10 +54,13 @@ export function WorkspacePage({api, client, accountKey, viewerId = client?.sessi
     case 'create-project': view = <ProjectCreate key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>; break;
     case 'project': view = <ProjectDetail key={route.projectId} api={api} projectId={route.projectId} renderSession={renderSession}/>; break;
     case 'devices': view = <DevicePage api={api}/>; break;
-    case 'create-space': view = <CreateSpace api={api}/>; break;
+    case 'create-space': view = <CreateSpace api={api} onCreated={spaceId => {
+      setSpaceRevision(revision => revision + 1);
+      navigateWorkspace({view: 'space', spaceId});
+    }}/>; break;
     case 'space':
     case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId} preferenceKey={preferenceKey} onRemember={setPreferred}/>; break;
-    case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} draftScope={preferenceKey} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
+    case 'create-item': view = <CreateItem key={workspaceHref(route)} api={api} workspaceId={route.spaceId} initialProjectId={route.projectId} draftScope={preferenceKey} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
     case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} client={client} viewerId={viewerId} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employee': view = <EmployeeDetail key={`${route.spaceId}:${route.employeeId}:${route.panel ?? ''}`} api={api} workspaceId={route.spaceId} employeeId={route.employeeId} panel={route.panel} onLockChange={onLockChange}/>; break;
@@ -66,7 +70,7 @@ export function WorkspacePage({api, client, accountKey, viewerId = client?.sessi
   const setupFrom = new URLSearchParams(location.hash.split('?')[1]).get('fromTask');
   const returnToDraft = setupFrom && ['devices', 'project', 'employees'].includes(route.view)
     && taskSetupDraft(preferenceKey, setupFrom).load();
-  return <WorkspaceShell api={api} route={route} preferred={preferred}>
+  return <WorkspaceShell api={api} route={route} preferred={preferred} spaceRevision={spaceRevision}>
     {setupFrom && returnToDraft && <TaskDraftBack spaceId={setupFrom}/>}
     {view}
   </WorkspaceShell>;
@@ -134,13 +138,13 @@ function SpaceHome({api}: {api: WorkspaceApi}) {
   </section>;
 }
 
-function CreateSpace({api}: {api: WorkspaceApi}) {
+function CreateSpace({api, onCreated}: {api: WorkspaceApi; onCreated: (spaceId: string) => void}) {
   const l = usePageLabels();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
-  return <form className="mx-auto max-w-lg space-y-4 rounded-lg border bg-card p-6" onSubmit={async e => {e.preventDefault(); if (busy) return; setBusy(true); try {await api.post('/workspace/create', {name, description}); navigateWorkspace({view: 'home'});} catch {setError(true);} finally {setBusy(false);}}}>
+  return <form className="mx-auto max-w-lg space-y-4 rounded-lg border bg-card p-6" onSubmit={async e => {e.preventDefault(); if (busy || !name.trim()) return; setBusy(true); setError(false); try {const space = await api.post<Workspace>('/workspace/create', {name: name.trim(), description}); onCreated(space.id);} catch {setError(true);} finally {setBusy(false);}}}>
     <h2 className="text-lg font-bold">{l('createSpace')}</h2>{error && <p role="alert">{l('error')}</p>}
     <label className="block space-y-1.5"><span className="text-sm font-medium">{l('name')}</span><input className={workspaceField} required maxLength={120} value={name} onChange={e => setName(e.target.value)}/></label>
     <label className="block space-y-1.5"><span className="text-sm font-medium">{l('description')}</span><textarea className={workspaceField} maxLength={2000} value={description} onChange={e => setDescription(e.target.value)}/></label>

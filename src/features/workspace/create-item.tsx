@@ -7,10 +7,10 @@ import { employeeReasonLabel, usePageLabels } from './page-labels';
 import { wsField } from './shell';
 import { useEmployeePages } from './use-employee-pages';
 import { employeeExecutor, executorDisplay } from './employees';
-import { CORRECTION_CHOICES, employeeCause, grantableWorkspaceBinding, myProjectBindings, otherMemberEmployee, projectDirectory, projectReviewer } from './employee-access';
+import { CORRECTION_CHOICES, canDevelop, employeeCause, grantableWorkspaceBinding, myProjectBindings, otherMemberEmployee, projectDirectory, projectReviewer } from './employee-access';
 import { workspaceHref, type WorkspaceRoute } from './routes';
 
-export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onLockChange}: {api: WorkspaceApi; workspaceId: string; draftScope?: string; onBack: () => void; onCreated: () => void; onLockChange: (locked: boolean) => void}) {
+export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBack, onCreated, onLockChange}: {api: WorkspaceApi; workspaceId: string; initialProjectId?: string; draftScope?: string; onBack: () => void; onCreated: () => void; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
   const [intent] = useState(() => workspaceItemIntent(api, workspaceId));
   const [storage] = useState(() => taskSetupDraft(draftScope, workspaceId));
@@ -19,7 +19,7 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
   const [description, setDescription] = useState(intent.input?.description ?? restoredDraft?.description ?? '');
   const [acceptance, setAcceptance] = useState(intent.input?.acceptance ?? restoredDraft?.acceptance ?? '');
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState(intent.input ? intent.input.projectId ?? '' : restoredDraft?.projectId ?? '');
+  const [projectId, setProjectId] = useState(intent.input ? intent.input.projectId ?? '' : initialProjectId ?? restoredDraft?.projectId ?? '');
   const employeePages = useEmployeePages(api, workspaceId, projectId || undefined);
   const employees = employeePages.rows;
   const [bindings, setBindings] = useState<Binding[]>();
@@ -41,10 +41,12 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
   const live = useRef(true);
   const chosen = useRef(false);
   const restored = useRef(true);
-  const row = employees.find(e => e.employeeId === employeeId);
-  const employee = row?.available ? row : undefined;
   const selectedProject = projects.find(p => p.id === projectId);
-  const unbound = !!selectedProject && myProjectBindings(selectedProject).length === 0;
+  const candidates = employees.filter(e => !otherMemberEmployee(e) && (!projectId ||
+    (e.projectIds.includes(projectId) && canDevelop(selectedProject, e.nodeId, e.workdirBindingId))));
+  const row = candidates.find(e => e.employeeId === employeeId);
+  const employee = row?.available ? row : undefined;
+  const unbound = !!selectedProject && !myProjectBindings(selectedProject).some(b => b.directories.some(d => d.access === 'write'));
   // My binding's reviewer on the developer's device reviews the delivery by itself; never the developer (§20.3).
   const reviewerId = [projectReviewer(selectedProject, row?.nodeId)].find(id => !!id && id !== employeeId);
   const reviewerName = employees.find(e => e.employeeId === reviewerId)?.name || l('unnamedEmployee');
@@ -58,7 +60,6 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
     const target = workspaceHref(route);
     location.hash = target + (target.includes('?') ? '&' : '?') + new URLSearchParams({fromTask: workspaceId});
   }
-  const projectMismatch = !!projectId && !!employee && !employee.projectIds.includes(projectId);
   const note = (id: string) => {
     const candidate = employees.find(e => e.employeeId === id);
     if (!candidate) return undefined;
@@ -76,7 +77,6 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
       // One project: it is the one. Choose only when there are several.
       const single = open.length === 1 ? open[0] : undefined;
       if (!projectId && !intent.input && !restoredDraft && single) setProjectId(single.id);
-      if (!intent.input && projectId && !open.some(project => project.id === projectId)) setProjectId('');
     } catch {if (live.current) {setMetadataError(true); setError(true);}}
     // Names are display-only; a failed device lookup must not change execution authorization.
     try {const list = await api.nodes(); if (live.current) {setNodes(list); setNodesKnown(true);}} catch { /* Do not infer missing devices. */ }
@@ -90,7 +90,7 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
   useEffect(() => {
     if (chosen.current || employeeId || intent.input || !ready || employeePages.hasMore) return;
     const reviewers = new Set(myProjectBindings(selectedProject).map(b => b.reviewerEmployeeId).filter(Boolean));
-    const only = employees.filter(e => e.available && !otherMemberEmployee(e) && !reviewers.has(e.employeeId));
+    const only = candidates.filter(e => e.available && !reviewers.has(e.employeeId));
     const single = only.length === 1 ? only[0] : undefined;
     if (single) setEmployeeId(single.employeeId);
   }, [employees, employeeId, ready, selectedProject, employeePages.hasMore]);
@@ -135,7 +135,7 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('title')}<input className={wsField} maxLength={200} value={title} onChange={e => setTitle(e.target.value)}/></label>
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('description')}<textarea className={wsField} maxLength={10000} value={description} onChange={e => setDescription(e.target.value)}/></label>
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('acceptance')}<textarea className={wsField} maxLength={10000} value={acceptance} onChange={e => setAcceptance(e.target.value)}/></label>
-      <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('project')}<select className={wsField} disabled={!metadataReady || metadataError} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('none')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+      <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('project')}<select className={wsField} disabled={!metadataReady || metadataError} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('none')}</option>{projectId && !selectedProject && <option disabled value={projectId}>{l('unavailable')}</option>}{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
       {noWorkstation && <div className="my-2 space-y-2 rounded-lg border bg-sidebar p-3 text-sm">
         <p>{l('taskConnectHint')}</p>
         <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'devices'})}>{l('taskConnectDevice')}</Button>
@@ -144,11 +144,11 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
         <p className="font-medium">{l('bindFirst')}</p><p className="text-muted-foreground">{l('bindFirstHint')}</p>
         <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'project', projectId})}>{l('bindMyDirs')}</Button>
       </div>}
-      <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('employee')}<select aria-label={l('employee')} className={wsField} disabled={!ready} value={employeeId} onChange={e => {chosen.current = true; setEmployeeId(e.target.value); setBindingId(''); setAcknowledge('');}}><option value="">{l('none')}</option>{employees.filter(e => !otherMemberEmployee(e)).map(e => {
+      <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('employee')}<select aria-label={l('employee')} className={wsField} disabled={!ready || candidates.length === 0} value={employeeId} onChange={e => {chosen.current = true; setEmployeeId(e.target.value); setBindingId(''); setAcknowledge('');}}><option value="">{l('none')}</option>{candidates.map(e => {
         const hint = note(e.employeeId);
         return <option key={e.employeeId} value={e.employeeId} disabled={!e.available}>{e.name || l('unnamedEmployee')}{hint && ` · ${hint}`}</option>;
       })}</select><span className="text-xs font-normal text-muted-foreground">{l('linkedEmployeeHint')}</span></label>
-      {!noWorkstation && !unbound && ready && !employeePages.hasMore && !employees.some(row => !otherMemberEmployee(row)) && <div className="space-y-2 pb-2 text-sm text-muted-foreground">
+      {!noWorkstation && !unbound && ready && metadataReady && !metadataError && !employeePages.hasMore && candidates.length === 0 && <div className="space-y-2 pb-2 text-sm text-muted-foreground">
         <p role="status">{l('noLinkedEmployees')}</p>
         <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'employees', spaceId: workspaceId})}>{l('employees')}</Button>
       </div>}
@@ -156,7 +156,7 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
       {employeePages.error && <Button type="button" variant="outline" size="sm" disabled={employeePages.busy} onClick={() => void (employeePages.ready ? employeePages.more() : employeePages.refresh())}>{l('retry')}</Button>}
       {metadataError && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void loadMetadata()}>{l('retry')}</Button>}
       {/* Held back only by a missing workspace binding: their device owner can grant it from here. */}
-      {metadataReady && !metadataError && employees.map(candidate => {
+      {metadataReady && !metadataError && candidates.map(candidate => {
         const missing = grantableWorkspaceBinding(candidate, bindings, nodes);
         if (!missing) return null;
         const device = nodes.find(n => n.nodeId === missing.nodeId)?.name || missing.nodeId;
@@ -180,7 +180,7 @@ export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onL
       </div>}
     </fieldset>
     <div className="mt-[19px] flex justify-end gap-2">
-      {intent.locked ? <Button disabled={busy} onClick={() => void submit(assignMode === true)}>{l('retry')}</Button> : <><Button variant="outline" disabled={busy || !title.trim() || (!!projectId && (!metadataReady || metadataError))} onClick={() => void submit(false)}>{l('onlyCreate')}</Button><Button disabled={busy || !ready || !metadataReady || metadataError || !title.trim() || !employee || !selectedBinding || projectMismatch || (!!employee?.previousResultUnknown && !acknowledge)} onClick={() => {if (window.confirm(`${l('sessionHint')}\n${l('privateNotImported')}`)) void submit(true);}}>{l('assign')}</Button></>}
+      {intent.locked ? <Button disabled={busy} onClick={() => void submit(assignMode === true)}>{l('retry')}</Button> : <><Button variant="outline" disabled={busy || !title.trim() || (!!projectId && (!metadataReady || metadataError || !selectedProject))} onClick={() => void submit(false)}>{l('onlyCreate')}</Button><Button disabled={busy || !ready || !metadataReady || metadataError || !title.trim() || !employee || !selectedBinding || (!!employee?.previousResultUnknown && !acknowledge)} onClick={() => {if (window.confirm(`${l('sessionHint')}\n${l('privateNotImported')}`)) void submit(true);}}>{l('assign')}</Button></>}
     </div>
   </section>;
 }

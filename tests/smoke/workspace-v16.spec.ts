@@ -37,9 +37,60 @@ test('cards separate association count and availability; exact management menu; 
   await expect(cards.first()).toContainText('Employees: 3'); await expect(cards.first()).toContainText('Available: 1'); await expect(cards.last()).toContainText('Available: Temporarily unavailable'); await expect(cards.first()).not.toContainText('Last activity');
   await page.getByRole('button', {name: 'Manage', exact: true}).click(); await expect(page.getByRole('menuitem')).toHaveText(['Project management', 'Device management', 'Create workspace']); expect(requests.every(r => r.method === 'GET' && !r.path.includes('room') && !r.path.includes('execution'))).toBe(true);
 });
-test('empty list keeps management; creating a space only saves the space', async ({page}) => {
-  const requests = await mock(page, path => path === '/workspace/page' ? {list: [], total: 0} : undefined); await mount(page);
-  await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Create workspace', exact: true}).click(); await page.getByLabel('Name', {exact: true}).fill('New team'); await page.getByRole('button', {name: 'Save', exact: true}).click(); await expect(page.getByTestId('workspace-home')).toBeVisible(); expect(requests.filter(r => r.method === 'POST').map(r => r.path)).toEqual(['/workspace/create']);
+test('creating a workspace opens it and refreshes the workspace switcher', async ({page}) => {
+  let created = false;
+  const requests = await mock(page, path => {
+    if (path === '/workspace/create') {created = true; return space('new');}
+    if (path === '/workspace/page') return {list: [], total: 0};
+    if (path === '/workspace/list') return created ? [space(), space('new')] : [space()];
+  });
+  await mount(page);
+  await page.getByRole('button', {name: 'Manage', exact: true}).click(); await page.getByRole('menuitem', {name: 'Create workspace', exact: true}).click(); await page.getByLabel('Name', {exact: true}).fill('New team'); await page.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(page.getByTestId('workspace-detail')).toBeVisible();
+  await expect(page.getByRole('combobox', {name: 'Select workspace'})).toHaveValue('new');
+  expect(requests.filter(r => r.method === 'POST').map(r => r.path)).toEqual(['/workspace/create']);
+});
+test('project detail starts a project task and only offers employees on its writable directories', async ({page}) => {
+  const bound = {...project, bindings: [myBinding]};
+  const requests = await mock(page, path => {
+    if (path === '/workspace/project/get/p') return bound;
+    if (path === '/workspace/project/list') return [bound];
+    if (path === '/workspace/employee/page') return {items: [
+      employee,
+      {...employee, id: 'ref-unbound', employeeId: 'unbound', name: 'Other workstation', nodeId: 'other-node'},
+      {...employee, id: 'ref-outside', employeeId: 'outside', name: 'Unbound directory', workdirBindingId: 'outside'},
+    ], hasMore: false, nextCursor: null};
+  });
+  await mount(page);
+  await page.getByTestId('ws-nav-navProjects').click();
+  await page.getByRole('button', {name: 'Project', exact: true}).click();
+  await page.getByRole('button', {name: 'New task', exact: true}).click();
+  await expect(page.getByRole('combobox', {name: 'Project', exact: true})).toHaveValue('p');
+  const picker = page.getByRole('combobox', {name: 'Employee (optional)'});
+  await expect(picker.getByRole('option', {name: 'Engineer'})).toHaveCount(1);
+  await expect(picker.getByRole('option', {name: /Other workstation|Unbound directory/})).toHaveCount(0);
+  await page.getByLabel('Title', {exact: true}).fill('Plan without dispatch');
+  await page.getByRole('button', {name: 'Create only', exact: true}).click();
+  expect(requests.find(r => r.path === '/workspace/work-item/create')?.body.projectId).toBe('p');
+  expect(requests.some(r => r.path.endsWith('/assign'))).toBe(false);
+});
+test('binding another workstation does not reuse the first workstation directories or version', async ({page}) => {
+  const second = {...node, nodeId: 'second', name: 'Second Mac', workdirs: [{id: 'second-dir', label: 'Second repository'}]};
+  const requests = await mock(page, path => {
+    if (path === '/workspace/project/get/p') return {...project, bindings: [myBinding]};
+    if (path === '/agent/nodes') return [node, second];
+    if (path === '/workspace/project/binding/save') return {...myBinding, nodeId: second.nodeId};
+  });
+  await openProjectDetail(page);
+  await page.getByRole('button', {name: 'Bind my directories'}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('second');
+  await dialog.getByRole('combobox', {name: 'Directory path', exact: true}).selectOption('second-dir');
+  await dialog.getByRole('button', {name: 'Save binding', exact: true}).click();
+  await expect.poll(() => requests.find(r => r.path === '/workspace/project/binding/save')?.body).toEqual({
+    projectId: 'p', nodeId: 'second', directories: [{workdirBindingId: 'second-dir', access: 'write'}],
+    notes: '',
+  });
 });
 test('unified task list pages downward and includes ended work; status chips filter without a separate view', async ({page}) => {
   const requests = await mock(page); await mount(page); await page.getByTestId('workspace-card').first().click();
@@ -307,7 +358,7 @@ test('space settings manage members by role through their own APIs', async ({pag
   await settings.getByRole('button', {name: 'Invite member', exact: true}).click();
   const inviteDialog = page.getByRole('dialog');
   await expect(inviteDialog.getByRole('heading', {name: 'Invite member', exact: true})).toBeVisible();
-  await expect(inviteDialog).toContainText('Send the invitation to space collaborators.');
+  await expect(inviteDialog).toContainText('Confirming adds them to this workspace.');
   await inviteDialog.getByLabel('Account', {exact: true}).fill('new-user');
   await inviteDialog.getByRole('button', {name: 'Preview invitation', exact: true}).click();
   await expect(inviteDialog.getByRole('heading', {name: 'Preview invitation', exact: true})).toBeVisible();
@@ -332,7 +383,7 @@ for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) te
 });
 
 test('lost assignment retains saved item and original key; candidates come from associations', async ({page}) => {
-  let lost = true; const requests = await mock(page, path => {if (path === '/workspace/work-execution/assign') {if (lost) {lost = false; return 'abort';} return {id: 'link', executionId: 'exec', state: 'accepted'};}}); page.on('dialog', dialog => dialog.accept());
+  let lost = true; const requests = await mock(page, path => {if (path === '/workspace/project/list') return [{...project, bindings: [myBinding]}]; if (path === '/workspace/work-execution/assign') {if (lost) {lost = false; return 'abort';} return {id: 'link', executionId: 'exec', state: 'accepted'};}}); page.on('dialog', dialog => dialog.accept());
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click(); await page.getByLabel('Title', {exact: true}).fill('Ship'); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click(); await expect(page.getByRole('alert').filter({hasText: 'Work item saved; assignment not confirmed'})).toBeVisible(); await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect(page.getByTestId('workspace-detail')).toBeVisible();
   const creates = requests.filter(r => r.path === '/workspace/work-item/create'), assigns = requests.filter(r => r.path === '/workspace/work-execution/assign'); expect(creates).toHaveLength(1); expect(assigns).toHaveLength(2); expect(assigns[0]?.body).toEqual(assigns[1]?.body); expect(assigns[0]?.body).toMatchObject({workItemId: '42', version: 1, employeeId: 'emp', bindingId: 'b'}); expect(requests.some(r => r.path === '/agent/agents/send')).toBe(false);
 });
@@ -374,7 +425,7 @@ for (const [language, title, add, column] of [['en', 'AI employees', 'Add AI emp
 }
 
 test('create-item discovers available employee 101 after an entirely unavailable first page without starting work', async ({page}) => {
-  const requests = await mock(page, (path, query) => path === '/workspace/employee/page' ? referencePage(query.searchParams.get('cursor')) : undefined);
+  const requests = await mock(page, (path, query) => path === '/workspace/employee/page' ? referencePage(query.searchParams.get('cursor')) : path === '/workspace/project/list' ? [{...project, bindings: [myBinding]}] : undefined);
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click();
   const panel = page.getByTestId('create-work-item'); const select = panel.getByRole('combobox', {name: 'Employee (optional)', exact: true});
   await expect(select.getByRole('option')).toHaveCount(101); await expect(select.getByRole('option', {name: 'Employee 1 · The device is offline. Check that it is connected.', exact: true})).toHaveJSProperty('disabled', true);
@@ -383,7 +434,7 @@ test('create-item discovers available employee 101 after an entirely unavailable
 });
 
 test('blocked accepted create-and-assign stays recoverable across reload without claiming delivery or replacing identity', async ({page}) => {
-  const requests = await mock(page, path => path === '/workspace/work-execution/assign' ? {id: 'held-link', executionId: 'accepted-held', state: 'accepted', deliveryBlockedReason: 'INTERNAL_DETAIL_NOT_FOR_DISPLAY'} : undefined);
+  const requests = await mock(page, path => path === '/workspace/work-execution/assign' ? {id: 'held-link', executionId: 'accepted-held', state: 'accepted', deliveryBlockedReason: 'INTERNAL_DETAIL_NOT_FOR_DISPLAY'} : path === '/workspace/project/list' ? [{...project, bindings: [myBinding]}] : undefined);
   page.on('dialog', dialog => dialog.accept());
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click();
   await page.getByLabel('Title', {exact: true}).fill('Held task'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click();

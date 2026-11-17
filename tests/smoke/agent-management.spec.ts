@@ -13,6 +13,37 @@ test.beforeEach(async ({page}) => {
   page.on('dialog', d => d.accept());
 });
 
+test('pairing keeps the code and claims the assistant only after explicit confirmation', async ({page}) => {
+  let claimed = false;
+  const approvals: string[] = [];
+  await page.route('**/__manage/app/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/assistant/personal/claim')) {
+      expect(route.request().postDataJSON()).toEqual({confirmed: true});
+      claimed = true;
+      return route.fulfill({json: {code: 0, data: {assistantUid: '1'}}});
+    }
+    if (path.endsWith('/pairing/approve')) {
+      approvals.push(route.request().postDataJSON().pairingCode);
+      if (!claimed) return route.fulfill({status: 403, json: {code: 10200, message: 'AGENT_ASSISTANT_NOT_CLAIMED'}});
+      return route.fulfill({json: {code: 0, data: {pairingId: '1', deviceName: 'Laptop', expiresAt: Date.now() + 60000}}});
+    }
+    return route.fulfill({json: {code: 0, data: []}});
+  });
+  await page.evaluate(async () => {const {mountDevicePage} = await import('/src/test-harness/workspace-console.tsx'); mountDevicePage(`${location.origin}/__manage/app`);});
+  await page.getByRole('button', {name: 'Add device'}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Pairing code').fill('ABC123');
+  await dialog.getByRole('button', {name: 'Verify device'}).click();
+  const action = dialog.getByRole('button', {name: 'Claim assistant and pair'});
+  await expect(action).toBeVisible();
+  expect(claimed).toBe(false);
+  await expect(dialog.getByLabel('Pairing code')).toHaveValue('ABC123');
+  await action.click();
+  await expect(dialog.getByText('Pairing approved. Waiting for device activation.')).toBeVisible();
+  expect(approvals).toEqual(['ABC123', 'ABC123']);
+});
+
 test('device page pairs, limits grants, preserves unknown grants and reports pending revocation', async ({page}) => {
   const posts: {path: string; body: any}[] = [];
   await page.route('**/__manage/app/agent/**', async route => {

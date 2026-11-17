@@ -81,15 +81,16 @@ function sectionKey(route: WorkspaceRoute): NavKey | 'createSpace' | null {
 /** Sidebar + breadcrumb chrome around the routed workspace view (design mockups).
  *  Purely presentational navigation: every target is an existing hash route, so
  *  deep links, refresh and back/forward keep working unchanged. */
-export function WorkspaceShell({api, route, preferred, children}: {api: WorkspaceApi; route: WorkspaceRoute; preferred?: string; children: ReactNode}) {
+export function WorkspaceShell({api, route, preferred, spaceRevision, children}: {api: WorkspaceApi; route: WorkspaceRoute; preferred?: string; spaceRevision: number; children: ReactNode}) {
   const l = usePageLabels();
   const [spaces, setSpaces] = useState<Workspace[]>([]);
+  const requestedSpace = routeSpaceId(route);
   useEffect(() => {
     let live = true;
     void api.list().then(rows => {if (live) setSpaces(rows);}).catch(() => {});
     return () => {live = false;};
-  }, [api]);
-  const spaceId = routeSpaceId(route) ?? spaces.find(s => s.id === preferred && s.archived === 0)?.id ?? spaces.find(s => s.archived === 0)?.id;
+  }, [api, spaceRevision]);
+  const spaceId = requestedSpace ?? spaces.find(s => s.id === preferred && s.archived === 0)?.id ?? spaces.find(s => s.archived === 0)?.id;
   const space = spaces.find(s => s.id === spaceId);
   const section = sectionKey(route);
   const detail = route.view === 'item' || route.view === 'project' || route.view === 'employee';

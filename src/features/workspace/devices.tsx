@@ -4,6 +4,7 @@ import { Monitor, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { PlatformApiError } from '@/lib/platform-errors';
 import { WorkspaceApi, type Node, type PairingView } from './api';
 import { roomFailure } from './room-observer';
 import { usePageLabels } from './page-labels';
@@ -20,6 +21,7 @@ export function DevicePage({api}: {api: WorkspaceApi}) {
   const [grants, setGrants] = useState<string[]>([]);
   const [code, setCode] = useState('');
   const [pairing, setPairing] = useState<PairingView>();
+  const [pairingError, setPairingError] = useState('');
   const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -54,15 +56,34 @@ export function DevicePage({api}: {api: WorkspaceApi}) {
       }
     } finally {running.current = false; if (live.current) setBusy(false);}
   }
+  function verifyPairing(claimAssistant = false) {
+    const pairingCode = code.trim();
+    if (!pairingCode) return;
+    void act(async () => {
+      setPairingError('');
+      try {
+        if (claimAssistant) await api.post('/assistant/personal/claim', {confirmed: true});
+        const result = await api.approvePairing(pairingCode);
+        if (live.current) {setPairing(result); setCode('');}
+      } catch (e) {
+        const code = e instanceof PlatformApiError ? e.machineCode : undefined;
+        if (live.current) setPairingError(code === 'AGENT_ASSISTANT_NOT_CLAIMED' ? 'pairingNeedsAssistant'
+          : code === 'ASSISTANT_PERSONAL_UNAVAILABLE' ? 'unsupported' : roomFailure(e) === 'denied' ? 'denied' : 'error');
+        return;
+      }
+      if (live.current) await refresh();
+    });
+  }
   return <main data-testid="device-page" className="w-full min-w-0">
     <WsPageHeader title={l('devicesTitle')} subtitle={l('devicesSub')} actions={
-      <Button disabled={busy} onClick={() => {setCode(''); setPairing(undefined); setAdding(true);}}><Plus className="h-4 w-4" />{l('addDevice')}</Button>
+      <><Button variant="outline" disabled={busy || loading} onClick={() => void act(refresh)}>{label('refresh')}</Button>
+      <Button disabled={busy} onClick={() => {setCode(''); setPairing(undefined); setPairingError(''); setAdding(true);}}><Plus className="h-4 w-4" />{l('addDevice')}</Button></>
     } />
     {error && <p role="alert" className="mb-3 text-sm text-destructive">{label(error)}</p>}
     {loading && <p role="status" className="mb-3 text-sm text-muted-foreground">{label('loading')}</p>}
     {!loading && !nodes.length && <div className="rounded-[9px] border py-[58px] text-center text-muted-foreground">
       <Monitor className="mx-auto h-6 w-6" aria-hidden="true" />
-      <p className="mt-2 text-sm">{label('empty')}</p>
+      <p className="mt-2 text-sm">{l('addDeviceHint')}</p>
     </div>}
     {nodes.length > 0 && <WsTable head={<><WsTh>{l('colDevice')}</WsTh><WsTh>{l('colSystem')}</WsTh><WsTh>{l('colStatus')}</WsTh><WsTh>{l('colLastOnline')}</WsTh></>}>
       {nodes.map(n => <tr key={n.nodeId} onClick={() => selectNode(n.nodeId)} className={cn('cursor-pointer transition-colors hover:bg-accent/40', selected === n.nodeId && 'bg-accent/40')}>
@@ -101,18 +122,17 @@ export function DevicePage({api}: {api: WorkspaceApi}) {
           <DialogTitle>{l('addDevice')}</DialogTitle>
           <DialogDescription>{l('addDeviceHint')}</DialogDescription>
         </DialogHeader>
-        <form className="space-y-4" onSubmit={e => {e.preventDefault(); if (code.trim() && window.confirm(label('pairingConfirm'))) void act(async () => {
-          const result = await api.approvePairing(code.trim());
-          if (live.current) {setPairing(result); setCode('');}
-          await refresh();
-        });}}>
+        <form className="space-y-4" onSubmit={e => {e.preventDefault(); if (code.trim() && window.confirm(label('pairingConfirm'))) verifyPairing();}}>
           <label className="grid gap-1.5 text-sm font-medium">{label('pairingCode')}
-            <input autoComplete="off" className={wsField} value={code} disabled={busy} onChange={e => {setCode(e.target.value); setPairing(undefined);}} />
+            <input autoComplete="off" className={wsField} value={code} disabled={busy} onChange={e => {setCode(e.target.value); setPairing(undefined); setPairingError('');}} />
           </label>
+          {pairingError && <p role="alert" className="text-sm text-destructive">{label(pairingError)}</p>}
           {pairing && <div role="status" className="break-words text-sm text-muted-foreground"><p>{label('pairingApproved')}</p><p>{pairing.deviceName} · {pairing.platform} · {pairing.runtimeVersion}</p><p>{label('expiresAt')}: {date(pairing.expiresAt)}</p></div>}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={() => setAdding(false)}>{l('cancel')}</Button>
-            <Button type="submit" disabled={busy || !code.trim()}>{l('verifyDeviceBtn')}</Button>
+            {pairingError === 'pairingNeedsAssistant'
+              ? <Button type="button" disabled={busy} onClick={() => verifyPairing(true)}>{label('claimAndPair')}</Button>
+              : <Button type="submit" disabled={busy || !code.trim()}>{l('verifyDeviceBtn')}</Button>}
           </DialogFooter>
         </form>
       </DialogContent>

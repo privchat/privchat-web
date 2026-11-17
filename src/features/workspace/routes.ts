@@ -10,7 +10,7 @@ export type WorkspaceRoute =
   | {view: 'create-space'}
   | {view: 'space'; spaceId: string}
   | {view: 'records'; spaceId: string}
-  | {view: 'create-item'; spaceId: string}
+  | {view: 'create-item'; spaceId: string; projectId?: string}
   | {view: 'item'; spaceId: string; itemId: string; executionId?: string}
   | {view: 'employees'; spaceId: string}
   | {view: 'employee'; spaceId: string; employeeId: string; panel?: 'profile' | 'rebind'}
@@ -44,7 +44,10 @@ export function parseWorkspaceRoute(hash: string): WorkspaceRoute | null {
     const spaceId = segments[1];
     if (segments.length === 2) return {view: 'space', spaceId};
     if (segments.length === 3 && segments[2] === 'records') return {view: 'records', spaceId};
-    if (segments.length === 3 && segments[2] === 'new') return {view: 'create-item', spaceId};
+    if (segments.length === 3 && segments[2] === 'new') {
+      const projectId = params.get('project') || undefined;
+      return {view: 'create-item', spaceId, ...(projectId ? {projectId} : {})};
+    }
     if (segments.length === 3 && segments[2] === 'employees') return {view: 'employees', spaceId};
     if (segments.length === 3 && segments[2] === 'settings') return {view: 'settings', spaceId};
     if (segments.length === 4 && segments[2] === 'item' && segments[3]) {
@@ -72,7 +75,7 @@ export function workspaceHref(route: WorkspaceRoute): string {
     case 'create-space': path += '/new'; break;
     case 'space': path += `/space/${encodeURIComponent(route.spaceId)}`; break;
     case 'records': path += `/space/${encodeURIComponent(route.spaceId)}/records`; break;
-    case 'create-item': path += `/space/${encodeURIComponent(route.spaceId)}/new`; break;
+    case 'create-item': path += `/space/${encodeURIComponent(route.spaceId)}/new`; if (route.projectId) query.set('project', route.projectId); break;
     case 'item':
       path += `/space/${encodeURIComponent(route.spaceId)}/item/${encodeURIComponent(route.itemId)}`;
       if (route.executionId) query.set('execution', route.executionId);
