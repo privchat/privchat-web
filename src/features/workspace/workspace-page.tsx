@@ -187,7 +187,7 @@ function SpaceView({api, client, spaceId, preferenceKey, onRemember}: {api: Work
   const open = (row: WorkspaceActivity) => navigateWorkspace({view: 'item', spaceId, itemId: row.item.id, executionId: row.latestExecution?.executionId ?? undefined});
   return <section data-testid="workspace-detail">
     <WsPageHeader title={l('tasksTitle')} subtitle={l('tasksSub')} actions={
-      <Button size="sm" disabled={readOnly} onClick={() => navigateWorkspace({view: 'create-item', spaceId})}><Plus className="h-4 w-4" />{l('newTask')}</Button>
+      <Button size="sm" disabled={readOnly} onClick={() => navigateWorkspace({view: 'create-item', spaceId, projectId: projectId || undefined})}><Plus className="h-4 w-4" />{l('newTask')}</Button>
     } />
     {error && <p role="alert">{l(denied ? 'accessDenied' : 'error')}</p>}
     {!space && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}

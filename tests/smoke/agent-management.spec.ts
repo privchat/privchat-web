@@ -165,6 +165,10 @@ test('workflow assigns, snapshots source link and explicitly records a human rev
   expect(posts[1].body).toMatchObject({sourceWorkExecutionId: '8', evidenceNoteIds: ['7'], version: 7});
   expect(posts[1].body).not.toHaveProperty('executionId');
   await p.getByRole('combobox', {name: /^Record human conclusion/}).selectOption('12');
+  await expect(p.locator('article')).toContainText('Delivered result to review: 8 · v7');
+  await expect(p.getByLabel('Review conclusion')).toHaveValue('');
+  await p.getByLabel('Conclusion rationale').fill('Checked fixed evidence');
+  await expect(p.getByRole('button', {name: 'Record human conclusion'})).toBeDisabled();
   await p.getByLabel('Review conclusion').selectOption('passed');
   await p.getByLabel('Conclusion rationale').fill('Checked fixed evidence');
   await p.getByRole('button', {name: 'Record human conclusion'}).click();
@@ -309,6 +313,8 @@ test('assignment defaults to automatic review by the binding reviewer and carrie
   await p.getByRole('button', {name: 'Assign to employee'}).click();
   await expect.poll(() => posts.length).toBe(1);
   expect(posts[0].body).toMatchObject({employeeId: '3', bindingId: '6', autoReview: true, correctionLimit: null});
+  await expect(p.getByLabel('Automatic correction rounds')).toBeHidden();
+  await auto.getByText('Advanced settings').click();
   await p.getByLabel('Automatic correction rounds').selectOption('3');
   await p.getByRole('button', {name: 'Assign to employee'}).click();
   await expect.poll(() => posts.length).toBe(2);

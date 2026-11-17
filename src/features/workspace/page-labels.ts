@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { UnavailableCause } from './employee-access';
 const en = {
+  advancedSettings: 'Advanced settings', manualWorkflow: 'Manual workflow',
   activeEmpty: 'No ongoing work',
   acceptance: 'Acceptance criteria', acceptedExecution: 'Accepted execution identity (not proof of delivery)',
   access: 'Access', accessDenied: 'You no longer have access to these tasks.', accessRead: 'Read', accessWrite: 'Write',
@@ -101,6 +102,7 @@ const en = {
 type Labels = typeof en;
 export type WorkspaceLabelKey = keyof Labels;
 const zh: Labels = {
+  advancedSettings: '进阶配置', manualWorkflow: '手动推进',
   activeEmpty: '暂无进行中的工作',
   acceptance: '验收条件', acceptedExecution: '已受理执行标识（不代表已投递）',
   access: '权限', accessDenied: '你已无权读取这些任务。', accessRead: '只读', accessWrite: '可修改',
@@ -199,6 +201,7 @@ const zh: Labels = {
   pendingRetry: '上一次请求结果未确认，请重试同一请求，不会新建。',
 };
 const zhTW: Labels = {
+  advancedSettings: '進階設定', manualWorkflow: '手動推進',
   activeEmpty: '暫無進行中的工作',
   acceptance: '驗收條件', acceptedExecution: '已受理執行識別碼（不代表已投遞）',
   access: '權限', accessDenied: '你已無權讀取這些任務。', accessRead: '唯讀', accessWrite: '可修改',
@@ -297,6 +300,7 @@ const zhTW: Labels = {
   pendingRetry: '上一次請求結果未確認，請重試同一請求，不會新建。',
 };
 const vi: Labels = {
+  advancedSettings: 'Cài đặt nâng cao', manualWorkflow: 'Thao tác thủ công',
   activeEmpty: 'Không có công việc đang tiến hành',
   acceptance: 'Tiêu chí nghiệm thu', acceptedExecution: 'Định danh thực thi đã tiếp nhận (không chứng minh đã chuyển lệnh)',
   access: 'Quyền', accessDenied: 'Bạn không còn quyền đọc các công việc này.', accessRead: 'Chỉ đọc', accessWrite: 'Có thể sửa',

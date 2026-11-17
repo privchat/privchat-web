@@ -96,6 +96,23 @@ test.describe('workspace app navigation (platform)', () => {
     await expect(page).toHaveURL(/\/space\/w2$/);
   });
 
+  test('a new task inherits the project filter and allows an explicit override', async ({page}) => {
+    const projects = ['Core', 'Docs'].map(name => ({id: name, workspaceId: 'w', name, archived: 0, bindings: []}));
+    await page.route('**/workspace/project/list?*', route => route.fulfill({json: {code: 0, data: projects}}));
+    await page.getByTestId('nav-workspace').click();
+    const workspace = page.getByTestId('workspace-detail');
+    await workspace.locator('select').filter({has: page.locator('option[value="Docs"]')}).selectOption('Docs');
+    await workspace.getByRole('button', {name: /New task|新建任务/}).click();
+    const form = page.getByTestId('create-work-item');
+    const project = form.locator('details select').first();
+    await expect(project).toHaveValue('Docs');
+    await expect(project).toBeHidden();
+    await expect(form.getByText(/^(Project|项目): Docs$/)).toBeVisible();
+    await form.locator('summary').click();
+    await project.selectOption('Core');
+    await expect(form.getByText(/^(Project|项目): Core$/)).toBeVisible();
+  });
+
   test('setting up a workstation preserves the unsubmitted draft', async ({page}) => {
     await page.getByTestId('nav-workspace').click();
     await page.getByTestId('workspace-detail').getByRole('button', {name: /New task|新建任务/}).click();

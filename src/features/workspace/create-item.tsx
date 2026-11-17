@@ -135,7 +135,7 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('title')}<input className={wsField} maxLength={200} value={title} onChange={e => setTitle(e.target.value)}/></label>
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('description')}<textarea className={wsField} maxLength={10000} value={description} onChange={e => setDescription(e.target.value)}/></label>
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('acceptance')}<textarea className={wsField} maxLength={10000} value={acceptance} onChange={e => setAcceptance(e.target.value)}/></label>
-      <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('project')}<select className={wsField} disabled={!metadataReady || metadataError} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('none')}</option>{projectId && !selectedProject && <option disabled value={projectId}>{l('unavailable')}</option>}{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+      <p className="py-2 text-sm">{l('project')}: {selectedProject?.name ?? (projectId ? projectId : metadataReady ? l('none') : l('loading'))}</p>
       {noWorkstation && <div className="my-2 space-y-2 rounded-lg border bg-sidebar p-3 text-sm">
         <p>{l('taskConnectHint')}</p>
         <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'devices'})}>{l('taskConnectDevice')}</Button>
@@ -174,13 +174,17 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
       {matching.length > 1 && <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('node')}<select className={wsField} value={bindingId} onChange={e => setBindingId(e.target.value)}><option value="">{l('none')}</option>{matching.map(b => <option key={b.id} value={b.id}>{nodes.find(n => n.nodeId === b.nodeId)?.name || b.nodeId} · {executorDisplay(employeeExecutor(b.capability) ?? b.capability)}</option>)}</select></label>}
       {reviewerId && <div data-testid="auto-review" className="my-2 space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
         <p className="text-muted-foreground">{l('autoReviewBy').replace('{name}', reviewerName)}</p>
-        <label className="grid gap-1.5 font-medium">{l('correctionRounds')}<select aria-label={l('correctionRounds')} className={wsField} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
-          {CORRECTION_CHOICES.map(choice => <option key={choice ?? 'unlimited'} value={choice ?? ''}>{choice == null ? l('correctionUnlimited') : l('correctionRoundsN').replace('{n}', String(choice))}</option>)}
-        </select><span className="text-xs font-normal text-muted-foreground">{l('correctionRoundsHint')}</span></label>
       </div>}
+      <details className="mt-3 border-t py-3">
+        <summary className="cursor-pointer text-sm font-medium">{l('advancedSettings')}</summary>
+        <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('project')}<select className={wsField} disabled={!metadataReady || metadataError} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('none')}</option>{projectId && !selectedProject && <option disabled value={projectId}>{l('unavailable')}</option>}{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        {reviewerId && <label className="grid gap-1.5 font-medium">{l('correctionRounds')}<select aria-label={l('correctionRounds')} className={wsField} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
+          {CORRECTION_CHOICES.map(choice => <option key={choice ?? 'unlimited'} value={choice ?? ''}>{choice == null ? l('correctionUnlimited') : l('correctionRoundsN').replace('{n}', String(choice))}</option>)}
+        </select><span className="text-xs font-normal text-muted-foreground">{l('correctionRoundsHint')}</span></label>}
+      </details>
     </fieldset>
     <div className="mt-[19px] flex justify-end gap-2">
-      {intent.locked ? <Button disabled={busy} onClick={() => void submit(assignMode === true)}>{l('retry')}</Button> : <><Button variant="outline" disabled={busy || !title.trim() || (!!projectId && (!metadataReady || metadataError || !selectedProject))} onClick={() => void submit(false)}>{l('onlyCreate')}</Button><Button disabled={busy || !ready || !metadataReady || metadataError || !title.trim() || !employee || !selectedBinding || (!!employee?.previousResultUnknown && !acknowledge)} onClick={() => {if (window.confirm(`${l('sessionHint')}\n${l('privateNotImported')}`)) void submit(true);}}>{l('assign')}</Button></>}
+      {intent.locked ? <Button disabled={busy} onClick={() => void submit(assignMode === true)}>{l('retry')}</Button> : <><Button variant="outline" disabled={busy || (!metadataReady && !metadataError) || !title.trim() || (!!projectId && (metadataError || !selectedProject))} onClick={() => void submit(false)}>{l('onlyCreate')}</Button><Button disabled={busy || !ready || !metadataReady || metadataError || !title.trim() || !employee || !selectedBinding || (!!employee?.previousResultUnknown && !acknowledge)} onClick={() => {if (window.confirm(`${l('sessionHint')}\n${l('privateNotImported')}`)) void submit(true);}}>{l('assign')}</Button></>}
     </div>
   </section>;
 }

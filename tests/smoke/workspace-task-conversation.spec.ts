@@ -74,6 +74,13 @@ test('lost task instruction response survives reload and retries the original re
   expect(writes[1]).toEqual(writes[0]);
 });
 
+test('manual workflow opens review controls without changing the task', async ({page}) => {
+  const {writes} = await fixture(page, {entries: [request, {...developer, state: 'succeeded'}]});
+  await page.getByRole('button', {name: 'Manual workflow'}).click();
+  await expect(page.getByRole('dialog').getByLabel('Review conclusion')).toHaveValue('');
+  expect(writes).toEqual([]);
+});
+
 test('the stop control pauses the task, not a raw execution', async ({page}) => {
   const {writes} = await fixture(page, {entries: [request, developer]});
   await page.getByRole('button', {name: 'Pause', exact: true}).click();
@@ -99,6 +106,7 @@ test('other members can see the conversation but cannot drive the task', async (
   await expect(page.getByText('Recover after reconnect')).toBeVisible();
   await expect(page.getByRole('textbox')).toHaveCount(0);
   await expect(page.getByRole('button', {name: 'Confirm completion'})).toHaveCount(0);
+  await expect(page.getByRole('button', {name: 'Manual workflow'})).toHaveCount(0);
   await expect(page.getByTestId('task-conversation-page')).not.toContainText('100000010');
   expect(writes).toEqual([]);
 });

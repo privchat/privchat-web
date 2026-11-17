@@ -34,7 +34,7 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
   const [description, setDescription] = useState('');
   const [instructions, setInstructions] = useState('');
   const [reviewId, setReviewId] = useState('');
-  const [conclusion, setConclusion] = useState('changes_requested');
+  const [conclusion, setConclusion] = useState('');
   const [verdict, setVerdict] = useState('');
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -66,8 +66,8 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
   const candidates = matchingEmployeeBindings(employee, access);
   const chosenBinding = candidates.length === 1 ? candidates[0]!.id : bindingId;
   const missingGrant = employee && !candidates.length ? workspaceBindingGrant(employee.nodeId, `agent.${employee.executor}`, access, nodes) : null;
-  const sourceRow = links.find(l => l.id === source);
   const sources = links.filter(l => l.state === 'succeeded' && l.executionId && !reviews.some(r => r.reviewerExecution.id === l.id));
+  const sourceRow = sources.find(l => l.id === source);
   // The reviewer named in my binding where the work runs: the developer's computer, or the reviewed round's binding (§20.3).
   const autoReviewerId = [projectReviewer(project, employee?.nodeId)].find(id => !!id && id !== employeeId);
   const reviewReviewerId = [
@@ -160,9 +160,9 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
       {autoReviewerId ? <div data-testid="auto-review" className="space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
         <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={autoReview} disabled={!canAutoReview} onChange={e => setAutoReview(e.target.checked)}/>{pageLabel('autoReview')}</label>
         <p className="text-muted-foreground">{canAutoReview ? pageLabel('autoReviewBy').replace('{name}', employeeName(autoReviewerId)) : pageLabel('selfReviewHint')}</p>
-        {autoReview && canAutoReview && <label className="grid gap-1.5 font-medium">{pageLabel('correctionRounds')}<select aria-label={pageLabel('correctionRounds')} className={field} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
+        {autoReview && canAutoReview && <details><summary className="cursor-pointer">{pageLabel('advancedSettings')}</summary><label className="grid gap-1.5 font-medium">{pageLabel('correctionRounds')}<select aria-label={pageLabel('correctionRounds')} className={field} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
           {CORRECTION_CHOICES.map(choice => <option key={choice ?? 'unlimited'} value={choice ?? ''}>{choice == null ? pageLabel('correctionUnlimited') : pageLabel('correctionRoundsN').replace('{n}', String(choice))}</option>)}
-        </select><span className="text-xs font-normal text-muted-foreground">{pageLabel('correctionRoundsHint')}</span></label>}
+        </select><span className="text-xs font-normal text-muted-foreground">{pageLabel('correctionRoundsHint')}</span></label></details>}
       </div> : <p className="text-sm text-muted-foreground">{pageLabel('autoReviewHint')}</p>}
       {needsAcknowledge && <label className="grid gap-1.5 text-sm font-medium">{pageLabel('acknowledgeUnknown')}<select className={field} value={acknowledge} onChange={e => setAcknowledge(e.target.value as '' | 'inspect' | 'rerun')}><option value="">{label('none')}</option><option value="inspect">{pageLabel('acknowledgeInspect')}</option><option value="rerun">{pageLabel('acknowledgeRerun')}</option></select></label>}
       <Button disabled={!canAssign} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-execution/assign', {workItemId: item.id, version: item.version, bindingId: chosenBinding, employeeId, text, autoReview: autoReview && canAutoReview, ...(autoReview && canAutoReview ? {correctionLimit: correctionLimit === '' ? null : Number(correctionLimit)} : {}), ...(needsAcknowledge && acknowledge ? {acknowledgeUnknown: acknowledge} : {})});}}>{label('assignEmployee')}</Button>
@@ -175,14 +175,17 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
       <h4>{label('reviewRecords')}</h4>
       {reviews.map(r => <article key={r.noteId} className="space-y-1 rounded-[8px] border bg-sidebar p-3 text-sm break-words">
         <p className="font-medium">{employeeName(r.reviewerEmployeeId)} · {new Date(r.createdAt).toLocaleString()}</p>
-        <p className="text-muted-foreground">{label(`execution_${r.reviewerExecution.state}`)} · {r.conclusion ? label(r.conclusion === 'passed' ? 'reviewPassed' : 'changesRequested') : label('awaitingVerdict')}</p>
-        <p className="whitespace-pre-wrap">{r.evidenceDescription}</p><p className="whitespace-pre-wrap">{r.conclusionBody}</p>
+        <p className="text-muted-foreground">{label(`execution_${r.reviewerExecution.state}`)} · {r.conclusion ? (r.conclusion === 'passed' ? label('reviewPassed') : r.conclusion === 'changes_requested' ? label('changesRequested') : r.conclusion) : label('awaitingVerdict')}</p>
+        <p>{label('reviewSource')}: {r.sourceWorkExecutionId} · v{r.workItemVersion}</p>
+        <p className="whitespace-pre-wrap">{label('evidenceDescription')}: {r.evidenceDescription}</p>
+        {r.evidenceNoteIds.map(id => <p key={id}>{label('records')} #{id} {notes.find(note => note.id === id)?.artifactRef ?? ''}</p>)}
+        {r.conclusionBody && <p className="whitespace-pre-wrap">{label('reviewReason')}: {r.conclusionBody}</p>}
         {r.reviewerExecution.executionId && <Button variant="outline" size="sm" onClick={() => onExecution(r.reviewerExecution.executionId!)}>{label('openReviewSession')}</Button>}
       </article>)}
-      <label className="grid gap-1.5 text-sm font-medium">{label('recordReview')}<select className={field} value={reviewId} onChange={e => {setReviewId(e.target.value); setConclusion('changes_requested');}}><option value="">{label('reviewRecords')}</option>{reviews.filter(r => !r.conclusion).map(r => <option key={r.noteId} value={r.noteId}>{employeeName(r.reviewerEmployeeId)} · {new Date(r.createdAt).toLocaleString()}</option>)}</select></label>
-      <label className="grid gap-1.5 text-sm font-medium">{label('reviewConclusion')}<select className={field} value={conclusion} onChange={e => setConclusion(e.target.value)}><option value="changes_requested">{label('changesRequested')}</option><option value="passed" disabled={selectedReview?.reviewerExecution.state !== 'succeeded'}>{label('reviewPassed')}</option></select></label>
+      <label className="grid gap-1.5 text-sm font-medium">{label('recordReview')}<select className={field} value={reviewId} onChange={e => {setReviewId(e.target.value); setConclusion(''); setVerdict('');}}><option value="">{label('reviewRecords')}</option>{reviews.filter(r => !r.conclusion).map(r => <option key={r.noteId} value={r.noteId}>{employeeName(r.reviewerEmployeeId)} · {new Date(r.createdAt).toLocaleString()}</option>)}</select></label>
+      <label className="grid gap-1.5 text-sm font-medium">{label('reviewConclusion')}<select className={field} value={conclusion} onChange={e => setConclusion(e.target.value)}><option value="">{label('none')}</option><option value="changes_requested">{label('changesRequested')}</option><option value="passed" disabled={selectedReview?.reviewerExecution.state !== 'succeeded'}>{label('reviewPassed')}</option></select></label>
       <label className="grid gap-1.5 text-sm font-medium">{label('reviewReason')}<textarea className={field} maxLength={20000} value={verdict} onChange={e => setVerdict(e.target.value)}/></label>
-      <Button disabled={!canRecord || !verdict.trim() || (conclusion === 'passed' && selectedReview?.reviewerExecution.state !== 'succeeded')} onClick={() => {if (window.confirm(label('verdictConfirm'))) void submit('/workspace/work-note/record-review', {reviewNoteId: reviewId, conclusion, body: verdict});}}>{label('recordReview')}</Button>
+      <Button disabled={!canRecord || !conclusion || !verdict.trim() || (conclusion === 'passed' && selectedReview?.reviewerExecution.state !== 'succeeded')} onClick={() => {if (window.confirm(label('verdictConfirm'))) void submit('/workspace/work-note/record-review', {reviewNoteId: reviewId, conclusion, body: verdict});}}>{label('recordReview')}</Button>
       </>}
     </fieldset>
   </section>;

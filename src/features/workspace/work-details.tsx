@@ -32,7 +32,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const [ownedEmployees, setOwnedEmployees] = useState<string[]>([]);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState(executionId);
-  const [mode, setMode] = useState<'details' | 'assign'>();
+  const [mode, setMode] = useState<'details' | 'assign' | 'manual'>();
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -189,6 +189,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
         <h1 className="break-words text-xl font-semibold tracking-tight">{item.title}</h1>
         {(developer || reviewer) && <p className="mt-1 break-words text-xs text-muted-foreground">{[developer, reviewer].flatMap(turn => turn ? [name(turn)] : []).join(' · ')}</p>}
       </div>
+      {snapshot && canEdit && !terminal && <Button variant="outline" size="sm" disabled={locked || busy || intent.hasPending} onClick={() => setMode('manual')}>{l('manualWorkflow')}</Button>}
       <Button data-testid="task-manage" variant="ghost" size="icon" aria-label={l('taskInfo')} onClick={() => setMode('details')}><MoreHorizontal className="h-5 w-5" /></Button>
     </header>
     {error && <div role="alert" className="my-4 flex flex-wrap items-center gap-2 text-sm text-destructive">{l('error')}<Button variant="outline" size="sm" onClick={() => void refresh().catch(() => {})}>{l('retry')}</Button></div>}
@@ -270,7 +271,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
     </footer>}
     <Dialog open={mode !== undefined} onOpenChange={open => {if (!open && !locked) setMode(undefined);}}>
       {mode && <DialogContent className="max-h-[85dvh] max-w-2xl overflow-y-auto">
-        <DialogHeader><DialogTitle>{mode === 'assign' ? label('assignEmployee') : l('taskInfo')}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{mode === 'assign' ? label('assignEmployee') : mode === 'manual' ? l('manualWorkflow') : l('taskInfo')}</DialogTitle></DialogHeader>
         <TaskManagement api={api} item={item} mode={mode} readOnly={!canEdit} refresh={async () => {await refresh();}}
           onLockChange={value => {setLocked(value); onLockChange(value);}}
           onExecution={id => {setExpanded(id); setMode(undefined); void refresh().catch(() => {});}} />
@@ -290,7 +291,7 @@ function TaskMarkdown({children}: {children: string}) {
 }
 
 function TaskManagement({api, item, mode, readOnly, refresh, onLockChange, onExecution}: {
-  api: WorkspaceApi; item: WorkItem; mode: 'details' | 'assign'; readOnly: boolean; refresh: () => Promise<void>;
+  api: WorkspaceApi; item: WorkItem; mode: 'details' | 'assign' | 'manual'; readOnly: boolean; refresh: () => Promise<void>;
   onLockChange: (locked: boolean) => void; onExecution: (id: string) => void;
 }) {
   const l = usePageLabels();
