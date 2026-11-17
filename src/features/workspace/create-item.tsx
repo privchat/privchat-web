@@ -31,6 +31,7 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
   const [employeeId, setEmployeeId] = useState(intent.assignment?.employeeId ?? '');
   const [bindingId, setBindingId] = useState('');
   const [correctionLimit, setCorrectionLimit] = useState(intent.input ? String(intent.assignment?.correctionLimit ?? '') : restoredDraft?.correctionLimit ?? '');
+  const [manualReview, setManualReview] = useState(restoredDraft?.manualReview === true);
   const [acknowledge, setAcknowledge] = useState<'' | 'inspect' | 'rerun'>('');
   const [grantError, setGrantError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,13 +51,14 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
   // My binding's reviewer on the developer's device reviews the delivery by itself; never the developer (§20.3).
   const reviewerId = [projectReviewer(selectedProject, row?.nodeId)].find(id => !!id && id !== employeeId);
   const reviewerName = employees.find(e => e.employeeId === reviewerId)?.name || l('unnamedEmployee');
+  const autoReview = intent.locked ? intent.assignment?.autoReview === true : !!reviewerId && !manualReview;
   const directory = projectDirectory(selectedProject, row?.nodeId, row?.workdirBindingId);
   const matching = (bindings ?? []).filter(b => b.revoked === 0 && b.nodeId === employee?.nodeId && b.capability === employee?.capability);
   const selectedBinding = matching.length === 1 ? matching[0]?.id : bindingId;
   const locked = busy || intent.locked;
   const noWorkstation = nodesKnown && !nodes.some(node => node.revokedAt == null);
   function openSetup(route: WorkspaceRoute) {
-    if (!storage.save({title, description, acceptance, projectId, correctionLimit})) {setDraftError(true); return;}
+    if (!storage.save({title, description, acceptance, projectId, correctionLimit, manualReview})) {setDraftError(true); return;}
     const target = workspaceHref(route);
     location.hash = target + (target.includes('?') ? '&' : '?') + new URLSearchParams({fromTask: workspaceId});
   }
@@ -111,7 +113,7 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
       if (intent.locked) await intent.retry(api);
       else await intent.run(api, {workspaceId, title, description, acceptance, projectId: projectId || null}, assign ? {
         employeeId, bindingId: selectedBinding!, text: [description || title, acceptance].filter(Boolean).join('\n\n'),
-        autoReview: !!reviewerId, ...(reviewerId ? {correctionLimit: correctionLimit === '' ? null : Number(correctionLimit)} : {}),
+        autoReview, ...(autoReview ? {correctionLimit: correctionLimit === '' ? null : Number(correctionLimit)} : {}),
         ...(employee?.previousResultUnknown && acknowledge ? {acknowledgeUnknown: acknowledge} : {}),
       } : undefined);
       if (isBlocked(intent.assignmentReceipt)) return;
@@ -172,13 +174,14 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
       </div>}
       {employee?.previousResultUnknown && <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('acknowledgeUnknown')}<select className={wsField} value={acknowledge} onChange={e => setAcknowledge(e.target.value as '' | 'inspect' | 'rerun')}><option value="">{l('none')}</option><option value="inspect">{l('acknowledgeInspect')}</option><option value="rerun">{l('acknowledgeRerun')}</option></select></label>}
       {matching.length > 1 && <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('node')}<select className={wsField} value={bindingId} onChange={e => setBindingId(e.target.value)}><option value="">{l('none')}</option>{matching.map(b => <option key={b.id} value={b.id}>{nodes.find(n => n.nodeId === b.nodeId)?.name || b.nodeId} · {executorDisplay(employeeExecutor(b.capability) ?? b.capability)}</option>)}</select></label>}
-      {reviewerId && <div data-testid="auto-review" className="my-2 space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
-        <p className="text-muted-foreground">{l('autoReviewBy').replace('{name}', reviewerName)}</p>
+      {(employee || intent.assignment) && <div data-testid="auto-review" className="my-2 space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
+        <p className="text-muted-foreground">{autoReview ? (intent.locked ? l('autoReview') : l('autoReviewBy').replace('{name}', reviewerName)) : l('manualReviewHint')}</p>
       </div>}
       <details className="mt-3 border-t py-3">
         <summary className="cursor-pointer text-sm font-medium">{l('advancedSettings')}</summary>
         <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('project')}<select className={wsField} disabled={!metadataReady || metadataError} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('none')}</option>{projectId && !selectedProject && <option disabled value={projectId}>{l('unavailable')}</option>}{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        {reviewerId && <label className="grid gap-1.5 font-medium">{l('correctionRounds')}<select aria-label={l('correctionRounds')} className={wsField} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
+        <label className="flex items-center gap-2 py-2 text-sm font-medium"><input type="checkbox" checked={autoReview} disabled={!reviewerId} onChange={e => setManualReview(!e.target.checked)}/>{l('autoReview')}</label>
+        {autoReview && <label className="grid gap-1.5 font-medium">{l('correctionRounds')}<select aria-label={l('correctionRounds')} className={wsField} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
           {CORRECTION_CHOICES.map(choice => <option key={choice ?? 'unlimited'} value={choice ?? ''}>{choice == null ? l('correctionUnlimited') : l('correctionRoundsN').replace('{n}', String(choice))}</option>)}
         </select><span className="text-xs font-normal text-muted-foreground">{l('correctionRoundsHint')}</span></label>}
       </details>

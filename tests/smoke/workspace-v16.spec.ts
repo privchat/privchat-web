@@ -1069,3 +1069,68 @@ test('closed stage shows business Done or Cancelled, while open work with a clos
   await expect(records.locator('[data-item-id="23"]')).toContainText('Latest stage: Stage unavailable');
   await expect(records).not.toContainText('Latest stage: Closed');
 });
+
+for (const policy of ['inherit', 'manual', 'unconfigured'] as const) {
+  test(`single-task review policy: ${policy}`, async ({page}) => {
+    let reviewer: string | null = policy === 'unconfigured' ? null : 'reviewer';
+    const requests = await mock(page, path => {
+      if (path === '/workspace/project/list') return [{...project, bindings: [{...myBinding, reviewerEmployeeId: reviewer}]}];
+      if (path === '/agent/nodes' && policy === 'manual') return [];
+      if (path === '/workspace/work-execution/assign') return 'abort';
+    });
+    async function open() {
+      await page.goto('/');
+      await page.evaluate(async () => {
+        const {default: i18n} = await import('/src/i18n/index.ts');
+        await i18n.changeLanguage('en');
+        const {mountWorkspacePage} = await import('/src/test-harness/workspace-console.tsx');
+        mountWorkspacePage(location.origin + '/__v16/app', '#/workspace/space/w/new?project=p');
+      });
+    }
+    page.on('dialog', dialog => dialog.accept());
+    await open();
+    const form = page.getByTestId('create-work-item');
+    const toggle = form.getByRole('checkbox', {name: 'Automatic review'});
+    const rounds = form.getByLabel('Automatic correction rounds');
+    const summary = form.getByText('Advanced settings', {exact: true});
+    await expect(form.getByLabel('Employee (optional)', {exact: true})).toHaveValue('emp');
+    await form.getByLabel('Title', {exact: true}).fill('Policy test');
+    await summary.click();
+    if (policy === 'unconfigured') {
+      await expect(toggle).toBeDisabled();
+      await expect(toggle).not.toBeChecked();
+    } else {
+      await expect(toggle).toBeChecked();
+      await rounds.selectOption('3');
+    }
+    if (policy === 'manual') {
+      await toggle.uncheck();
+      await expect(rounds).toHaveCount(0);
+      await form.getByRole('button', {name: 'Connect a workstation'}).click();
+      await page.getByRole('button', {name: 'Back to task draft'}).click();
+      await expect(form.getByLabel('Title', {exact: true})).toHaveValue('Policy test');
+      await summary.click();
+      await expect(toggle).not.toBeChecked();
+      await toggle.check();
+      await expect(rounds).toHaveValue('3');
+      await toggle.uncheck();
+    }
+    await form.getByRole('button', {name: 'Create and assign'}).click();
+    await expect(form.getByRole('button', {name: 'Retry', exact: true})).toBeVisible();
+    const assigns = () => requests.filter(r => r.path === '/workspace/work-execution/assign');
+    expect(assigns()).toHaveLength(1);
+    const first = assigns()[0]!.body;
+    expect(first.autoReview).toBe(policy === 'inherit');
+    if (policy === 'inherit') expect(first.correctionLimit).toBe(3);
+    else expect(first).not.toHaveProperty('correctionLimit');
+    reviewer = reviewer ? null : 'reviewer';
+    await open();
+    await summary.click();
+    await expect(toggle).toBeDisabled();
+    await expect(toggle).toBeChecked({checked: policy === 'inherit'});
+    await form.getByRole('button', {name: 'Retry', exact: true}).click();
+    await expect.poll(() => assigns().length).toBe(2);
+    expect(assigns()[1]!.body).toEqual(first);
+    expect(requests.filter(r => r.path === '/workspace/work-item/create')).toHaveLength(1);
+  });
+}

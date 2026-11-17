@@ -2,7 +2,7 @@ import { getActiveAccountKey } from '@/lib/active-account';
 import type { WorkspaceApi } from './api';
 import { CreateItemIntent, type ItemRecovery } from './create-item-intent';
 
-type SetupDraft = { title: string; description: string; acceptance: string; projectId: string; correctionLimit: string };
+type SetupDraft = { title: string; description: string; acceptance: string; projectId: string; correctionLimit: string; manualReview?: boolean };
 
 /** Unsubmitted form fields only; the delivery journal owns accepted requests. */
 export function taskSetupDraft(scope: string | undefined, spaceId: string) {
