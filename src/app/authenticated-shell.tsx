@@ -19,7 +19,7 @@ import { useIncomingNotifier } from '@/features/chat/use-incoming-notifier';
 import { captureException } from '@/lib/error-reporter';
 import { useLazyMount } from '@/lib/use-lazy-mount';
 import { cn } from '@/lib/utils';
-import { isWorkspaceHash } from '@/features/workspace/routes';
+import { isWorkspaceHash, navigateWorkspace } from '@/features/workspace/routes';
 import { AppRail, type AppSection } from '@/app/app-rail';
 import { AccountMenu } from '@/app/account-menu';
 
@@ -185,7 +185,8 @@ export function AuthenticatedShell({
 
   const onNavigate = (next: AppSection) => {
     if (next === section) return;
-    location.hash = next === 'chats' ? '' : `/${next}`;
+    if (next === 'workspace') navigateWorkspace({view: 'resume'});
+    else location.hash = next === 'chats' ? '' : `/${next}`;
   };
 
   return (

@@ -2,31 +2,35 @@ import { isBlocked } from './delivery-receipt';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import type { Binding, Node, Project, WorkspaceApi } from './api';
-import { workspaceItemIntent } from './create-item-storage';
+import { taskSetupDraft, workspaceItemIntent } from './create-item-storage';
 import { employeeReasonLabel, usePageLabels } from './page-labels';
 import { wsField } from './shell';
 import { useEmployeePages } from './use-employee-pages';
 import { employeeExecutor, executorDisplay } from './employees';
 import { CORRECTION_CHOICES, employeeCause, grantableWorkspaceBinding, myProjectBindings, otherMemberEmployee, projectDirectory, projectReviewer } from './employee-access';
-import { navigateWorkspace } from './routes';
+import { workspaceHref, type WorkspaceRoute } from './routes';
 
-export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: {api: WorkspaceApi; workspaceId: string; onBack: () => void; onCreated: () => void; onLockChange: (locked: boolean) => void}) {
+export function CreateItem({api, workspaceId, draftScope, onBack, onCreated, onLockChange}: {api: WorkspaceApi; workspaceId: string; draftScope?: string; onBack: () => void; onCreated: () => void; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
   const [intent] = useState(() => workspaceItemIntent(api, workspaceId));
-  const [title, setTitle] = useState(intent.input?.title ?? '');
-  const [description, setDescription] = useState(intent.input?.description ?? '');
-  const [acceptance, setAcceptance] = useState(intent.input?.acceptance ?? '');
+  const [storage] = useState(() => taskSetupDraft(draftScope, workspaceId));
+  const [restoredDraft] = useState(() => storage.load());
+  const [title, setTitle] = useState(intent.input?.title ?? restoredDraft?.title ?? '');
+  const [description, setDescription] = useState(intent.input?.description ?? restoredDraft?.description ?? '');
+  const [acceptance, setAcceptance] = useState(intent.input?.acceptance ?? restoredDraft?.acceptance ?? '');
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState(intent.input?.projectId ?? '');
+  const [projectId, setProjectId] = useState(intent.input ? intent.input.projectId ?? '' : restoredDraft?.projectId ?? '');
   const employeePages = useEmployeePages(api, workspaceId, projectId || undefined);
   const employees = employeePages.rows;
   const [bindings, setBindings] = useState<Binding[]>();
   const [nodes, setNodes] = useState<Node[]>([]);
+  const [nodesKnown, setNodesKnown] = useState(false);
+  const [draftError, setDraftError] = useState(false);
   const [metadataReady, setMetadataReady] = useState(false);
   const [metadataError, setMetadataError] = useState(false);
   const [employeeId, setEmployeeId] = useState(intent.assignment?.employeeId ?? '');
   const [bindingId, setBindingId] = useState('');
-  const [correctionLimit, setCorrectionLimit] = useState(intent.assignment?.correctionLimit == null ? '' : String(intent.assignment.correctionLimit));
+  const [correctionLimit, setCorrectionLimit] = useState(intent.input ? String(intent.assignment?.correctionLimit ?? '') : restoredDraft?.correctionLimit ?? '');
   const [acknowledge, setAcknowledge] = useState<'' | 'inspect' | 'rerun'>('');
   const [grantError, setGrantError] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -48,6 +52,12 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
   const matching = (bindings ?? []).filter(b => b.revoked === 0 && b.nodeId === employee?.nodeId && b.capability === employee?.capability);
   const selectedBinding = matching.length === 1 ? matching[0]?.id : bindingId;
   const locked = busy || intent.locked;
+  const noWorkstation = nodesKnown && !nodes.some(node => node.revokedAt == null);
+  function openSetup(route: WorkspaceRoute) {
+    if (!storage.save({title, description, acceptance, projectId, correctionLimit})) {setDraftError(true); return;}
+    const target = workspaceHref(route);
+    location.hash = target + (target.includes('?') ? '&' : '?') + new URLSearchParams({fromTask: workspaceId});
+  }
   const projectMismatch = !!projectId && !!employee && !employee.projectIds.includes(projectId);
   const note = (id: string) => {
     const candidate = employees.find(e => e.employeeId === id);
@@ -65,10 +75,11 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
       setProjects(open); setBindings(b); setMetadataReady(true);
       // One project: it is the one. Choose only when there are several.
       const single = open.length === 1 ? open[0] : undefined;
-      if (!projectId && !intent.input && single) setProjectId(single.id);
+      if (!projectId && !intent.input && !restoredDraft && single) setProjectId(single.id);
+      if (!intent.input && projectId && !open.some(project => project.id === projectId)) setProjectId('');
     } catch {if (live.current) {setMetadataError(true); setError(true);}}
     // Names are display-only; a failed device lookup must not change execution authorization.
-    try {const list = await api.nodes(); if (live.current) setNodes(list);} catch { /* Keep the localized fallback labels. */ }
+    try {const list = await api.nodes(); if (live.current) {setNodes(list); setNodesKnown(true);}} catch { /* Do not infer missing devices. */ }
   }
   useEffect(() => {live.current = true; void loadMetadata(); return () => {live.current = false;};}, [api, workspaceId]);
   useEffect(() => {
@@ -77,12 +88,12 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
   }, [api, workspaceId, projectId]);
   // One developer who can take it (the project's reviewers do not develop): pick it, until the owner chooses.
   useEffect(() => {
-    if (chosen.current || employeeId || intent.input || !ready) return;
+    if (chosen.current || employeeId || intent.input || !ready || employeePages.hasMore) return;
     const reviewers = new Set(myProjectBindings(selectedProject).map(b => b.reviewerEmployeeId).filter(Boolean));
-    const only = employees.filter(e => e.available && !reviewers.has(e.employeeId));
+    const only = employees.filter(e => e.available && !otherMemberEmployee(e) && !reviewers.has(e.employeeId));
     const single = only.length === 1 ? only[0] : undefined;
     if (single) setEmployeeId(single.employeeId);
-  }, [employees, employeeId, ready, selectedProject]);
+  }, [employees, employeeId, ready, selectedProject, employeePages.hasMore]);
   async function grant(nodeId: string, capability: string) {
     const device = nodes.find(n => n.nodeId === nodeId)?.name || nodeId;
     const name = executorDisplay(employeeExecutor(capability) ?? capability);
@@ -105,6 +116,7 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
       } : undefined);
       if (isBlocked(intent.assignmentReceipt)) return;
       completed = true;
+      storage.save();
       if (live.current) {onLockChange(false); onCreated();}
     } catch {if (live.current) setError(true);}
     finally {running.current = false; if (live.current) {setBusy(false); onLockChange(!completed && intent.locked);}}
@@ -112,9 +124,10 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
   return <section className="mx-auto w-full max-w-[460px] rounded-xl border bg-card p-[22px]" data-testid="create-work-item">
     <header className="flex items-start justify-between gap-2">
       <div><h2 className="text-[17px] font-semibold">{l('createItem')}</h2><p className="mt-1 text-sm text-muted-foreground">{l('newTaskHint')}</p></div>
-      <Button variant="ghost" size="sm" disabled={locked} onClick={onBack}>{l('back')}</Button>
+      <Button variant="ghost" size="sm" disabled={locked} onClick={() => {storage.save(); onBack();}}>{l('back')}</Button>
     </header>
     {error && <p role="alert" className="mt-3 text-sm text-destructive">{l(intent.item ? 'savedNotAssigned' : 'error')}</p>}
+    {draftError && <p role="alert" className="mt-3 text-sm text-destructive">{l('taskDraftUnavailable')}</p>}
     {isBlocked(intent.assignmentReceipt) && intent.assignmentReceipt && <div role="alert" data-testid="delivery-blocked" className="mt-3 space-y-1 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm"><p>{l('deliveryBlocked')}</p><p>{l('deliveryBlockedHint')}</p><p>{l('requestIdentity')}: {String(intent.assign.pendingRequest?.body.requestId ?? '')}</p>{intent.assignmentReceipt.executionId && <p>{l('acceptedExecution')}: {intent.assignmentReceipt.executionId}</p>}</div>}
     {employeePages.error && <p role="alert" className="mt-3 text-sm text-destructive">{l(employeePages.errorCode ?? 'error')}</p>}
     {grantError && <p role="alert" className="mt-3 text-sm text-destructive">{l('grantFailed')}</p>}
@@ -123,15 +136,22 @@ export function CreateItem({api, workspaceId, onBack, onCreated, onLockChange}: 
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('description')}<textarea className={wsField} maxLength={10000} value={description} onChange={e => setDescription(e.target.value)}/></label>
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('acceptance')}<textarea className={wsField} maxLength={10000} value={acceptance} onChange={e => setAcceptance(e.target.value)}/></label>
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('project')}<select className={wsField} disabled={!metadataReady || metadataError} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('none')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-      {unbound && metadataReady && !metadataError && <div role="alert" data-testid="bind-project-first" className="my-2 space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
+      {noWorkstation && <div className="my-2 space-y-2 rounded-lg border bg-sidebar p-3 text-sm">
+        <p>{l('taskConnectHint')}</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'devices'})}>{l('taskConnectDevice')}</Button>
+      </div>}
+      {!noWorkstation && unbound && metadataReady && !metadataError && <div role="alert" data-testid="bind-project-first" className="my-2 space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
         <p className="font-medium">{l('bindFirst')}</p><p className="text-muted-foreground">{l('bindFirstHint')}</p>
-        <Button type="button" variant="outline" size="sm" disabled={locked} onClick={() => navigateWorkspace({view: 'project', projectId})}>{l('bindMyDirs')}</Button>
+        <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'project', projectId})}>{l('bindMyDirs')}</Button>
       </div>}
       <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('employee')}<select aria-label={l('employee')} className={wsField} disabled={!ready} value={employeeId} onChange={e => {chosen.current = true; setEmployeeId(e.target.value); setBindingId(''); setAcknowledge('');}}><option value="">{l('none')}</option>{employees.filter(e => !otherMemberEmployee(e)).map(e => {
         const hint = note(e.employeeId);
         return <option key={e.employeeId} value={e.employeeId} disabled={!e.available}>{e.name || l('unnamedEmployee')}{hint && ` · ${hint}`}</option>;
       })}</select><span className="text-xs font-normal text-muted-foreground">{l('linkedEmployeeHint')}</span></label>
-      {ready && !employees.length && <p role="status" className="pb-2 text-sm text-muted-foreground">{l('noLinkedEmployees')}</p>}
+      {!noWorkstation && !unbound && ready && !employeePages.hasMore && !employees.some(row => !otherMemberEmployee(row)) && <div className="space-y-2 pb-2 text-sm text-muted-foreground">
+        <p role="status">{l('noLinkedEmployees')}</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'employees', spaceId: workspaceId})}>{l('employees')}</Button>
+      </div>}
       {employeePages.hasMore && <Button type="button" variant="outline" size="sm" disabled={employeePages.busy} onClick={() => void employeePages.more()}>{l('more')}</Button>}
       {employeePages.error && <Button type="button" variant="outline" size="sm" disabled={employeePages.busy} onClick={() => void (employeePages.ready ? employeePages.more() : employeePages.refresh())}>{l('retry')}</Button>}
       {metadataError && <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void loadMetadata()}>{l('retry')}</Button>}

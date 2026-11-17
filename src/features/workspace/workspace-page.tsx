@@ -10,6 +10,7 @@ import { SpaceSettings } from './space-settings';
 import { DevicePage } from './devices';
 import { TaskFeed } from './task-feed-view';
 import { CreateItem } from './create-item';
+import { taskSetupDraft } from './create-item-storage';
 import { SpaceEmployees } from './space-employees';
 import { EmployeeDetail } from './employee-detail';
 import { WorkDetails } from './work-details';
@@ -25,6 +26,13 @@ let lastWorkspaceAccount: string | null | undefined;
 
 export function WorkspacePage({api, client, accountKey, viewerId = client?.sessionSnapshot?.().user_id, renderSession, onLockChange}: {api: WorkspaceApi; client?: PrivchatClient; accountKey?: string | null; viewerId?: string; renderSession: (id: string, task?: {readOnly: boolean}) => ReactNode; onLockChange: (locked: boolean) => void}) {
   const [route, setRoute] = useState<WorkspaceRoute>(() => parseWorkspaceRoute(location.hash) ?? {view: 'home'});
+  const preferenceKey = accountKey || viewerId
+    ? 'privchat.workspace.last.' + JSON.stringify([api.base, accountKey, viewerId]) : undefined;
+  const [preferred, setPreferred] = useState<string>();
+  useEffect(() => {
+    try {setPreferred(preferenceKey ? localStorage.getItem(preferenceKey) ?? undefined : undefined);}
+    catch {setPreferred(undefined);}
+  }, [preferenceKey]);
   useEffect(() => {
     const change = () => setRoute(parseWorkspaceRoute(location.hash) ?? {view: 'home'});
     window.addEventListener('hashchange', change);
@@ -40,21 +48,53 @@ export function WorkspacePage({api, client, accountKey, viewerId = client?.sessi
   }, [accountKey]);
   let view: ReactNode;
   switch (route.view) {
+    case 'resume': view = <ResumeWorkspace api={api} preferenceKey={preferenceKey}/>; break;
     case 'projects': view = <ProjectList key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>; break;
     case 'create-project': view = <ProjectCreate key={workspaceHref(route)} api={api} workspaceId={route.workspaceId}/>; break;
     case 'project': view = <ProjectDetail key={route.projectId} api={api} projectId={route.projectId} renderSession={renderSession}/>; break;
     case 'devices': view = <DevicePage api={api}/>; break;
     case 'create-space': view = <CreateSpace api={api}/>; break;
     case 'space':
-    case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId}/>; break;
-    case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
+    case 'records': view = <SpaceView key={route.spaceId} api={api} client={client} spaceId={route.spaceId} preferenceKey={preferenceKey} onRemember={setPreferred}/>; break;
+    case 'create-item': view = <CreateItem key={route.spaceId} api={api} workspaceId={route.spaceId} draftScope={preferenceKey} onBack={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onCreated={() => navigateWorkspace({view: 'space', spaceId: route.spaceId})} onLockChange={onLockChange}/>; break;
     case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} client={client} viewerId={viewerId} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employee': view = <EmployeeDetail key={`${route.spaceId}:${route.employeeId}:${route.panel ?? ''}`} api={api} workspaceId={route.spaceId} employeeId={route.employeeId} panel={route.panel} onLockChange={onLockChange}/>; break;
     case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId}/>; break;
     default: view = <SpaceHome api={api}/>;
   }
-  return <WorkspaceShell api={api} route={route}>{view}</WorkspaceShell>;
+  const setupFrom = new URLSearchParams(location.hash.split('?')[1]).get('fromTask');
+  const returnToDraft = setupFrom && ['devices', 'project', 'employees'].includes(route.view)
+    && taskSetupDraft(preferenceKey, setupFrom).load();
+  return <WorkspaceShell api={api} route={route} preferred={preferred}>
+    {setupFrom && returnToDraft && <TaskDraftBack spaceId={setupFrom}/>}
+    {view}
+  </WorkspaceShell>;
+}
+
+function TaskDraftBack({spaceId}: {spaceId: string}) {
+  const l = usePageLabels();
+  return <Button className="mb-4" size="sm" variant="outline" onClick={() => navigateWorkspace({view: 'create-item', spaceId})}>{l('backToTaskDraft')}</Button>;
+}
+
+function ResumeWorkspace({api, preferenceKey}: {api: WorkspaceApi; preferenceKey?: string}) {
+  const l = usePageLabels();
+  const [fallback, setFallback] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const hash = location.hash;
+    void api.list().then(rows => {
+      if (!active || location.hash !== hash) return;
+      let last: string | null = null;
+      try {if (preferenceKey) last = localStorage.getItem(preferenceKey);} catch { /* optional preference */ }
+      const spaces = rows.filter(row => row.archived === 0);
+      const current = spaces.find(row => row.id === last) ?? spaces[0];
+      if (current) location.replace(workspaceHref({view: 'space', spaceId: current.id}));
+      else setFallback(true);
+    }).catch(() => {if (active) setFallback(true);});
+    return () => {active = false;};
+  }, [api, preferenceKey]);
+  return fallback ? <SpaceHome api={api}/> : <p role="status">{l('loading')}</p>;
 }
 
 function SpaceHome({api}: {api: WorkspaceApi}) {
@@ -111,7 +151,7 @@ function CreateSpace({api}: {api: WorkspaceApi}) {
   </form>;
 }
 
-function SpaceView({api, client, spaceId}: {api: WorkspaceApi; client?: PrivchatClient; spaceId: string}) {
+function SpaceView({api, client, spaceId, preferenceKey, onRemember}: {api: WorkspaceApi; client?: PrivchatClient; spaceId: string; preferenceKey?: string; onRemember: (id: string) => void}) {
   const l = usePageLabels();
   const [space, setSpace] = useState<Workspace>();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -129,6 +169,10 @@ function SpaceView({api, client, spaceId}: {api: WorkspaceApi; client?: Privchat
       const [current, rows] = await Promise.all([api.space(spaceId), api.projects(spaceId)]);
       if (!live.current) return;
       setSpace(current); setProjects(rows); setError(false); setDenied(false);
+      if (current.id === spaceId && current.archived === 0) {
+        onRemember(spaceId);
+        try {if (preferenceKey) localStorage.setItem(preferenceKey, spaceId);} catch { /* optional preference */ }
+      }
     } catch (e) {
       if (!live.current) return;
       if (roomFailure(e) === 'denied') {setDenied(true); setSpace(undefined); setProjects([]);}
@@ -145,7 +189,9 @@ function SpaceView({api, client, spaceId}: {api: WorkspaceApi; client?: Privchat
     {!space && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
     {space && <>
       {readOnly && <p className="mb-3 text-sm text-muted-foreground">{l('readOnly')}</p>}
-      <WorkspaceInbox key={`inbox:${spaceId}`} api={api} workspaceId={spaceId} hideWhenEmpty/>
+      <WorkspaceInbox key={`inbox:${spaceId}`} api={api} workspaceId={spaceId} hideWhenEmpty onOpenTask={entry => {
+        if (entry.workspaceId === spaceId) navigateWorkspace({view: 'item', spaceId, itemId: entry.workItemId, executionId: entry.executionId ?? undefined});
+      }}/>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <WsChipGroup label={l('colStatus')}>
           {([['all', 'statusAll'], ['pending', 'statusPending'], ['running', 'statusRunning'], ['review', 'statusReview'], ['done', 'statusDone']] as const).map(([key, label]) => <WsChip key={key} active={statusFilter === key} onClick={() => setStatusFilter(key)}>{l(label)}</WsChip>)}

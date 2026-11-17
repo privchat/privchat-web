@@ -3,15 +3,18 @@ import { gotoAppFresh } from './_helpers';
 
 const summary = {id: 'w', name: 'Team', description: '', archived: 0, myRole: 'owner', employeeCount: 0, availableEmployeeCount: 0, employeeAvailabilityKnown: true, openItemCount: 0, lastActivityAt: null};
 
-async function routePlatform(page: Page) {
+async function routePlatform(page: Page, spaces = [summary]) {
   await page.route('**/__fake-platform/app/**', async route => {
     const path = new URL(route.request().url()).pathname;
     let data: unknown = [];
     if (path.endsWith('/config/bootstrap')) data = {gateways: ['wss://gw.example/gate'], features: {}, legal: {}};
-    if (path.endsWith('/workspace/page')) data = {list: [summary], total: 1};
-    if (path.endsWith('/workspace/list')) data = [{id: 'w', name: 'Team', archived: 0, myRole: 'owner'}];
+    if (path.endsWith('/workspace/page')) data = {list: spaces, total: spaces.length};
+    if (path.endsWith('/workspace/list')) data = spaces;
     if (path.endsWith('/workspace/inbox/list')) data = {entries: []};
-    if (path.includes('/workspace/get/')) data = summary;
+    if (path.endsWith('/room/join')) data = {channelId: '400', channelType: 3, ticket: 'fixture', expiresAt: Date.now() + 60000, eventProtocolVersion: 1};
+    if (path.includes('/workspace/get/')) data = spaces.find(space => path.endsWith(`/${space.id}`)) ?? summary;
+    if (path.endsWith('/workspace/employee/page')) data = {items: [], hasMore: false, nextCursor: null};
+    if (path.endsWith('/agent/nodes')) data = [];
     if (path.endsWith('/activity/page')) data = {items: [], olderCursor: null, hasOlder: false};
     if (path.endsWith('/workspace/project/list')) data = [];
     await route.fulfill({json: {code: 0, data}});
@@ -32,6 +35,10 @@ test.describe('workspace app navigation (platform)', () => {
           },
         },
         active: '0123456789abcdef',
+      }));
+      window.localStorage.setItem('privchat.web.session.0123456789abcdef', JSON.stringify({
+        url: 'ws://gw-alice/', user_id: '900001', device_id: 'dev-alice', access_token: 'test', saved_at: Date.now(),
+        account_mode: 'platform', platform_base_url: w.__privchatForcedPlatformBaseUrl,
       }));
     });
     await routePlatform(page);
@@ -61,7 +68,8 @@ test.describe('workspace app navigation (platform)', () => {
 
     await page.getByTestId('nav-workspace').click();
     const main = page.getByTestId('workspace-main');
-    await expect(main.getByTestId('workspace-home')).toBeVisible();
+    await expect(main.getByTestId('workspace-detail')).toBeVisible();
+    await expect(page).toHaveURL(/#\/workspace\/space\/w$/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByTestId('pane-chats')).toBeHidden();
     await expect(page.getByTestId('nav-workspace')).toHaveAttribute('aria-current', 'page');
@@ -74,6 +82,31 @@ test.describe('workspace app navigation (platform)', () => {
     await expect(composer).toHaveValue('Draft before leaving');
     await page.goForward();
     await expect(main).toBeVisible();
+  });
+
+  test('the rail resumes the last authorized workspace, not the first row', async ({page}) => {
+    await routePlatform(page, [summary, {...summary, id: 'w2', name: 'Other team'}]);
+    await page.getByTestId('nav-workspace').click();
+    await expect(page).toHaveURL(/\/space\/w$/);
+    await page.locator('select').filter({has: page.locator('option[value="w2"]')}).selectOption('w2');
+    await expect(page).toHaveURL(/\/space\/w2$/);
+    await expect(page.getByTestId('workspace-detail').getByRole('button', {name: /New task|新建任务/})).toBeEnabled();
+    await page.getByTestId('nav-chats').click();
+    await page.getByTestId('nav-workspace').click();
+    await expect(page).toHaveURL(/\/space\/w2$/);
+  });
+
+  test('setting up a workstation preserves the unsubmitted draft', async ({page}) => {
+    await page.getByTestId('nav-workspace').click();
+    await page.getByTestId('workspace-detail').getByRole('button', {name: /New task|新建任务/}).click();
+    const form = page.getByTestId('create-work-item');
+    await form.getByRole('textbox').first().fill('Keep this task');
+    await form.getByRole('textbox').nth(1).fill('Keep the description too');
+    await form.getByRole('button', {name: /Connect a workstation|连接工作站/}).click();
+    await expect(page).toHaveURL(/\/devices\?fromTask=w$/);
+    await page.getByRole('button', {name: /Back to task draft|返回任务草稿/}).click();
+    await expect(form.getByRole('textbox').first()).toHaveValue('Keep this task');
+    await expect(form.getByRole('textbox').nth(1)).toHaveValue('Keep the description too');
   });
 
   test('a scoped deep link survives refresh in a narrow viewport', async ({ page }) => {

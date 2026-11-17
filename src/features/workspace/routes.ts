@@ -2,6 +2,7 @@
  * every view is directly addressable so refresh, deep links and back/forward work. */
 export type WorkspaceRoute =
   | {view: 'home'}
+  | {view: 'resume'}
   | {view: 'projects'; workspaceId?: string}
   | {view: 'create-project'; workspaceId?: string}
   | {view: 'project'; projectId: string}
@@ -30,6 +31,7 @@ export function parseWorkspaceRoute(hash: string): WorkspaceRoute | null {
   try {segments = path.split('/').filter(Boolean).slice(1).map(decodeURIComponent);} catch {return {view: 'home'};}
   const workspaceId = params.get('workspace') || undefined;
   if (segments.length === 0) return {view: 'home'};
+  if (segments.length === 1 && segments[0] === 'tasks') return {view: 'resume'};
   if (segments[0] === 'projects') {
     if (segments.length === 1) return {view: 'projects', ...(workspaceId ? {workspaceId} : {})};
     if (segments.length === 2 && segments[1] === 'new') return {view: 'create-project', ...(workspaceId ? {workspaceId} : {})};
@@ -62,6 +64,7 @@ export function workspaceHref(route: WorkspaceRoute): string {
   let path = ROOT;
   switch (route.view) {
     case 'home': break;
+    case 'resume': path += '/tasks'; break;
     case 'projects': path += '/projects'; if (route.workspaceId) query.set('workspace', route.workspaceId); break;
     case 'create-project': path += '/projects/new'; if (route.workspaceId) query.set('workspace', route.workspaceId); break;
     case 'project': path += `/projects/${encodeURIComponent(route.projectId)}`; break;

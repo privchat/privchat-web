@@ -59,13 +59,15 @@ export function TestApp() {
   const handle = useMemo(() => {
     installTestControls();
     const adapter = createTestAdapter();
-    // AuthenticatedShell reads `handle.client` only for the workspace panel
-    // (useWorkspaceApi → client.sessionSnapshot). Mirror that one method
-    // so the workspace page can mount in mock mode; all chat data still
-    // flows through the real adapter below.
+    // Mock the workspace Room transport separately from the chat adapter.
     const fakeHandle: PrivchatHandle = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      client: { sessionSnapshot: () => ({ user_id: '900001' }) } as any,
+      client: {
+        sessionSnapshot: () => ({ user_id: '900001' }),
+        observeEvents: () => () => {},
+        subscribeChannel: async () => {},
+        unsubscribeChannel: async () => {},
+      } as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       adapter: adapter as any,
     };

@@ -2,6 +2,30 @@ import { getActiveAccountKey } from '@/lib/active-account';
 import type { WorkspaceApi } from './api';
 import { CreateItemIntent, type ItemRecovery } from './create-item-intent';
 
+type SetupDraft = { title: string; description: string; acceptance: string; projectId: string; correctionLimit: string };
+
+/** Unsubmitted form fields only; the delivery journal owns accepted requests. */
+export function taskSetupDraft(scope: string | undefined, spaceId: string) {
+  const key = scope && 'privchat.workspace.setup.' + JSON.stringify([scope, spaceId]);
+  return {
+    load(): SetupDraft | undefined {
+      try {
+        if (!key) return;
+        const draft = JSON.parse(sessionStorage.getItem(key) ?? 'null') as SetupDraft | null;
+        if (draft && [draft.title, draft.description, draft.acceptance, draft.projectId, draft.correctionLimit].every(value => typeof value === 'string')) return draft;
+      } catch { /* storage is optional until submission */ }
+    },
+    save(draft?: SetupDraft) {
+      if (!key) return false;
+      try {
+        if (draft) sessionStorage.setItem(key, JSON.stringify(draft));
+        else sessionStorage.removeItem(key);
+        return true;
+      } catch {return false;}
+    },
+  };
+}
+
 export function workspaceItemIntent(api: WorkspaceApi, workspaceId: string, storage?: Storage) {
   const account = getActiveAccountKey();
   const key = `privchat.workspace.create.${account}.${encodeURIComponent(api.base)}.${encodeURIComponent(workspaceId)}`;

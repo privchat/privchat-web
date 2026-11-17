@@ -42,7 +42,7 @@ function useLabels() {
 }
 
 /** One list of everything waiting for a person; answers go through each record's own API. */
-export function WorkspaceInbox({api, workspaceId, onCount, hideWhenEmpty}: {api: WorkspaceApi; workspaceId: string; onCount?: (count: number) => void; hideWhenEmpty?: boolean}) {
+export function WorkspaceInbox({api, workspaceId, onCount, hideWhenEmpty, onOpenTask}: {api: WorkspaceApi; workspaceId: string; onCount?: (count: number) => void; hideWhenEmpty?: boolean; onOpenTask?: (entry: WorkspaceInboxEntry) => void}) {
   const l = useLabels();
   const [entries, setEntries] = useState<WorkspaceInboxEntry[]>([]);
   const [busy, setBusy] = useState(false);
@@ -79,7 +79,9 @@ export function WorkspaceInbox({api, workspaceId, onCount, hideWhenEmpty}: {api:
     {error && <p role="alert">{l('error')}</p>}
     {!entries.length && !busy && <p role="status">{l('empty')}</p>}
     {entries.map(entry => <article key={entry.key} data-testid="inbox-entry" data-kind={entry.kind} className="space-y-2 rounded border p-2">
-      <p className="text-sm"><span className="font-medium">{l(entry.kind as keyof Labels) ?? entry.kind}</span> · {entry.workItemTitle}</p>
+      <p className="text-sm"><span className="font-medium">{l(entry.kind as keyof Labels) ?? entry.kind}</span> · {onOpenTask && entry.workspaceId === workspaceId
+        ? <button type="button" className="text-left font-medium underline underline-offset-2" onClick={() => onOpenTask(entry)}>{entry.workItemTitle}</button>
+        : entry.workItemTitle}</p>
       {entry.kind === 'approval'
         ? <pre className="whitespace-pre-wrap break-all text-xs">{permissionDetails(entry.summary) ?? entry.summary}</pre>
         : <p className="whitespace-pre-wrap break-words">{entry.kind === 'failure' ? l(entry.state === 'unknown' ? 'unknown' : 'failed') : entry.summary}</p>}

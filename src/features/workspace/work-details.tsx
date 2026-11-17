@@ -13,6 +13,7 @@ import {WorkflowPanel} from './workflow';
 import type {PendingConsoleRequest} from './console-intent';
 import {WorkspaceRoomObserver, roomFailure} from './room-observer';
 import {taskIntent, taskResult, taskWorking, type TaskDecision, type TaskEntry} from './task-conversation';
+import {isQueued} from './delivery-receipt';
 
 type Props = {
   api: WorkspaceApi; initial: WorkItem; client?: PrivchatClient; viewerId?: string; executionId?: string;
@@ -172,8 +173,11 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
     finally {inFlight.current = false; setBusy(false);}
   }
 
+  const latestTurn = entries.filter(entry => entry.kind === 'turn').at(-1);
+  const queued = isQueued(snapshot?.runs.find(run => run.id === latestTurn?.workExecutionId));
   const status = terminal ? label(`status_${item.status}`) : paused ? l(working ? 'taskPausing' : 'taskPaused')
     : working ? `${name(working)} · ${label(`execution_${working.state}`)}`
+    : queued ? l('taskDirectoryQueue')
     : question ? l('taskDecision') : passed ? l('taskReviewPassed') : developer?.state === 'unknown' ? label('unknown') : undefined;
 
   if (denied) return <section className="space-y-3"><Button variant="ghost" onClick={onBack}>{l('back')}</Button><p role="alert">{l('accessDenied')}</p></section>;
@@ -235,7 +239,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
           return id && <Button variant="ghost" size="sm" onClick={() => {
             setExpanded(id);
             document.getElementById(`task-turn-${working.id}`)?.scrollIntoView({block: 'nearest'});
-          }}>{l('execProcess')}</Button>;
+          }}>{l('taskOpenApproval')}</Button>;
         })()}
         {canEdit && !terminal && passed && !working && <Button size="sm" disabled={busy || intent.hasPending} onClick={() => void accept()}>{l('taskConfirmDone')}</Button>}
         {canTalk && paused && !working && !passed && <Button variant="ghost" size="sm" onClick={() => input.current?.focus()}>{l('taskResume')}</Button>}
