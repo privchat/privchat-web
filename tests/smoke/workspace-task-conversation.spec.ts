@@ -5,7 +5,7 @@ const developer = {kind: 'turn', id: 't7', at: 2, role: 'developer', employeeId:
 const request = {kind: 'requirement', id: 'a7', at: 1, text: 'Recover after reconnect'};
 const review = {kind: 'cycle', id: 'c1', at: 3, state: 'recommendation_passed'};
 
-async function fixture(page: Page, {entries = [] as object[], owner = 'test-owner', loseSend = false, verifyUnknown = false} = {}) {
+async function fixture(page: Page, {entries = [] as object[], owner = 'test-owner', loseSend = false, verifyUnknown = false, runs = undefined as object[] | undefined, reviewError = false, reviews = [] as object[]} = {}) {
   const writes: {path: string; body: Record<string, unknown>}[] = [];
   let timeline = entries;
   let state = 'open';
@@ -28,6 +28,11 @@ async function fixture(page: Page, {entries = [] as object[], owner = 'test-owne
     }
     if (path.endsWith('/work-instruction/timeline')) data = timeline;
     if (path.endsWith('/work-execution/list') && timeline.some(e => 'workExecutionId' in e)) data = [{id: '7', executionId: '77', state: (timeline.find(e => 'workExecutionId' in e) as typeof developer).state}];
+    if (path.endsWith('/work-execution/list') && runs) data = runs;
+    if (path.endsWith('/work-note/review-list')) {
+      if (reviewError) return route.abort();
+      data = reviews;
+    }
     if (path.endsWith('/workspace/get/w')) data = {id: 'w', name: 'Team', archived: 0, myRole: 'owner'};
     if (path.endsWith('/work-item/get/2')) data = {id: '2', workspaceId: 'w', title: 'Reconnect task', description: '', createdBy: owner, version: 2, status: state};
     if (path.endsWith('/employee/list')) data = [{employeeId: '12', name: 'Ada'}];
@@ -94,7 +99,7 @@ test('finished result renders public Markdown and review still requires owner co
   await expect(view.locator('strong')).toHaveText('Reconnect verified');
   await expect(view).not.toContainText('NOT PUBLIC');
   await expect(view.locator('img')).toHaveCount(0);
-  await expect(page.getByText('Review passed — confirm completion', {exact: true})).toBeVisible();
+  await expect(view.getByTestId('delivery-summary')).toContainText('unverified');
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', {name: 'Confirm completion'}).click();
   await expect(page.getByRole('status').filter({hasText: 'Done'})).toBeVisible();
@@ -120,4 +125,52 @@ test('unknown result requires an explicit choice and preserves the task instruct
   await expect(page.getByText('Check this before continuing', {exact: true})).toBeVisible();
   expect(writes).toHaveLength(2);
   expect(writes[1]).toEqual({...writes[0], body: {...writes[0].body, acknowledgeUnknown: 'inspect'}});
+});
+
+const delivered = {...developer, state: 'succeeded'};
+const reviewed = {...delivered, id: 't8', role: 'reviewer', employeeId: '13', workExecutionId: '8', at: 3};
+const boundCycle = {...review, at: 4, workExecutionId: '7', reviewWorkExecutionId: '8'};
+const sourceRun = {id: '7', executionId: '77', state: 'succeeded', workItemVersion: 2};
+const reviewRun = {...sourceRun, id: '8', executionId: '88'};
+const frozen = {noteId: '19', workItemId: '2', workItemVersion: 2, sourceWorkExecutionId: '7', sourceExecutionId: '77',
+  reviewerExecution: reviewRun, evidenceDescription: 'Artifact digest 4fa9', evidenceNoteIds: ['18'],
+  conclusionSource: 'human_recorded', conclusionNoteId: '20', conclusion: 'changes_requested', conclusionBody: 'Offline case still fails'};
+
+test('conversation shows bound delivery evidence and separates advice from a recorded verdict for other members', async ({page}) => {
+  const {writes} = await fixture(page, {entries: [delivered, reviewed, boundCycle], runs: [sourceRun, reviewRun],
+    reviews: [frozen, {...frozen, reviewerExecution: {...reviewRun, id: 'other'}, evidenceDescription: 'Wrong round'}], owner: 'other'});
+  const summary = page.getByTestId('delivery-summary');
+  for (const value of ['Reviewer recommends passing (not acceptance)', '7 · v2', 'Artifact digest 4fa9', '#18', 'Offline case still fails', 'unverified']) {
+    await expect(summary).toContainText(value);
+  }
+  await expect(summary).not.toContainText('Wrong round');
+  await expect(page.getByRole('button', {name: 'Confirm completion'})).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+for (const [name, cycle, record, later] of [
+  ['legacy cycle', review, frozen, []],
+  ['wrong review link', {...boundCycle, reviewWorkExecutionId: '9'}, frozen, []],
+  ['wrong source link', {...boundCycle, workExecutionId: '9'}, frozen, []],
+  ['wrong frozen execution', boundCycle, {...frozen, sourceExecutionId: 'old'}, []],
+  ['detached review', boundCycle, {...frozen, reviewerExecution: {...reviewRun, detached: true}}, []],
+  ['wrong version', boundCycle, {...frozen, workItemVersion: 1}, []],
+  ['new development round', boundCycle, frozen, [{...delivered, id: 't9', workExecutionId: '9', at: 5}]],
+] as const) {
+  test(`conversation does not attribute a verdict to ${name}`, async ({page}) => {
+    const {writes} = await fixture(page, {entries: [delivered, reviewed, cycle, ...later], reviews: [record], runs: [sourceRun, reviewRun]});
+    const summary = page.getByTestId('delivery-summary');
+    await expect(summary).toContainText('Current delivery and review evidence: unverified');
+    await expect(summary).not.toContainText('Artifact digest');
+    await expect(summary).not.toContainText('Offline case');
+    await expect(page.getByRole('status').filter({hasText: 'Review passed'})).toHaveCount(0);
+    expect(writes).toEqual([]);
+  });
+}
+
+test('unavailable evidence does not disable existing owner confirmation or write to the task', async ({page}) => {
+  const {writes} = await fixture(page, {entries: [delivered, reviewed, boundCycle], runs: [sourceRun, reviewRun], reviewError: true});
+  await expect(page.getByTestId('delivery-summary')).toContainText('Current delivery and review evidence: unverified');
+  await expect(page.getByRole('button', {name: 'Confirm completion'})).toBeEnabled();
+  expect(writes).toEqual([]);
 });

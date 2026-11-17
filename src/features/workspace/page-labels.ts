@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { UnavailableCause } from './employee-access';
 const en = {
+  deliverySummary: 'Delivery review', deliveryRecommendation: 'Reviewer recommends passing (not acceptance).', unverifiedDelivery: 'Current delivery and review evidence: unverified.', unverifiedRemainder: 'Checks not covered by this evidence: unverified.',
   manualReviewHint: 'Manual for this task: no automatic review.', advancedSettings: 'Advanced settings', manualWorkflow: 'Manual workflow',
   activeEmpty: 'No ongoing work',
   acceptance: 'Acceptance criteria', acceptedExecution: 'Accepted execution identity (not proof of delivery)',
@@ -102,6 +103,7 @@ const en = {
 type Labels = typeof en;
 export type WorkspaceLabelKey = keyof Labels;
 const zh: Labels = {
+  deliverySummary: '交付结论', deliveryRecommendation: '评审建议通过（不等于验收）。', unverifiedDelivery: '本轮交付与评审依据：未核验。', unverifiedRemainder: '证据未覆盖的检查项：未核验。',
   manualReviewHint: '本次手动推进，不自动发起评审。', advancedSettings: '进阶配置', manualWorkflow: '手动推进',
   activeEmpty: '暂无进行中的工作',
   acceptance: '验收条件', acceptedExecution: '已受理执行标识（不代表已投递）',
@@ -201,6 +203,7 @@ const zh: Labels = {
   pendingRetry: '上一次请求结果未确认，请重试同一请求，不会新建。',
 };
 const zhTW: Labels = {
+  deliverySummary: '交付結論', deliveryRecommendation: '評審建議通過（不等於驗收）。', unverifiedDelivery: '本輪交付與評審依據：未核驗。', unverifiedRemainder: '證據未涵蓋的檢查項：未核驗。',
   manualReviewHint: '本次手動推進，不自動發起評審。', advancedSettings: '進階設定', manualWorkflow: '手動推進',
   activeEmpty: '暫無進行中的工作',
   acceptance: '驗收條件', acceptedExecution: '已受理執行識別碼（不代表已投遞）',
@@ -300,6 +303,7 @@ const zhTW: Labels = {
   pendingRetry: '上一次請求結果未確認，請重試同一請求，不會新建。',
 };
 const vi: Labels = {
+  deliverySummary: 'Kết luận bàn giao', deliveryRecommendation: 'Đề xuất đánh giá: đạt (chưa nghiệm thu).', unverifiedDelivery: 'Bàn giao và bằng chứng vòng này: chưa xác minh.', unverifiedRemainder: 'Các kiểm tra ngoài bằng chứng này: chưa xác minh.',
   manualReviewHint: 'Thao tác thủ công cho nhiệm vụ này, không tự động yêu cầu đánh giá.', advancedSettings: 'Cài đặt nâng cao', manualWorkflow: 'Thao tác thủ công',
   activeEmpty: 'Không có công việc đang tiến hành',
   acceptance: 'Tiêu chí nghiệm thu', acceptedExecution: 'Định danh thực thi đã tiếp nhận (không chứng minh đã chuyển lệnh)',

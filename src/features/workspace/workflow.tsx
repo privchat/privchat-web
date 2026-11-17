@@ -1,3 +1,4 @@
+import { FrozenReviewEvidence } from './delivery-summary';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -176,9 +177,7 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
       {reviews.map(r => <article key={r.noteId} className="space-y-1 rounded-[8px] border bg-sidebar p-3 text-sm break-words">
         <p className="font-medium">{employeeName(r.reviewerEmployeeId)} · {new Date(r.createdAt).toLocaleString()}</p>
         <p className="text-muted-foreground">{label(`execution_${r.reviewerExecution.state}`)} · {r.conclusion ? (r.conclusion === 'passed' ? label('reviewPassed') : r.conclusion === 'changes_requested' ? label('changesRequested') : r.conclusion) : label('awaitingVerdict')}</p>
-        <p>{label('reviewSource')}: {r.sourceWorkExecutionId} · v{r.workItemVersion}</p>
-        <p className="whitespace-pre-wrap">{label('evidenceDescription')}: {r.evidenceDescription}</p>
-        {r.evidenceNoteIds.map(id => <p key={id}>{label('records')} #{id} {notes.find(note => note.id === id)?.artifactRef ?? ''}</p>)}
+        <FrozenReviewEvidence review={r} notes={notes}/>
         {r.conclusionBody && <p className="whitespace-pre-wrap">{label('reviewReason')}: {r.conclusionBody}</p>}
         {r.reviewerExecution.executionId && <Button variant="outline" size="sm" onClick={() => onExecution(r.reviewerExecution.executionId!)}>{label('openReviewSession')}</Button>}
       </article>)}

@@ -10,6 +10,7 @@ export interface TaskEntry {
   role?: string | null;
   employeeId?: string | null;
   workExecutionId?: string | null;
+  reviewWorkExecutionId?: string | null;
   state?: string | null;
   text?: string | null;
   delivery?: string | null;

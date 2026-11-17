@@ -1,3 +1,4 @@
+import {currentReview, DeliverySummary} from './delivery-summary';
 import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import {useTranslation} from 'react-i18next';
 import Markdown from 'react-markdown';
@@ -6,7 +7,7 @@ import type {PrivchatClient} from '@privchat/sdk';
 import {Button} from '@/components/ui/button';
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@/components/ui/dialog';
 import {PlatformApiError} from '@/lib/platform-errors';
-import type {Binding, Node, WorkExecution, WorkItem, WorkNote, WorkspaceApi} from './api';
+import type {Binding, Node, WorkExecution, WorkItem, WorkNote, WorkReview, WorkspaceApi} from './api';
 import {usePageLabels} from './page-labels';
 import {WorkItemPanel} from './work-item';
 import {WorkflowPanel} from './workflow';
@@ -28,6 +29,17 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const label = (key: string) => t(`agentWorkspace.${key}`);
   const [item, setItem] = useState(initial);
   const [snapshot, setSnapshot] = useState<{entries: TaskEntry[]; runs: WorkExecution[]; questions: TaskDecision[]}>();
+  const [reviewRead, setReviewRead] = useState<{snapshot: typeof snapshot; rows: WorkReview[]}>();
+  const cycle = snapshot?.entries.filter(e => e.kind === 'cycle').at(-1);
+  const readEvidence = cycle?.state === 'recommendation_passed' && !!cycle.workExecutionId && !!cycle.reviewWorkExecutionId;
+  useEffect(() => {
+    if (!snapshot || !readEvidence) return;
+    let active = true;
+    void api.get<WorkReview[]>('/workspace/work-note/review-list?workItemId=' + encodeURIComponent(initial.id)).then(rows => {
+      if (active) setReviewRead({snapshot, rows: Array.isArray(rows) ? rows : []});
+    }).catch(() => {if (active) setReviewRead({snapshot, rows: []});});
+    return () => {active = false;};
+  }, [api, initial.id, snapshot, readEvidence]);
   const [people, setPeople] = useState<Record<string, string>>({});
   const [ownedEmployees, setOwnedEmployees] = useState<string[]>([]);
   const [previews, setPreviews] = useState<Record<string, string>>({});
@@ -54,7 +66,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const working = entries.filter(e => e.kind === 'turn' && taskWorking.has(e.state ?? '')).at(-1);
   const pauseIndex = entries.map(e => e.kind).lastIndexOf('pause');
   const paused = pauseIndex >= 0 && !entries.slice(pauseIndex + 1).some(e => e.kind === 'requirement');
-  const passed = entries.filter(e => e.kind === 'cycle').at(-1)?.state === 'recommendation_passed';
+  const passed = cycle?.state === 'recommendation_passed';
   const question = snapshot?.questions.find(q => q.workItemId === item.id && q.status === 'pending' && q.expiresAt > Date.now());
   const canTalk = canEdit && !!developer && !terminal;
   const name = (entry: TaskEntry) => (entry.employeeId && people[entry.employeeId]) ||
@@ -175,10 +187,12 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
 
   const latestTurn = entries.filter(entry => entry.kind === 'turn').at(-1);
   const queued = isQueued(snapshot?.runs.find(run => run.id === latestTurn?.workExecutionId));
+  const deliveryReview = !error && snapshot && reviewRead?.snapshot === snapshot
+    ? currentReview(item, entries, snapshot.runs, reviewRead.rows) : undefined;
   const status = terminal ? label(`status_${item.status}`) : paused ? l(working ? 'taskPausing' : 'taskPaused')
     : working ? `${name(working)} · ${label(`execution_${working.state}`)}`
     : queued ? l('taskDirectoryQueue')
-    : question ? l('taskDecision') : passed ? l('taskReviewPassed') : developer?.state === 'unknown' ? label('unknown') : undefined;
+    : question ? l('taskDecision') : passed ? l(deliveryReview ? 'taskReviewPassed' : 'unverifiedDelivery') : developer?.state === 'unknown' ? label('unknown') : undefined;
 
   if (denied) return <section className="space-y-3"><Button variant="ghost" onClick={onBack}>{l('back')}</Button><p role="alert">{l('accessDenied')}</p></section>;
 
@@ -199,6 +213,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       <p className="text-sm text-muted-foreground">{l('taskNoDeveloper')}</p>
       {canEdit && <Button onClick={() => setMode('assign')}>{label('assignEmployee')}</Button>}
     </div>}
+    {snapshot && developer && (developer.state === 'succeeded' || reviewer) && <DeliverySummary review={deliveryReview} loading={!error && readEvidence && reviewRead?.snapshot !== snapshot}/>}
     {snapshot && <ol aria-label={l('taskConversation')} className="space-y-5 py-5">
       {!entries.some(e => e.kind === 'requirement') && item.description.trim() && <li className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-xl bg-accent px-4 py-3 text-sm">{item.description}</li>}
       {entries.map(entry => {
