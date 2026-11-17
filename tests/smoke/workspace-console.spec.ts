@@ -88,7 +88,9 @@ test('real session component polls commands, pages history and binds one-time ap
     if(route.request().method()==='POST')submitted.push({path,body});
     let data:unknown;
     if(path==='executions/get')data={executionId:'1',nodeId:'2',state:'running',stateVersion:1};
-    else if(path==='permissions/list')data=[{permissionId:'p1',requestDigest:'digest-bound',summary:JSON.stringify({tool:'write_file',kind:'tool',input:{path:'src/main.ts',content:'reviewed change'}}),expiresAt:Date.now()+60000,status:'pending'}];
+    else if(path==='permissions/list')data=[{permissionId:'p1',requestDigest:'digest-bound',
+      summary:{action:'command',title:'Run command',command:'printf test > report.txt',cwd:'/workspace/project',paths:[],remoteApprovable:true},
+      remoteApprovable:true,answers:['allow_once','deny'],expiresAt:Date.now()+60000,status:'pending'}];
     else if(path==='commands/get')data={commandId:url.searchParams.get('commandId'),executionId:'1',kind:'session.history',status:'applied',result:{data:{items:[{id:'h1',kind:'text',text:'History from device'}],nextCursor:'cursor-2'}}};
     else data={commandId:body.commandId,executionId:'1',kind:path.replaceAll('/','.'),status:path==='sessions/history'?'pending':'applied'};
     await route.fulfill({json:{code:0,data}});
@@ -98,6 +100,7 @@ test('real session component polls commands, pages history and binds one-time ap
     mountSessionConsole(`${location.origin}/__console/app`);
   });
   const console=page.getByTestId('session-console');
+  await expect(console.locator('pre').filter({hasText:'printf test > report.txt'})).toContainText('/workspace/project');
   await console.getByRole('button',{name:/History|历史记录|Lịch sử/,exact:true}).click();
   await expect(console.getByText('History from device')).toBeVisible();
   await console.getByRole('button',{name:/Load more|加载更多|Tải thêm/}).click();
@@ -106,6 +109,23 @@ test('real session component polls commands, pages history and binds one-time ap
   await expect.poll(()=>submitted.some(x=>x.path==='permissions/resolve')).toBe(true);
   expect(submitted.find(x=>x.path==='permissions/resolve')?.body).toMatchObject({executionId:'1',permissionId:'p1',requestDigest:'digest-bound',decision:'allow_once'});
   expect(submitted.filter(x=>x.path==='sessions/history')[1]?.body.cursor).toBe('cursor-2');
+});
+
+test('structured permissions fail closed when workstation approval is required', async ({page}) => {
+  await page.route('**/__local-approval/app/agent/**', route => route.fulfill({json: {code: 0,
+    data: route.request().url().includes('permissions/list') ? [{
+      permissionId: 'p-local', requestDigest: 'fixture', summary: {action:'tool', title:'Review on workstation', paths:[], remoteApprovable:false},
+      remoteApprovable:false, answers:['deny'], expiresAt:Date.now()+60000, status:'pending',
+    }] : {executionId:'1', state:'waiting_user'},
+  }}));
+  await page.evaluate(async () => {
+    const {mountSessionConsole}=await import('/src/test-harness/workspace-console.tsx');
+    mountSessionConsole(`${location.origin}/__local-approval/app`);
+  });
+  const console=page.getByTestId('session-console');
+  await expect(console.getByText('Review on workstation')).toBeVisible();
+  await expect(console.getByRole('button',{name:/Allow once|仅批准本次|Cho phép một lần/})).toHaveCount(0);
+  await expect(console.getByRole('button',{name:/Deny|拒绝|Từ chối/})).toBeEnabled();
 });
 
 test('revoked Room access clears and stops until explicitly reauthorized',async({page})=>{

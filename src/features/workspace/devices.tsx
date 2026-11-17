@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { PlatformApiError } from '@/lib/platform-errors';
 import { WorkspaceApi, type Node, type PairingView } from './api';
 import { roomFailure } from './room-observer';
+import { isNodeOnline, latestNodeContact } from './node-connection';
 import { usePageLabels } from './page-labels';
 import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh, wsField } from './shell';
 
@@ -86,12 +87,15 @@ export function DevicePage({api}: {api: WorkspaceApi}) {
       <p className="mt-2 text-sm">{l('addDeviceHint')}</p>
     </div>}
     {nodes.length > 0 && <WsTable head={<><WsTh>{l('colDevice')}</WsTh><WsTh>{l('colSystem')}</WsTh><WsTh>{l('colStatus')}</WsTh><WsTh>{l('colLastOnline')}</WsTh></>}>
-      {nodes.map(n => <tr key={n.nodeId} onClick={() => selectNode(n.nodeId)} className={cn('cursor-pointer transition-colors hover:bg-accent/40', selected === n.nodeId && 'bg-accent/40')}>
-        <WsTd><span className="flex items-center gap-2"><Monitor className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />{n.name}</span></WsTd>
-        <WsTd className="text-muted-foreground">{n.platform ?? '—'}</WsTd>
-        <WsTd><StatusPill><span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', n.state === 'active' ? 'bg-current' : 'border border-current')} />{n.state === 'active' ? l('deviceOnline') : l('deviceOffline')}</StatusPill></WsTd>
-        <WsTd className="text-muted-foreground">{date(n.lastReportAt)}</WsTd>
-      </tr>)}
+      {nodes.map(n => {
+        const online = isNodeOnline(n, Date.now());
+        return <tr key={n.nodeId} onClick={() => selectNode(n.nodeId)} className={cn('cursor-pointer transition-colors hover:bg-accent/40', selected === n.nodeId && 'bg-accent/40')}>
+          <WsTd><span className="flex items-center gap-2"><Monitor className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />{n.name}</span></WsTd>
+          <WsTd className="text-muted-foreground">{n.platform ?? '—'}</WsTd>
+          <WsTd><StatusPill><span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', online ? 'bg-current' : 'border border-current')} />{online ? l('deviceOnline') : l('deviceOffline')}</StatusPill></WsTd>
+          <WsTd className="text-muted-foreground">{date(latestNodeContact(n))}</WsTd>
+        </tr>;
+      })}
     </WsTable>}
     {node && <section className="mt-[22px] min-w-0 space-y-3 break-words rounded-[9px] border bg-card p-4">
       <h2 className="text-[17px] font-semibold">{node.name}</h2>

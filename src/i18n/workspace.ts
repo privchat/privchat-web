@@ -207,6 +207,8 @@ export const enWorkspace = {
   "newRequest": "New request",
   "executions": "Executions",
   "permissionHint": "Approval applies only to this request, not future actions.",
+  "permissionDetailsUnavailable": "No readable tool request details.",
+  "permissionLocalOnly": "This request cannot be approved remotely. Check it on the workstation.",
   "unsupported": "This server or device does not support the operation"
 };
 export const zhWorkspace = {
@@ -418,6 +420,8 @@ export const zhWorkspace = {
   "newRequest": "新的请求",
   "executions": "执行记录",
   "permissionHint": "只批准本次请求，不授权以后的操作。",
+  "permissionDetailsUnavailable": "没有可读取的工具请求详情。",
+  "permissionLocalOnly": "无法远程批准此请求，请在工作站检查。",
   "unsupported": "当前服务端或设备不支持此操作"
 };
 export const viWorkspace = {
@@ -629,12 +633,16 @@ export const viWorkspace = {
   "newRequest": "Yêu cầu mới",
   "executions": "Lượt thực thi",
   "permissionHint": "Chỉ phê duyệt yêu cầu này, không áp dụng cho lần sau.",
+  "permissionDetailsUnavailable": "Không đọc được chi tiết yêu cầu công cụ.",
+  "permissionLocalOnly": "Không thể phê duyệt từ xa. Hãy kiểm tra trên máy làm việc.",
   "unsupported": "Máy chủ hoặc thiết bị chưa hỗ trợ thao tác này"
 };
 
 // WF-05 has Traditional Chinese copy; unrelated legacy workspace copy falls back to zh-CN.
 export const zhTWWorkspace: typeof enWorkspace = {
   ...zhWorkspace,
+  permissionDetailsUnavailable: "沒有可讀取的工具請求明細。",
+  permissionLocalOnly: "無法遠端批准此請求，請在工作站檢查。",
   stage_development_pending: "等待開發執行",
   stage_development_blocked: "開發待處理",
   stage_waiting_user: "等待使用者處理",

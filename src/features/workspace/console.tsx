@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { WorkspaceApi, type Command, type Execution, type NodeEvent, type Permission } from './api';
 import { roomFailure } from './room-observer';
-import { permissionDetails } from './permission-details';
+import { canApprovePermission, permissionDetails } from './permission-details';
 import { ConsoleIntent } from './console-intent';
 import { SessionRecords } from './session-records';
 import { publicRecords } from './public-records';
@@ -105,7 +105,24 @@ function SessionConsoleBody({api,executionId,onContinue,employeeManaged=false,ta
     {commands.map(c=><div key={c.commandId}><p>{c.kind} · {c.status==='unknown'?t('agentWorkspace.unknown'):c.status==='pending'?t('agentWorkspace.pending'):c.status}</p>{c.result?.data&&c.kind==='session.inspect'&&<pre className="whitespace-pre-wrap break-all">{JSON.stringify(c.result.data,null,2)}</pre>}</div>)}
     {history.map((h,i)=><pre key={String(h.id??i)} className="whitespace-pre-wrap break-words text-sm">{String(h.text??h.toolName??h.kind??'')}</pre>)}
     {events.map(e => <div key={e.seq}>{publicRecords(e).map((record, index) => <p key={index} className="whitespace-pre-wrap break-words text-sm">{record.text ?? t(`agentWorkspace.${record.state ? `execution_${record.state}` : `record_${record.kind}`}`)}</p>)}</div>)}
-    {permissions.filter(p=>p.status==='pending').map(p=><div key={p.permissionId} className="rounded border p-3"><pre className="whitespace-pre-wrap break-all">{permissionDetails(p.summary)??p.summary}</pre><p>{t('agentWorkspace.permissionHint')}</p>{!task?.readOnly && (['allow_once','deny'] as const).map(decision=><Button key={decision} disabled={controls||p.expiresAt<=Date.now()||(!!task&&intent.current.hasPending)||(decision==='allow_once'&&!permissionDetails(p.summary))} onClick={()=>{if(window.confirm(t('agentWorkspace.confirm')))void command('permissions/resolve',{permissionId:p.permissionId,requestDigest:p.requestDigest,decision});}}>{t(decision==='allow_once'?'agentWorkspace.approve':'agentWorkspace.deny')}</Button>)}{p.expiresAt<=Date.now()&&<p>{t('agentWorkspace.expired')}</p>}</div>)}
+    {permissions.filter(p => p.status === 'pending').map(p => {
+      const details = permissionDetails(p.summary);
+      const legacy = typeof p.summary === 'string';
+      const expired = p.expiresAt <= Date.now();
+      const canApprove = canApprovePermission(p.summary, p.remoteApprovable);
+      const answers = (['allow_once', 'deny'] as const).filter(answer =>
+        Array.isArray(p.answers) ? p.answers.includes(answer) : legacy && p.answers == null);
+      return <div key={p.permissionId} className="rounded border p-3">
+        <pre className="whitespace-pre-wrap break-all">{details ?? (legacy ? String(p.summary) : t('agentWorkspace.permissionDetailsUnavailable'))}</pre>
+        <p>{t('agentWorkspace.permissionHint')}</p>
+        {!canApprove && <p>{t('agentWorkspace.permissionLocalOnly')}</p>}
+        {!task?.readOnly && answers.map(decision => <Button key={decision}
+          disabled={controls || expired || (!!task && intent.current.hasPending) || (decision === 'allow_once' && !canApprove)}
+          onClick={() => {if (window.confirm(t('agentWorkspace.confirm'))) void command('permissions/resolve', {permissionId: p.permissionId, requestDigest: p.requestDigest, decision});}}
+        >{t(decision === 'allow_once' ? 'agentWorkspace.approve' : 'agentWorkspace.deny')}</Button>)}
+        {expired && <p>{t('agentWorkspace.expired')}</p>}
+      </div>;
+    })}
     {nextExecution&&nextExecution!==executionId&&<Button onClick={()=>onContinue?.(nextExecution)} disabled={!onContinue}>{t('agentWorkspace.executions')} · {nextExecution}</Button>}
   </section>;
 }
