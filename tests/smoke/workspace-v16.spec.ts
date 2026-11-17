@@ -65,6 +65,7 @@ test('project detail starts a project task and only offers employees on its writ
   await page.getByTestId('ws-nav-navProjects').click();
   await page.getByRole('button', {name: 'Project', exact: true}).click();
   await page.getByRole('button', {name: 'New task', exact: true}).click();
+  await page.getByTestId('create-work-item').getByText('Advanced settings', {exact: true}).click();
   await expect(page.getByRole('combobox', {name: 'Project', exact: true})).toHaveValue('p');
   const picker = page.getByRole('combobox', {name: 'Employee (optional)'});
   await expect(picker.getByRole('option', {name: 'Engineer'})).toHaveCount(1);
@@ -384,7 +385,7 @@ for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) te
 
 test('lost assignment retains saved item and original key; candidates come from associations', async ({page}) => {
   let lost = true; const requests = await mock(page, path => {if (path === '/workspace/project/list') return [{...project, bindings: [myBinding]}]; if (path === '/workspace/work-execution/assign') {if (lost) {lost = false; return 'abort';} return {id: 'link', executionId: 'exec', state: 'accepted'};}}); page.on('dialog', dialog => dialog.accept());
-  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click(); await page.getByLabel('Title', {exact: true}).fill('Ship'); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click(); await expect(page.getByRole('alert').filter({hasText: 'Work item saved; assignment not confirmed'})).toBeVisible(); await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect(page.getByTestId('workspace-detail')).toBeVisible();
+  await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByRole('button', {name: 'New task', exact: true}).click(); await page.getByLabel('Title', {exact: true}).fill('Ship'); await page.getByTestId('create-work-item').getByText('Advanced settings', {exact: true}).click(); await page.getByRole('combobox', {name: 'Project', exact: true}).selectOption('p'); await page.getByRole('combobox', {name: 'Employee (optional)', exact: true}).selectOption('emp'); await page.getByRole('button', {name: 'Create and assign'}).click(); await expect(page.getByRole('alert').filter({hasText: 'Work item saved; assignment not confirmed'})).toBeVisible(); await page.getByRole('button', {name: 'Retry', exact: true}).click(); await expect(page.getByTestId('workspace-detail')).toBeVisible();
   const creates = requests.filter(r => r.path === '/workspace/work-item/create'), assigns = requests.filter(r => r.path === '/workspace/work-execution/assign'); expect(creates).toHaveLength(1); expect(assigns).toHaveLength(2); expect(assigns[0]?.body).toEqual(assigns[1]?.body); expect(assigns[0]?.body).toMatchObject({workItemId: '42', version: 1, employeeId: 'emp', bindingId: 'b'}); expect(requests.some(r => r.path === '/agent/agents/send')).toBe(false);
 });
 test('mobile cards and scoped feed fit phone viewport', async ({page}) => {
