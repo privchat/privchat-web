@@ -5,7 +5,7 @@ const employee = {agentId: '3', name: 'Engineer', title: 'Developer', nodeId: '2
 const item = {id: '5', workspaceId: '4', title: 'Ship core', description: 'Core only', acceptance: 'Checks pass', status: 'open', version: 7};
 const binding = {id: '6', nodeId: '2', capability: 'agent.codex', revoked: 0};
 const note = {id: '7', workItemId: '5', kind: 'artifact', body: 'Fixed commit', artifactRef: 'commit:abc123'};
-const link = {id: '8', executionId: '9', state: 'succeeded'};
+const link = {id: '8', executionId: '9', state: 'succeeded', nodeId: '2', employeeId: 'previous'};
 
 test.beforeEach(async ({page}) => {
   await page.goto('/');
@@ -158,6 +158,7 @@ test('workflow assigns, snapshots source link and explicitly records a human rev
   expect(posts[0].body).toMatchObject({workItemId: '5', version: 7, employeeId: '3', bindingId: '6'});
   expect(posts[0].body.requestId).toHaveLength(36);
   await p.getByLabel('Delivered result to review').selectOption('8');
+  await p.getByLabel('Review employee', {exact: true}).selectOption('3');
   await p.getByLabel('Fixed evidence and revision').fill('commit abc123');
   await p.getByRole('checkbox', {name: /commit:abc123/}).check();
   await p.getByRole('button', {name: 'Request employee review'}).click();
@@ -279,18 +280,21 @@ test('a read-only start directory allows review but never development, and no em
   const posts = await projectWorkflow(page, {
     directories: [{workdirBindingId: 'repo', label: 'Repository', access: 'read'}, {workdirBindingId: 'docs', label: 'Docs', access: 'read'}],
     reviewerEmployeeId: '4',
-    rows: [linked('3', 'Engineer', 'repo'), linked('4', 'Reviewer', 'docs')],
-    links: [{id: '8', executionId: '9', state: 'succeeded', employeeId: '3', projectBindingId: 'pb', createdAt: 1}],
+    rows: [linked('3', 'Engineer', 'repo'), linked('4', 'Reviewer', ''),
+      linked('5', 'Different directory', 'docs'), linked('6', 'Different workstation', '', {nodeId: 'other'})],
+    bindings: [binding, {...binding, id: 'other-grant', nodeId: 'other'}],
+    links: [{id: '8', executionId: '9', state: 'succeeded', employeeId: '3', projectBindingId: 'pb', nodeId: '2', workdirBindingId: 'repo', createdAt: 1}],
   });
-  const p = page.getByTestId('workflow-panel'), developer = p.getByRole('combobox').first();
-  await expect(developer.getByRole('option', {name: 'Engineer · Codex · review only', exact: true})).toHaveCount(1);
-  await developer.selectOption('3');
+  const p = page.getByTestId('workflow-panel'), developer = p.getByRole('combobox', {name: 'Virtual employees', exact: true});
+  await expect(developer).toBeDisabled();
   await p.getByLabel('Work instructions', {exact: true}).fill('Implement core');
   await expect(p.getByRole('button', {name: 'Assign to employee'})).toBeDisabled();
   await p.getByLabel('Delivered result to review').selectOption('8');
   await p.getByLabel('Fixed evidence and revision').fill('commit abc123');
   await expect(p.getByRole('button', {name: 'Request employee review'})).toBeDisabled();
-  await developer.selectOption('4');
+  const reviewer = p.getByLabel('Review employee', {exact: true});
+  await expect(reviewer.locator('option')).toHaveText(['None', 'Reviewer']);
+  await reviewer.selectOption('4');
   await expect(p.getByRole('button', {name: 'Request employee review'})).toBeEnabled();
   await p.getByRole('button', {name: 'Request employee review'}).click();
   await expect.poll(() => posts.length).toBe(1);
@@ -303,10 +307,10 @@ test('assignment defaults to automatic review by the binding reviewer and carrie
   const posts = await projectWorkflow(page, {
     directories: [{workdirBindingId: 'repo', label: 'Repository', access: 'write'}],
     reviewerEmployeeId: '4',
-    rows: [linked('3', 'Engineer', 'repo'), linked('4', 'Reviewer', 'repo')],
+    rows: [linked('3', 'Engineer', 'repo'), linked('4', 'Reviewer', '')],
   });
   const p = page.getByTestId('workflow-panel'), auto = p.getByTestId('auto-review');
-  await p.getByRole('combobox').first().selectOption('3');
+  await p.getByRole('combobox', {name: 'Virtual employees', exact: true}).selectOption('3');
   await expect(auto.getByRole('checkbox')).toBeChecked();
   await expect(auto).toContainText('Reviewed by Reviewer after delivery');
   await p.getByLabel('Work instructions', {exact: true}).fill('Implement core');
@@ -321,7 +325,7 @@ test('assignment defaults to automatic review by the binding reviewer and carrie
   expect(posts[1].body.correctionLimit).toBe(3);
   await auto.getByRole('checkbox').uncheck();
   await expect(p.getByLabel('Automatic correction rounds')).toHaveCount(0);
-  await p.getByRole('button', {name: 'Assign to employee'}).click();
+  await p.getByRole('button', {name: 'Assign manually'}).click();
   await expect.poll(() => posts.length).toBe(3);
   expect(posts[2].body.autoReview).toBe(false);
   expect(posts[2].body).not.toHaveProperty('correctionLimit');
@@ -335,17 +339,17 @@ test('a missing workspace authorization is granted in place before the assignmen
     bindings: [],
   });
   const p = page.getByTestId('workflow-panel'), grant = p.getByTestId('grant-binding');
-  await p.getByRole('combobox').first().selectOption('3');
+  await p.getByRole('combobox', {name: 'Virtual employees', exact: true}).selectOption('3');
   await expect(grant).toContainText('This workspace is not yet authorized to use this device.');
   await expect(grant).toContainText('Will authorize this workspace to use Codex on Laptop');
   await p.getByLabel('Work instructions', {exact: true}).fill('Implement core');
-  await expect(p.getByRole('button', {name: 'Assign to employee'})).toBeDisabled();
+  await expect(p.getByRole('button', {name: 'Assign manually'})).toBeDisabled();
   await grant.getByRole('button', {name: 'Authorize this workspace to use this device'}).click();
   await expect.poll(() => posts.filter(post => post.path === '/workspace/agent-binding/create').length).toBe(1);
   expect(posts[0].body).toEqual({workspaceId: '4', nodeId: '2', capability: 'agent.codex'});
   await expect(p.getByTestId('grant-binding')).toHaveCount(0);
-  await expect(p.getByRole('button', {name: 'Assign to employee'})).toBeEnabled();
-  await p.getByRole('button', {name: 'Assign to employee'}).click();
+  await expect(p.getByRole('button', {name: 'Assign manually'})).toBeEnabled();
+  await p.getByRole('button', {name: 'Assign manually'}).click();
   await expect.poll(() => posts.filter(post => post.path.endsWith('/assign')).length).toBe(1);
   expect(posts.at(-1)!.body).toMatchObject({employeeId: '3', bindingId: 'new-b', autoReview: false});
 });

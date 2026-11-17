@@ -16,3 +16,9 @@ export function isNodeOnline(node: NodeContact, now: number): boolean {
     && (node.disconnectedAt == null || node.disconnectedAt < seen)
     && now - seen <= ONLINE_WINDOW_MS;
 }
+
+/** Missing contact telemetry alone does not override server-projected availability. */
+export function isKnownNodeOffline(node: NodeContact | undefined): boolean {
+  return !!node && (node.state !== 'active' || node.revokedAt != null ||
+    node.disconnectedAt != null || latestNodeContact(node) !== undefined) && !isNodeOnline(node, Date.now());
+}

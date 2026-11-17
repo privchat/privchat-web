@@ -1,12 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { PlatformApiError } from '@/lib/platform-errors';
+import { employeeCreationIntent } from './console-intent-storage';
 import { Bot, Circle, LoaderCircle, Plus } from 'lucide-react';
 import {TaskHistory} from './task-history';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Binding, Employee, Node, Workspace, WorkspaceApi, WorkspaceEmployee } from './api';
-import { availableEmployeeExecutors, employeeExecutor, executorDisplay, ModelField } from './employees';
+import { availableEmployeeExecutors, employeeExecutor, executorDefaultModel, executorDisplay, executorModels, ModelField } from './employees';
 import { employeeCause, executorGrant, grantableWorkspaceBinding, workspaceBindingGrant } from './employee-access';
-import { employeeReasonLabel, usePageLabels } from './page-labels';
+import { employeeReasonLabel, usePageLabels, type WorkspaceLabelKey } from './page-labels';
 import { navigateWorkspace } from './routes';
 import { StatusPill, WsPageHeader, WsTable, WsTd, WsTh, wsField } from './shell';
 import { useEmployeePages } from './use-employee-pages';
@@ -20,7 +22,8 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
   const [owned, setOwned] = useState<Employee[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [bindings, setBindings] = useState<Binding[]>([]);
-  const [adding, setAdding] = useState(false);
+  const [creation] = useState(() => employeeCreationIntent(api, workspaceId));
+  const [adding, setAdding] = useState(creation.hasPending);
   const [manageId, setManageId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -79,53 +82,75 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
       <p className="mt-2 text-sm">{l('noLinkedEmployees')}</p>
     </div>}
     {employeePages.hasMore && <div className="mt-3"><Button variant="outline" disabled={busy || employeePages.busy} onClick={() => void employeePages.more()}>{l('more')}</Button></div>}
-    <AddEmployeeDialog api={api} nodes={nodes} bindings={bindings} workspaceId={workspaceId} candidates={candidates} readOnly={readOnly} open={adding} onClose={() => setAdding(false)} onCreated={() => {setAdding(false); void reload();}} onAssociated={() => void reload()} onLockChange={onLockChange}/>
+    <AddEmployeeDialog api={api} creation={creation} names={[...owned.map(e => e.name), ...rows.map(r => r.name ?? '')]} nodes={nodes} bindings={bindings} workspaceId={workspaceId} candidates={candidates} readOnly={readOnly} open={adding} onClose={() => setAdding(false)} onCreated={employee => {setOwned(current => [...current, employee]); setAdding(false); void reload().catch(() => setError(true));}} onAssociated={() => void reload().catch(() => setError(true))} onLockChange={onLockChange}/>
   </section>;
 }
 
-function AddEmployeeDialog({api, nodes, bindings, workspaceId, candidates, readOnly, open, onClose, onCreated, onAssociated, onLockChange}: {api: WorkspaceApi; nodes: Node[]; bindings: Binding[]; workspaceId: string; candidates: Employee[]; readOnly: boolean; open: boolean; onClose: () => void; onCreated: () => void; onAssociated: () => void; onLockChange: (locked: boolean) => void}) {
+function AddEmployeeDialog({api, creation, names, nodes, bindings, workspaceId, candidates, readOnly, open, onClose, onCreated, onAssociated, onLockChange}: {api: WorkspaceApi; creation: ReturnType<typeof employeeCreationIntent>; names: string[]; nodes: Node[]; bindings: Binding[]; workspaceId: string; candidates: Employee[]; readOnly: boolean; open: boolean; onClose: () => void; onCreated: (employee: Employee) => void; onAssociated: () => void; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
-  const [name, setName] = useState('');
-  const [roleDescription, setRoleDescription] = useState('');
-  const [title, setTitle] = useState('');
+  const [customName, setCustomName] = useState<string>();
   const [model, setModel] = useState('');
   const [nodeId, setNodeId] = useState('');
   const [executor, setExecutor] = useState('');
-  const [workdirBindingId, setWorkdirBindingId] = useState('');
   const [associateId, setAssociateId] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  const node = nodes.find(n => n.nodeId === nodeId);
+  const [error, setError] = useState<WorkspaceLabelKey>();
+  const running = useRef(false);
+  const pending = creation.hasPending;
+  const workstations = nodes.filter(n => n.state === 'active' && n.revokedAt == null);
+  const node = workstations.find(n => n.nodeId === nodeId);
   const executors = availableEmployeeExecutors(node);
+  const models = executorModels(node, executor);
+  const modelName = models.find(m => m.id === model)?.name || model || executorDefaultModel(node, executor);
+  const used = new Set(names.map(n => n.trim().toLowerCase()));
+  const base = executor ? [executorDisplay(executor), modelName].filter(Boolean).join(' · ') : '';
+  let suggested = base.slice(0, 64);
+  for (let i = 2; suggested && used.has(suggested.toLowerCase()); i++) {
+    const suffix = ` (${i})`;
+    suggested = base.slice(0, 64 - suffix.length) + suffix;
+  }
+  const name = customName ?? suggested;
   const grant = executorGrant(node, executor);
   const grantNotice = l(grant === 'revoked' ? 'capabilityRevokedConfirm' : 'grantOnSaveConfirm').replace('{capability}', executorDisplay(executor));
-  const valid = !!name.trim() && !!roleDescription.trim() && !!nodeId && !!executor && !!workdirBindingId;
-  function reset() {setName(''); setRoleDescription(''); setTitle(''); setModel(''); setNodeId(''); setExecutor(''); setWorkdirBindingId(''); setAssociateId(''); setError(false);}
-  function close() {if (busy) return; reset(); onClose();}
+  const valid = !!name.trim() && !used.has(name.trim().toLowerCase()) && !!node && executors.includes(executor) &&
+    (!model || models.some(m => m.id === model));
+  function reset() {setCustomName(undefined); setModel(''); setNodeId(''); setExecutor(''); setAssociateId(''); setError(undefined);}
+  function close() {if (running.current || pending) return; reset(); onClose();}
   async function submit() {
-    if (busy || !valid) return;
-    // Choosing an executor grants its capability on the device; a revoked one only returns after the owner confirms.
-    if (grant !== 'granted' && !window.confirm(grantNotice)) return;
-    setBusy(true); setError(false); onLockChange(true);
+    if (running.current || readOnly || (!pending && !valid)) return;
+    if (!pending && grant !== 'granted' && !window.confirm(grantNotice)) return;
+    running.current = true; setBusy(true); setError(undefined); onLockChange(true);
     try {
-      const created = await api.createEmployee({requestId: crypto.randomUUID(), name: name.trim(), nodeId, executor, workdirBindingId,
-        title: title.trim(), roleDescription: roleDescription.trim(), model: model.trim(), ...(grant === 'revoked' ? {authorizeCapability: true} : {})});
-      const binding = workspaceBindingGrant(nodeId, `agent.${executor}`, bindings, nodes);
+      // Retain the creation receipt's request identity until the employee is associated.
+      const retain = (created: Employee) => {
+        if (!created?.agentId) throw new Error('Invalid employee creation receipt');
+        return true;
+      };
+      const created = pending ? await creation.retry(api, retain) : await creation.run(api, '/agent/agents', {
+        name: name.trim(), nodeId, executor, workdirBindingId: '', title: '', roleDescription: '', model,
+        ...(grant === 'revoked' ? {authorizeCapability: true} : {}),
+      }, 'requestId', retain);
+      if (created.workdirBindingId || created.executionId) {
+        creation.complete(); setError('employeeCreateUnsupported'); return;
+      }
+      const binding = workspaceBindingGrant(created.nodeId, `agent.${created.executor}`, bindings, nodes);
       if (binding) await api.createBinding(workspaceId, binding.nodeId, binding.capability);
       await api.associateEmployee(workspaceId, created.agentId);
-      reset(); onCreated();
-    } catch {setError(true);}
-    finally {setBusy(false); onLockChange(false);}
+      creation.complete();
+      reset(); onCreated(created);
+    } catch (e) {
+      setError(e instanceof PlatformApiError && ['AGENT_DEFINITION_INVALID', 'AGENT_WORKDIR_NOT_ALLOWED'].includes(e.machineCode ?? '') ? 'employeeCreateUnsupported' : 'error');
+    } finally {running.current = false; setBusy(false); onLockChange(creation.hasPending);}
   }
   async function associate() {
-    if (busy || readOnly || !associateId) return;
-    setBusy(true); setError(false); onLockChange(true);
+    if (busy || pending || readOnly || !associateId) return;
+    setBusy(true); setError(undefined); onLockChange(true);
     try {
       const candidate = candidates.find(c => c.agentId === associateId);
       const binding = candidate ? workspaceBindingGrant(candidate.nodeId, `agent.${candidate.executor}`, bindings, nodes) : null;
       if (binding) await api.createBinding(workspaceId, binding.nodeId, binding.capability);
       await api.associateEmployee(workspaceId, associateId); setAssociateId(''); onAssociated();
-    } catch {setError(true);}
+    } catch {setError('error');}
     finally {setBusy(false); onLockChange(false);}
   }
   return <Dialog open={open} onOpenChange={o => {if (!o) close();}}>
@@ -135,19 +160,12 @@ function AddEmployeeDialog({api, nodes, bindings, workspaceId, candidates, readO
         <DialogDescription>{l('addEmployeeHint')}</DialogDescription>
       </DialogHeader>
       <form className="space-y-4" onSubmit={e => {e.preventDefault(); void submit();}}>
-        <label className="grid gap-1.5 text-sm font-medium">{l('employeeNameLabel')}
-          <input className={wsField} value={name} maxLength={80} disabled={busy} onChange={e => setName(e.target.value)}/>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">{l('roleDescription')}
-          <textarea className={wsField} value={roleDescription} maxLength={2000} disabled={busy} onChange={e => setRoleDescription(e.target.value)}/>
-        </label>
-        <label className="grid gap-1.5 text-sm font-medium">{l('employeeTitle')}
-          <input className={wsField} value={title} maxLength={80} disabled={busy} onChange={e => setTitle(e.target.value)}/>
-        </label>
+        {pending ? <p role="status">{l('pendingRetry')} {String(creation.pendingRequest?.body.name ?? '')}</p> : !workstations.length && !readOnly ?
+          <Button type="button" onClick={() => navigateWorkspace({view: 'devices'})}>{l('taskConnectDevice')}</Button> : <>
         <label className="grid gap-1.5 text-sm font-medium">{l('deviceNodeLabel')}
-          <select className={wsField} value={nodeId} disabled={busy} onChange={e => {setNodeId(e.target.value); setExecutor(''); setWorkdirBindingId(''); setModel('');}}>
+          <select className={wsField} value={nodeId} disabled={busy} onChange={e => {setNodeId(e.target.value); setExecutor(''); setModel('');}}>
             <option value="">{l('deviceNodeLabel')}</option>
-            {nodes.map(n => <option key={n.nodeId} value={n.nodeId} disabled={n.state !== 'active'}>{n.name}</option>)}
+            {workstations.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">{l('executorLabel')}
@@ -157,25 +175,23 @@ function AddEmployeeDialog({api, nodes, bindings, workspaceId, candidates, readO
           </select>
         </label>
         {!!executor && grant !== 'granted' && <p className="text-sm text-muted-foreground" data-testid="employee-grant-notice">{grantNotice}</p>}
-        <label className="grid gap-1.5 text-sm font-medium">{l('workdirLabel')}
-          <select className={wsField} value={workdirBindingId} disabled={busy || !nodeId} onChange={e => setWorkdirBindingId(e.target.value)}>
-            <option value="">{l('workdirLabel')}</option>
-            {node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
-          </select>
-        </label>
-        <ModelField node={node} executor={executor} value={model} disabled={busy || !executor} onChange={setModel}/>
-        <p className="text-sm text-muted-foreground">{l('privateNotImported')}</p>
-        <div className="space-y-2 border-t pt-4">
+        <ModelField reportedOnly node={node} executor={executor} value={model} disabled={busy || !executor} onChange={setModel}/>
+        {executor && <label className="grid gap-1.5 text-sm font-medium">{l('employeeNameLabel')}
+          <input className={wsField} value={name} maxLength={64} disabled={busy} onChange={e => setCustomName(e.target.value)}/>
+        </label>}
+        {customName && used.has(customName.trim().toLowerCase()) && <p role="status" className="text-sm">{l('employeeNameTaken')}</p>}
+        {candidates.length > 0 && <div className="space-y-2 border-t pt-4">
           <label className="grid gap-1.5 text-sm font-medium">{l('link')}
             <select className={wsField} value={associateId} disabled={busy || readOnly} onChange={e => setAssociateId(e.target.value)}><option value="">{l('none')}</option>{candidates.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select>
           </label>
           <Button type="button" variant="outline" disabled={busy || readOnly || !associateId} onClick={() => void associate()}>{l('link')}</Button>
-        </div>
-        {error && <p role="alert" className="text-sm text-destructive">{l('error')}</p>}
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={busy} onClick={close}>{l('cancel')}</Button>
-          <Button type="submit" disabled={busy || !valid}>{l('createEmployeeBtn')}</Button>
-        </DialogFooter>
+        </div>}
+        </>}
+        {error && <p role="alert" className="text-sm text-destructive">{l(error)}</p>}
+        {(pending || workstations.length > 0) && <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy || pending} onClick={close}>{l('cancel')}</Button>
+          <Button type="submit" disabled={busy || readOnly || (!pending && !valid)}>{l(pending ? 'retry' : 'createEmployeeBtn')}</Button>
+        </DialogFooter>}
       </form>
     </DialogContent>
   </Dialog>;

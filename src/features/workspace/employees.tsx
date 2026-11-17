@@ -35,13 +35,13 @@ export function executorDefaultModel(node: Node | undefined, executor: string): 
  * first item keeps the executor's own default (`model:""`). Only a node without a catalog still takes a typed name.
  * A value the executor no longer offers stays visible as such, never silently turned into the default.
  */
-export function ModelField({node, executor, value, disabled, onChange}: {node?: Node; executor: string; value: string; disabled?: boolean; onChange: (model: string) => void}) {
+export function ModelField({node, executor, value, disabled, reportedOnly, onChange}: {node?: Node; executor: string; value: string; disabled?: boolean; reportedOnly?: boolean; onChange: (model: string) => void}) {
   const l = usePageLabels();
   const models = executorModels(node, executor);
   const fallback = executorDefaultModel(node, executor);
   const keepDefault = fallback ? l('modelDefaultChoice').replace('{model}', fallback) : l('modelDefaultChoiceUnknown');
   return <label className="grid gap-1.5 text-sm font-medium">{l('modelLabel')}
-    {models.length
+    {models.length || reportedOnly
       ? <select data-testid="employee-model-select" className={wsField} value={value} disabled={disabled} onChange={e => onChange(e.target.value)}>
         <option value="">{keepDefault}</option>
         {models.map(m => <option key={m.id} value={m.id}>{m.name && m.name !== m.id ? `${m.name} · ${m.id}` : m.id}</option>)}

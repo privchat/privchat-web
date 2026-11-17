@@ -2,7 +2,7 @@ import { getActiveAccountKey } from '@/lib/active-account';
 import type { WorkspaceApi } from './api';
 import { CreateItemIntent, type ItemRecovery } from './create-item-intent';
 
-type SetupDraft = { title: string; description: string; acceptance: string; projectId: string; correctionLimit: string; manualReview?: boolean };
+type SetupDraft = { title: string; description: string; acceptance: string; projectId: string; nodeId?: string; employeeId?: string; correctionLimit: string; manualReview?: boolean };
 
 /** Unsubmitted form fields only; the delivery journal owns accepted requests. */
 export function taskSetupDraft(scope: string | undefined, spaceId: string) {
@@ -12,7 +12,8 @@ export function taskSetupDraft(scope: string | undefined, spaceId: string) {
       try {
         if (!key) return;
         const draft = JSON.parse(sessionStorage.getItem(key) ?? 'null') as SetupDraft | null;
-        if (draft && [draft.title, draft.description, draft.acceptance, draft.projectId, draft.correctionLimit].every(value => typeof value === 'string')) return draft;
+        if (draft && [draft.title, draft.description, draft.acceptance, draft.projectId, draft.correctionLimit].every(value => typeof value === 'string') &&
+            [draft.nodeId, draft.employeeId].every(value => value === undefined || typeof value === 'string')) return draft;
       } catch { /* storage is optional until submission */ }
     },
     save(draft?: SetupDraft) {

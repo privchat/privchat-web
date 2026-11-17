@@ -130,7 +130,8 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
   const targetBinding = myBindings.find(b => b.nodeId === bindNodeId);
   const canBind = !!space && space.archived === 0 && project?.archived === 0 && ['owner', 'admin', 'member'].includes(space.myRole);
   const workdirs = nodes.find(n => n.nodeId === draft?.nodeId)?.workdirs ?? [];
-  const reviewerCandidates = employees.filter(e => e.nodeId === draft?.nodeId && draft?.directories.some(d => d.workdirBindingId === e.workdirBindingId));
+  const reviewerCandidates = draft?.nodeId && draft.directories.length ? employees.filter(e =>
+    e.nodeId === draft.nodeId && (!e.workdirBindingId || draft.directories.some(d => d.workdirBindingId === e.workdirBindingId))) : [];
   const accessLabel = (access: string) => access === 'write' ? l('accessWrite') : l('accessRead');
   const employeeName = (id: string) => employees.find(e => e.agentId === id)?.name || l('unnamedEmployee');
   const bindWorkdirs = nodes.find(n => n.nodeId === bindNodeId)?.workdirs ?? [];

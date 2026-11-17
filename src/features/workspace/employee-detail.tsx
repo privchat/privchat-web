@@ -58,8 +58,8 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
   const conflict = !!own && baseVersion !== undefined && baseVersion !== version;
   const pending = profileIntent.current.hasPending || rebindIntent.current.hasPending;
   const locked = busy || pending;
-  const canEditProfile = !!own?.nodeId && !!own.executor && !!own.workdirBindingId;
-  const profileValid = !!profile.name.trim() && !!profile.roleDescription.trim();
+  const canEditProfile = !!own?.nodeId && !!own.executor;
+  const profileValid = !!profile.name.trim();
   const rebindValid = !!own && !conflict && node?.state === 'active' && executors.includes(draft.executor)
     && !!node.workdirs?.some(w => w.id === draft.workdirBindingId)
     && (!existingSession || (!!candidate && consent));
@@ -116,7 +116,7 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
     if (!own || !canEditProfile) return;
     // An ordinary profile change carries the existing routing and never a session (§18.14).
     const body = {agentId: own.agentId, name: profile.name.trim(), roleDescription: profile.roleDescription.trim(), title: profile.title.trim(),
-      model: own.model, nodeId: own.nodeId!, executor: own.executor, workdirBindingId: own.workdirBindingId};
+      model: own.model, nodeId: own.nodeId!, executor: own.executor, workdirBindingId: own.workdirBindingId ?? ''};
     await act(async () => {
       await profileIntent.current.run<Employee>(api, '/agent/agents/update', body, 'requestId');
       if (!live.current) return;

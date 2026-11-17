@@ -91,12 +91,35 @@ export function projectReviewer(project: Project | undefined, nodeId?: string | 
 
 /** A start directory the caller bound as writable: the employee may develop there (§20.3). */
 export function canDevelop(project: Project | undefined, nodeId?: string | null, workdirBindingId?: string | null) {
-  return projectDirectory(project, nodeId, workdirBindingId)?.access === 'write';
+  if (workdirBindingId) return projectDirectory(project, nodeId, workdirBindingId)?.access === 'write';
+  // This is an eligibility check only. The server resolves and freezes the directory.
+  return writableProjectDirectories(project, nodeId).length === 1;
+}
+
+export function writableProjectDirectories(project: Project | undefined, nodeId?: string | null) {
+  return myProjectBinding(project, nodeId)?.directories.filter(d => d.workdirBindingId && d.access === 'write') ?? [];
 }
 
 /** Any directory the caller bound there: the employee may review there, read-only included. */
 export function canReview(project: Project | undefined, nodeId?: string | null, workdirBindingId?: string | null) {
-  return !!projectDirectory(project, nodeId, workdirBindingId);
+  return workdirBindingId ? !!projectDirectory(project, nodeId, workdirBindingId)
+    : !!myProjectBinding(project, nodeId)?.directories.some(d => d.workdirBindingId);
+}
+
+function reviewerAvailable(row: WorkspaceEmployee, project: Project, bindings?: Binding[], nodes?: Node[]) {
+  return !otherMemberEmployee(row) && canReview(project, row.nodeId, row.workdirBindingId) &&
+    (row.available || employeeCause(row, bindings, nodes) === 'directoryMismatch') &&
+    grants(bindings ?? [], row.nodeId, row.capability);
+}
+
+export function defaultProjectReviewer(project: Project | undefined, developer: WorkspaceEmployee | undefined,
+  employees: WorkspaceEmployee[], bindings?: Binding[], nodes?: Node[]) {
+  if (!project || !developer?.nodeId) return;
+  const id = projectReviewer(project, developer.nodeId);
+  const directories = writableProjectDirectories(project, developer.nodeId);
+  const directory = developer.workdirBindingId || (directories.length === 1 ? directories[0]?.workdirBindingId : undefined);
+  return employees.find(row => row.employeeId === id && id !== developer.employeeId && row.nodeId === developer.nodeId &&
+    (!row.workdirBindingId || row.workdirBindingId === directory) && reviewerAvailable(row, project, bindings, nodes));
 }
 
 export function projectDirectory(project: Project | undefined, nodeId?: string | null, workdirBindingId?: string | null) {

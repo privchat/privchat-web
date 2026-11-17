@@ -31,6 +31,11 @@ export class ConsoleIntent {
   get pendingRequest(): PendingConsoleRequest | undefined {
     return this.pending && structuredClone(this.pending);
   }
+  /** Finish a retained request after any dependent writes have succeeded. */
+  complete() {
+    this.store?.save(undefined);
+    this.pending = undefined;
+  }
   async retry<T>(api: WorkspaceApi, retain?: (result: T) => boolean): Promise<T> {
     if (this.recoveryError) throw this.recoveryError;
     if (!this.pending) throw new Error('No request to retry');
@@ -59,7 +64,7 @@ export class ConsoleIntent {
       throw e;
     }
     this.maybeCommitted = true;
-    if (!keep) { this.store?.save(undefined); this.pending = undefined; }
+    if (!keep) this.complete();
     return result;
   }
   get hasPending(): boolean { return this.pending !== undefined || !!this.recoveryError; }

@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { WorkspaceApi, type Binding, type Node, type Project, type WorkExecution, type WorkItem, type WorkNote, type WorkReview, type WorkspaceEmployee } from './api';
 import { matchingEmployeeBindings, ReviewEvidenceFields } from './workflow-targets';
 import { ConsoleIntent } from './console-intent';
-import { CORRECTION_CHOICES, canDevelop, canReview, employeeCause, myProjectBindings, otherMemberEmployee, projectReviewer, workspaceBindingGrant } from './employee-access';
+import { CORRECTION_CHOICES, canDevelop, canReview, defaultProjectReviewer, employeeCause, myProjectBindings, otherMemberEmployee, projectDirectory, projectReviewer, workspaceBindingGrant, writableProjectDirectories } from './employee-access';
 import { employeeExecutor, executorDisplay } from './employees';
+import { isKnownNodeOffline } from './node-connection';
+import { workspaceHref } from './routes';
 import { roomFailure } from './room-observer';
 import { useEmployeePages } from './use-employee-pages';
 import { employeeReasonLabel, usePageLabels } from './page-labels';
@@ -24,10 +26,13 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
   const [granted, setGranted] = useState<Binding[]>();
   const [links, setLinks] = useState<WorkExecution[]>([]);
   const [reviews, setReviews] = useState<WorkReview[]>([]);
-  const [employeeId, setEmployeeId] = useState('');
+  const [nodeId, setNodeId] = useState<string>();
+  const [reviewerId, setReviewerId] = useState('');
+  const [reviewBindingId, setReviewBindingId] = useState('');
+  const [employeeId, setEmployeeId] = useState<string>();
   const [bindingId, setBindingId] = useState('');
   const [text, setText] = useState('');
-  const [autoReview, setAutoReview] = useState(false);
+  const [manualReview, setManualReview] = useState(false);
   const [correctionLimit, setCorrectionLimit] = useState('');
   const [acknowledge, setAcknowledge] = useState<'' | 'inspect' | 'rerun'>('');
   const [source, setSource] = useState('');
@@ -50,32 +55,41 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
   const access = granted ?? bindings;
   const terminal = ['done', 'cancelled'].includes(item.status);
   const employeeName = (id?: string | null) => authorized.find(row => row.employeeId === id)?.name || pageLabel('unnamedEmployee');
-  const deviceName = (id?: string | null) => nodes.find(node => node.nodeId === id)?.name || pageLabel('deviceNode');
-  // Developing needs the start directory writable in my binding on its computer; reviewing only needs it bound (§20.5).
+  const deviceName = (id?: string | null) => nodes.find(node => node.nodeId === id)?.name || myProjectBindings(project).find(b => b.nodeId === id)?.nodeName || pageLabel('deviceNode');
+  const nodeOffline = (id?: string | null) => isKnownNodeOffline(nodes.find(n => n.nodeId === id));
   const fits = (row: WorkspaceEmployee, mode: 'develop' | 'review') => {
+    if (otherMemberEmployee(row) || nodeOffline(row.nodeId)) return false;
     const cause = employeeCause(row, access, nodes);
-    // A binding only I can grant stays reachable so it can be granted here; a read-only start directory only blocks development.
     const usable = row.available || cause === 'bindingMissing' || (mode === 'review' && cause === 'directoryMismatch');
-    if (!item.projectId || !project) return usable;
+    if (!item.projectId) return usable && !!row.workdirBindingId;
     const allowed = mode === 'review' ? canReview(project, row.nodeId, row.workdirBindingId) : canDevelop(project, row.nodeId, row.workdirBindingId);
     return allowed && usable;
   };
-  const selectable = authorized.filter(row => !otherMemberEmployee(row) && (fits(row, 'develop') || fits(row, 'review')));
-  const employees = selectable.map(row => ({agentId: row.employeeId, name: row.name || pageLabel('unnamedEmployee'), nodeId: row.nodeId ?? undefined, executor: row.capability?.replace(/^agent\./, '') ?? '', workdirBindingId: row.workdirBindingId ?? '', reviewOnly: !fits(row, 'develop')}));
-  const employee = employees.find(e => e.agentId === employeeId);
-  const selectedRow = authorized.find(row => row.employeeId === employeeId);
+  const workstations = myProjectBindings(project).filter(b => b.nodeId && writableProjectDirectories(project, b.nodeId).length);
+  const station = nodeId ?? (workstations.length === 1 ? workstations[0]?.nodeId : undefined);
+  const target = (row: WorkspaceEmployee | undefined) => row && ({nodeId: row.nodeId ?? undefined, executor: row.capability?.replace(/^agent\./, '') ?? ''});
+  const developers = authorized.filter(row => (!item.projectId || row.nodeId === station) && fits(row, 'develop'));
+  const viable = developers.filter(row => row.available && row.employeeId !== projectReviewer(project, row.nodeId) && matchingEmployeeBindings(target(row), access).length);
+  const selectedId = employeeId ?? (item.projectId && !employeePages.hasMore && viable.length === 1 ? viable[0]?.employeeId : '');
+  const selectedRow = developers.find(row => row.employeeId === selectedId);
+  const directory = projectDirectory(project, selectedRow?.nodeId, selectedRow?.workdirBindingId);
+  const employee = target(selectedRow);
   const candidates = matchingEmployeeBindings(employee, access);
-  const chosenBinding = candidates.length === 1 ? candidates[0]!.id : bindingId;
+  const chosenBinding = candidates.length === 1 ? candidates[0]?.id : candidates.find(b => b.id === bindingId)?.id;
   const missingGrant = employee && !candidates.length ? workspaceBindingGrant(employee.nodeId, `agent.${employee.executor}`, access, nodes) : null;
-  const sources = links.filter(l => l.state === 'succeeded' && l.executionId && !reviews.some(r => r.reviewerExecution.id === l.id));
+  const sources = links.filter(l => l.state === 'succeeded' && l.executionId && !l.detached && !reviews.some(r => r.reviewerExecution.id === l.id));
   const sourceRow = sources.find(l => l.id === source);
-  // The reviewer named in my binding where the work runs: the developer's computer, or the reviewed round's binding (§20.3).
-  const autoReviewerId = [projectReviewer(project, employee?.nodeId)].find(id => !!id && id !== employeeId);
-  const reviewReviewerId = [
-    project?.bindings.find(b => b.mine && !!sourceRow?.projectBindingId && b.id === sourceRow.projectBindingId)?.reviewerEmployeeId,
-    myProjectBindings(project)[0]?.reviewerEmployeeId,
-  ].find(id => !!id && id !== sourceRow?.employeeId);
-  const canAutoReview = !!autoReviewerId && !!employeeId;
+  const sourceProjectBinding = project?.bindings.find(b => b.mine && b.id === sourceRow?.projectBindingId);
+  const sourceNode = sourceRow?.nodeId ?? sourceProjectBinding?.nodeId ?? access.find(b => b.id === sourceRow?.bindingId)?.nodeId;
+  const reviewers = authorized.filter(row => !!sourceNode && row.nodeId === sourceNode && row.employeeId !== sourceRow?.employeeId &&
+    fits(row, 'review') && (!item.projectId || !sourceRow?.workdirBindingId || !row.workdirBindingId || row.workdirBindingId === sourceRow.workdirBindingId) &&
+    matchingEmployeeBindings(target(row), access).length > 0);
+  const reviewReviewerId = sourceProjectBinding?.reviewerEmployeeId;
+  const reviewer = reviewers.find(row => row.employeeId === reviewerId);
+  const reviewBindings = matchingEmployeeBindings(target(reviewer), access);
+  const chosenReviewBinding = reviewBindings.length === 1 ? reviewBindings[0]?.id : reviewBindings.find(b => b.id === reviewBindingId)?.id;
+  const autoReviewer = defaultProjectReviewer(project, selectedRow, authorized, access, nodes);
+  const autoReview = !!autoReviewer && !manualReview;
   const locked = busy || intent.current.hasPending;
   const directoryKnown = !item.projectId || !!project || projectError;
   const disabled = locked || readOnly || !ready || !directoryKnown || !employeePages.ready || employeePages.error;
@@ -83,10 +97,12 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
   const canRecord = !!selectedReview && !selectedReview.conclusion && ['succeeded', 'failed', 'cancelled'].includes(selectedReview.reviewerExecution.state ?? '');
   const needsAcknowledge = !!selectedRow?.previousResultUnknown;
   const cause = selectedRow ? employeeCause(selectedRow, access, nodes) : undefined;
-  const canAssign = !!selectedRow && fits(selectedRow, 'develop') && !!text.trim() && !!chosenBinding && !terminal
-    && !(autoReview && !canAutoReview) && !(needsAcknowledge && !acknowledge);
-  const canRequest = !!selectedRow && fits(selectedRow, 'review') && selectedRow.employeeId !== sourceRow?.employeeId
-    && !!sourceRow?.executionId && sourceRow.state === 'succeeded' && !!description.trim() && !!chosenBinding && !terminal;
+  const canAssign = !!selectedRow?.available && !!text.trim() && !!chosenBinding && !terminal
+    && !(needsAcknowledge && !acknowledge);
+  const canRequest = !!reviewer && !!sourceRow?.executionId && !!description.trim() && !!chosenReviewBinding && !terminal;
+  useEffect(() => {
+    if (employeeId === undefined && selectedId) setEmployeeId(selectedId);
+  }, [employeeId, selectedId]);
   useEffect(() => {
     let active = true; setProject(undefined); setProjectError(false);
     if (item.projectId) void api.project(item.projectId).then(loaded => {
@@ -94,8 +110,6 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
     }).catch(() => {if (active) setProjectError(true);});
     return () => {active = false;};
   }, [api, item.projectId]);
-  // Choosing another developer decides the review again, as on the create page (§19.6).
-  useEffect(() => {setAutoReview(canAutoReview);}, [canAutoReview]);
   async function refresh() {
     const [, l, r] = await Promise.all([employeePages.refresh(), api.get<WorkExecution[]>(`/workspace/work-execution/list?workItemId=${encodeURIComponent(item.id)}`), api.get<WorkReview[]>(`/workspace/work-note/review-list?workItemId=${encodeURIComponent(item.id)}`)]);
     if (live.current) {setLinks(l); setReviews(r); setReady(true);}
@@ -147,9 +161,20 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
     {employeePages.error && <><p role="alert" className="text-sm text-destructive">{pageLabel(employeePages.errorCode ?? 'error')}</p><Button size="sm" disabled={locked || employeePages.busy} onClick={() => void employeePages.refresh()}>{pageLabel('retry')}</Button></>}
     {intent.current.hasPending && <div className="space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5"><p className="text-sm">{label('retryRecovery')}</p><Button size="sm" disabled={busy} onClick={() => void submit()}>{label('retrySame')}</Button></div>}
     <fieldset disabled={disabled} className="min-w-0 space-y-3">
-      <label className="grid gap-1.5 text-sm font-medium">{label('employees')}<select className={field} value={employeeId} onChange={e => {setEmployeeId(e.target.value); setBindingId(''); setAcknowledge('');}}><option value="">{label('employees')}</option>{employees.map(e => <option key={e.agentId} value={e.agentId}>{e.name} · {executorDisplay(e.executor)}{e.reviewOnly && ` · ${pageLabel('reviewOnly')}`}</option>)}</select></label>
+      {item.projectId && <><p className="text-sm">{pageLabel('project')}: {project?.name ?? pageLabel('unavailable')}</p>
+        <label className="grid gap-1.5 text-sm font-medium">{pageLabel('workstation')}<select aria-label={pageLabel('workstation')} className={field} value={station ?? ''} onChange={e => {setNodeId(e.target.value); setEmployeeId(undefined); setBindingId(''); setAcknowledge('');}}>
+          <option value="">{pageLabel('none')}</option>{workstations.map(b => <option key={b.id} value={b.nodeId!}>{deviceName(b.nodeId)}{nodeOffline(b.nodeId) ? ` · ${pageLabel('deviceOffline')}` : ''}</option>)}
+        </select></label>
+        {!!project && !workstations.length && <p className="text-sm"><a className="underline" href={workspaceHref({view: 'project', projectId: project.id})}>{pageLabel('bindFirst')}</a></p>}
+        {nodeOffline(station) && <p role="status" className="text-sm">{pageLabel('reasonOffline')}</p>}
+        {writableProjectDirectories(project, station).length > 1 && authorized.some(row => row.nodeId === station && !row.workdirBindingId) &&
+          <p role="status" className="text-sm">{pageLabel('ambiguousProjectDirectory')}</p>}
+      </>}
+      <label className="grid gap-1.5 text-sm font-medium">{label('employees')}<select aria-label={label('employees')} className={field} value={selectedRow?.employeeId ?? ''} disabled={!!item.projectId && !station} onChange={e => {setEmployeeId(e.target.value); setBindingId(''); setAcknowledge('');}}><option value="">{label('employees')}</option>{developers.map(row => <option key={row.employeeId} value={row.employeeId}>{employeeName(row.employeeId)} · {executorDisplay(target(row)!.executor)}</option>)}</select></label>
+      {project && selectedRow && <p data-testid="assignment-target" className="text-sm font-medium">{project.name} · {deviceName(station)} · {employeeName(selectedRow.employeeId)}</p>}
+      {directory && <p data-testid="start-directory" className="text-sm">{pageLabel('colWorkdir')}: {directory.label}</p>}
       {employeePages.hasMore && <Button type="button" variant="outline" disabled={employeePages.busy} onClick={() => void employeePages.more()}>{pageLabel('more')}</Button>}
-      {ready && !employees.length && <p role="status" className="text-sm text-muted-foreground">{pageLabel('noLinkedEmployees')}</p>}
+      {ready && !developers.length && <p role="status" className="text-sm text-muted-foreground">{pageLabel('noLinkedEmployees')}</p>}
       {cause && <p data-testid="employee-unavailable" className="text-sm text-muted-foreground">{pageLabel(employeeReasonLabel[cause])}</p>}
       {missingGrant && <div role="alert" data-testid="grant-binding" className="space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
         <p className="font-medium">{pageLabel('reasonBindingMissing')}</p>
@@ -158,21 +183,24 @@ export function WorkflowPanel({api, item, nodes, bindings, notes, readOnly, assi
       </div>}
       {candidates.length > 0 && <label className="grid gap-1.5 text-sm font-medium">{label('binding')}<select className={field} value={chosenBinding} onChange={e => setBindingId(e.target.value)}>{candidates.length > 1 && <option value="">{label('binding')}</option>}{candidates.map(b => <option key={b.id} value={b.id}>{deviceName(b.nodeId)} · {executorDisplay(employeeExecutor(b.capability) ?? b.capability)}</option>)}</select></label>}
       <label className="grid gap-1.5 text-sm font-medium">{label('assignmentText')}<textarea className={field} maxLength={16000} value={text} onChange={e => setText(e.target.value)}/></label>
-      {autoReviewerId ? <div data-testid="auto-review" className="space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
-        <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={autoReview} disabled={!canAutoReview} onChange={e => setAutoReview(e.target.checked)}/>{pageLabel('autoReview')}</label>
-        <p className="text-muted-foreground">{!canAutoReview ? pageLabel('selfReviewHint') : autoReview ? pageLabel('autoReviewBy').replace('{name}', employeeName(autoReviewerId)) : pageLabel('manualReviewHint')}</p>
-        {autoReview && canAutoReview && <details><summary className="cursor-pointer">{pageLabel('advancedSettings')}</summary><label className="grid gap-1.5 font-medium">{pageLabel('correctionRounds')}<select aria-label={pageLabel('correctionRounds')} className={field} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
+      {autoReviewer ? <div data-testid="auto-review" className="space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">
+        <label className="flex items-center gap-2 font-medium"><input type="checkbox" checked={autoReview} onChange={e => setManualReview(!e.target.checked)}/>{pageLabel('autoReview')}</label>
+        <p className="text-muted-foreground">{autoReview ? pageLabel('autoReviewBy').replace('{name}', employeeName(autoReviewer.employeeId)) : pageLabel('manualReviewHint')}</p>
+        {autoReview && <details><summary className="cursor-pointer">{pageLabel('advancedSettings')}</summary><label className="grid gap-1.5 font-medium">{pageLabel('correctionRounds')}<select aria-label={pageLabel('correctionRounds')} className={field} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
           {CORRECTION_CHOICES.map(choice => <option key={choice ?? 'unlimited'} value={choice ?? ''}>{choice == null ? pageLabel('correctionUnlimited') : pageLabel('correctionRoundsN').replace('{n}', String(choice))}</option>)}
         </select><span className="text-xs font-normal text-muted-foreground">{pageLabel('correctionRoundsHint')}</span></label></details>}
-      </div> : <p className="text-sm text-muted-foreground">{pageLabel('manualReviewHint')}</p>}
+      </div> : selectedRow && project && <p className="text-sm text-muted-foreground">{pageLabel('noEligibleReviewer')} <a className="underline" href={workspaceHref({view: 'project', projectId: project.id})}>{pageLabel('configureReviewer')}</a></p>}
       {needsAcknowledge && <label className="grid gap-1.5 text-sm font-medium">{pageLabel('acknowledgeUnknown')}<select className={field} value={acknowledge} onChange={e => setAcknowledge(e.target.value as '' | 'inspect' | 'rerun')}><option value="">{label('none')}</option><option value="inspect">{pageLabel('acknowledgeInspect')}</option><option value="rerun">{pageLabel('acknowledgeRerun')}</option></select></label>}
-      <Button disabled={!canAssign} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-execution/assign', {workItemId: item.id, version: item.version, bindingId: chosenBinding, employeeId, text, autoReview: autoReview && canAutoReview, ...(autoReview && canAutoReview ? {correctionLimit: correctionLimit === '' ? null : Number(correctionLimit)} : {}), ...(needsAcknowledge && acknowledge ? {acknowledgeUnknown: acknowledge} : {})});}}>{label('assignEmployee')}</Button>
+      <Button disabled={!canAssign} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-execution/assign', {workItemId: item.id, version: item.version, bindingId: chosenBinding, employeeId: selectedId, text, autoReview, ...(autoReview ? {correctionLimit: correctionLimit === '' ? null : Number(correctionLimit)} : {}), ...(needsAcknowledge && acknowledge ? {acknowledgeUnknown: acknowledge} : {})});}}>{item.projectId && selectedRow && !autoReview ? pageLabel('assignExistingManually') : label('assignEmployee')}</Button>
       {!assignmentOnly && <>
       <h4>{label('requestReview')}</h4>
-      {reviewReviewerId && <Button type="button" variant="outline" data-testid="default-reviewer" disabled={!employees.some(e => e.agentId === reviewReviewerId)} onClick={() => {setEmployeeId(reviewReviewerId); setBindingId(''); setAcknowledge('');}}>{pageLabel('defaultReviewer')}: {employeeName(reviewReviewerId)}</Button>}
-      <ReviewEvidenceFields links={sources} notes={notes} employeeName={employeeName} source={source} onSource={setSource} description={description} onDescription={setDescription} evidence={evidence} onEvidence={setEvidence}/>
+      <ReviewEvidenceFields links={sources} notes={notes} employeeName={employeeName} source={source} onSource={id => {setSource(id); setReviewerId(''); setReviewBindingId('');}} description={description} onDescription={setDescription} evidence={evidence} onEvidence={setEvidence}/>
+      {reviewReviewerId && <Button type="button" variant="outline" data-testid="default-reviewer" disabled={!reviewers.some(row => row.employeeId === reviewReviewerId)} onClick={() => {setReviewerId(reviewReviewerId); setReviewBindingId('');}}>{pageLabel('defaultReviewer')}: {employeeName(reviewReviewerId)}</Button>}
+      <label className="grid gap-1.5 text-sm font-medium">{pageLabel('reviewEmployee')}<select aria-label={pageLabel('reviewEmployee')} className={field} disabled={!reviewers.length} value={reviewer?.employeeId ?? ''} onChange={e => {setReviewerId(e.target.value); setReviewBindingId('');}}><option value="">{pageLabel('none')}</option>{reviewers.map(row => <option key={row.employeeId} value={row.employeeId}>{employeeName(row.employeeId)}</option>)}</select></label>
+      {sourceRow && !reviewers.length && <p role="status" className="text-sm">{pageLabel('noEligibleReviewer')}</p>}
+      {reviewBindings.length > 1 && <label className="grid gap-1.5 text-sm font-medium">{label('binding')}<select className={field} value={reviewBindingId} onChange={e => setReviewBindingId(e.target.value)}><option value="">{label('none')}</option>{reviewBindings.map(b => <option key={b.id} value={b.id}>{deviceName(b.nodeId)} · {executorDisplay(employeeExecutor(b.capability) ?? b.capability)}</option>)}</select></label>}
       <label className="grid gap-1.5 text-sm font-medium">{label('reviewInstructions')}<textarea className={field} maxLength={4000} value={instructions} onChange={e => setInstructions(e.target.value)}/></label>
-      <Button disabled={!canRequest} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-note/request-review', {workItemId: item.id, version: item.version, sourceWorkExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description, reviewerEmployeeId: employeeId, reviewerBindingId: chosenBinding, instructions});}}>{label('requestReview')}</Button>
+      <Button disabled={!canRequest} onClick={() => {if (window.confirm(label('confirm'))) void submit('/workspace/work-note/request-review', {workItemId: item.id, version: item.version, sourceWorkExecutionId: source, evidenceNoteIds: evidence, evidenceDescription: description, reviewerEmployeeId: reviewer?.employeeId, reviewerBindingId: chosenReviewBinding, instructions});}}>{label('requestReview')}</Button>
       <h4>{label('reviewRecords')}</h4>
       {reviews.map(r => <article key={r.noteId} className="space-y-1 rounded-[8px] border bg-sidebar p-3 text-sm break-words">
         <p className="font-medium">{employeeName(r.reviewerEmployeeId)} · {new Date(r.createdAt).toLocaleString()}</p>
