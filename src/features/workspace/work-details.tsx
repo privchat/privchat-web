@@ -56,6 +56,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const inFlight = useRef(false);
   const mounted = useRef(false);
   const generation = useRef(0);
+  const accepted = useRef<{item: WorkItem; runs: WorkExecution[]}>({item: initial, runs: []});
   const input = useRef<HTMLTextAreaElement>(null);
   const owner = !!viewerId && viewerId === item.createdBy;
   const canEdit = owner && !readOnly && !error;
@@ -86,6 +87,16 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       if (current.id !== initial.id || current.workspaceId !== initial.workspaceId ||
           !Array.isArray(entries) || !Array.isArray(runs) || !Array.isArray(questions)) throw new Error('Invalid task snapshot');
       if (version !== generation.current) return;
+      // The room observer reconciles its own rows after this callback; fence the
+      // detail view too, before publishing any part of an older snapshot.
+      const previous = accepted.current;
+      const previousRuns = new Map(previous.runs.map(run => [run.id, run]));
+      if (current.version < previous.item.version || runs.some(run => {
+        const old = previousRuns.get(run.id);
+        return !run.detached && old && old.executionId === run.executionId &&
+          old.stateVersion != null && run.stateVersion != null && run.stateVersion < old.stateVersion;
+      })) return previous.item;
+      accepted.current = {item: current, runs};
       setItem(current); setSnapshot({entries, runs, questions}); setError(false); setDenied(false);
       return current;
     } catch (failure) {

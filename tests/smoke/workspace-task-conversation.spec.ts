@@ -9,6 +9,8 @@ async function fixture(page: Page, {entries = [] as object[], owner = 'test-owne
   const writes: {path: string; body: Record<string, unknown>}[] = [];
   let timeline = entries;
   let state = 'open';
+  let version = 2;
+  let reads = 0;
   await page.goto('/');
   await page.route('**/__task/app/**', async route => {
     const url = new URL(route.request().url());
@@ -34,7 +36,10 @@ async function fixture(page: Page, {entries = [] as object[], owner = 'test-owne
       data = reviews;
     }
     if (path.endsWith('/workspace/get/w')) data = {id: 'w', name: 'Team', archived: 0, myRole: 'owner'};
-    if (path.endsWith('/work-item/get/2')) data = {id: '2', workspaceId: 'w', title: 'Reconnect task', description: '', createdBy: owner, version: 2, status: state};
+    if (path.endsWith('/work-item/get/2')) {
+      reads++;
+      data = {id: '2', workspaceId: 'w', title: 'Reconnect task', description: '', createdBy: owner, version, status: state};
+    }
     if (path.endsWith('/employee/list')) data = [{employeeId: '12', name: 'Ada'}];
     if (path.endsWith('/employee/page')) data = {items: [], hasMore: false, nextCursor: null};
     if (path.endsWith('/sessions/records')) data = {items: [{seq: 1, executionId: '77', eventId: '1', protocolVersion: 1, kind: 'output', payload: {items: [
@@ -50,8 +55,47 @@ async function fixture(page: Page, {entries = [] as object[], owner = 'test-owne
     mountWorkspacePage(`${location.origin}/__task/app`, hash);
   }, path);
   await mount();
-  return {writes, mount};
+  return {writes, mount, reads: () => reads, replace: (nextState: string, nextVersion: number, nextRuns?: object[], nextTimeline = timeline) => {
+    state = nextState;
+    version = nextVersion;
+    runs = nextRuns;
+    timeline = nextTimeline;
+  }};
 }
+
+test('repeated catch-up reads cannot reopen a completed task or dispatch work', async ({page}) => {
+  const {writes, reads, replace} = await fixture(page, {entries: [request, {...developer, state: 'succeeded'}, review]});
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', {name: 'Confirm completion'}).click();
+  const done = page.getByRole('status').filter({hasText: 'Done'});
+  await expect(done).toBeVisible();
+  replace('open', 1);
+  for (let i = 0; i < 2; i++) {
+    const before = reads();
+    const response = page.waitForResponse(r => r.url().endsWith('/work-decision/list?workItemId=2'));
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await (await response).finished();
+    await expect.poll(reads).toBeGreaterThan(before);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await expect(done).toBeVisible();
+  }
+  await expect(page.getByRole('button', {name: 'Confirm completion'})).toHaveCount(0);
+  expect(writes.map(w => w.path)).toEqual(['/workspace/work-item/update-status']);
+});
+
+test('catch-up preserves execution progress even when the task version is unchanged', async ({page}) => {
+  const finished = {id: '7', executionId: '77', state: 'succeeded', stateVersion: 4};
+  const {writes, replace} = await fixture(page, {entries: [request, {...developer, state: 'succeeded'}, review], runs: [finished]});
+  const completion = page.getByRole('button', {name: 'Confirm completion'});
+  await expect(completion).toBeVisible();
+  replace('open', 2, [{...finished, state: 'running', stateVersion: 3}], [request, developer]);
+  const response = page.waitForResponse(r => r.url().endsWith('/work-execution/list?workItemId=2'));
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await (await response).finished();
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await expect(completion).toBeVisible();
+  expect(writes).toEqual([]);
+});
 
 test('unassigned task shows an actionable handoff, not an idle composer or raw author ID', async ({page}) => {
   await page.setViewportSize({width: 390, height: 844});
