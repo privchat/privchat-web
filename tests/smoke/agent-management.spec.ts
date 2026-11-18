@@ -151,7 +151,7 @@ test('workflow assigns, snapshots source link and explicitly records a human rev
   await page.evaluate(async ({item, node, binding, note}) => {const {mountWorkflow} = await import('/src/test-harness/workspace-console.tsx'); mountWorkflow(`${location.origin}/__manage/app`, item, [node], [binding], [note]);}, {item, node, binding, note});
   const p = page.getByTestId('workflow-panel');
   await p.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3');
-  await p.getByRole('combobox', {name: /^Authorized capability/}).selectOption('6');
+  await expect(p.getByRole('combobox', {name: /^Authorized capability/})).toHaveCount(0);
   await p.getByLabel('Work instructions', {exact: true}).fill('Implement core');
   await p.getByRole('button', {name: 'Assign to employee'}).click();
   await expect.poll(() => posts.length).toBe(1);
@@ -230,7 +230,7 @@ test('blocked assignment receipt keeps original request and never reports succes
   });
   await page.evaluate(async ({item, node, binding}) => {const {mountWorkflow} = await import('/src/test-harness/workspace-console.tsx'); mountWorkflow(`${location.origin}/__manage/app`, item, [node], [binding], []);}, {item, node, binding});
   const panel = page.getByTestId('workflow-panel');
-  await panel.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3'); await panel.getByRole('combobox', {name: /^Authorized capability/}).selectOption('6');
+  await panel.getByRole('combobox', {name: /^Virtual employees/}).selectOption('3'); await expect(panel.getByRole('combobox', {name: /^Authorized capability/})).toHaveCount(0);
   await panel.getByLabel('Work instructions', {exact: true}).fill('Keep original identity'); await panel.getByRole('button', {name: 'Assign to employee'}).click();
   await expect(panel.getByTestId('delivery-blocked')).toContainText('execution delivery is blocked'); await expect(panel.getByTestId('delivery-blocked')).not.toContainText('AUTHORITY_CHANGED_PRIVATE_DETAIL');
   await expect(panel.getByRole('status')).toHaveCount(0); expect(await panel.evaluate(el => el.parentElement?.dataset.execution ?? '')).toBe('');

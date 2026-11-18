@@ -203,10 +203,9 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
         <Button type="button" variant="outline" size="sm" onClick={() => openSetup({view: 'project', projectId})}>{l('bindMyDirs')}</Button>
       </div>}
       {row && <p data-testid="assignment-target" className="py-2 text-sm font-medium">{selectedProject?.name} · {nodeName(nodeId)} · {row.name || l('unnamedEmployee')}</p>}
-      {employee && <div className="my-2 space-y-1 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm text-muted-foreground">
-        <p>{l('sessionHint')}</p><p>{l('privateNotImported')}</p><p>{l('sessionUnknown')}</p>
-        {directory && <p data-testid="start-directory">{l('colWorkdir')}: {directory.label} · {l(directory.access === 'write' ? 'accessWrite' : 'accessRead')}</p>}
-      </div>}
+      {employee && directory && <p data-testid="start-directory" className="text-sm text-muted-foreground">
+        {l('colWorkdir')}: {directory.label} · {l(directory.access === 'write' ? 'accessWrite' : 'accessRead')}
+      </p>}
       {employee?.previousResultUnknown && <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('acknowledgeUnknown')}<select className={wsField} value={acknowledge} onChange={e => setAcknowledge(e.target.value as '' | 'inspect' | 'rerun')}><option value="">{l('none')}</option><option value="inspect">{l('acknowledgeInspect')}</option><option value="rerun">{l('acknowledgeRerun')}</option></select></label>}
       {matching.length > 1 && <label className="grid gap-1.5 py-[13px] text-sm font-medium">{l('binding')}<select className={wsField} value={bindingId} onChange={e => setBindingId(e.target.value)}><option value="">{l('none')}</option>{matching.map(b => <option key={b.id} value={b.id}>{nodes.find(n => n.nodeId === b.nodeId)?.name || b.nodeId} · {executorDisplay(employeeExecutor(b.capability) ?? b.capability)}</option>)}</select></label>}
       {(employee || intent.assignment) && <div data-testid="auto-review" className="my-2 space-y-2 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm">

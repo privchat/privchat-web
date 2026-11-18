@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PlatformApiError } from '@/lib/platform-errors';
 import type { Employee, Node, Project, ProjectBindingDirectoryWrite, Workspace, WorkspaceApi } from './api';
-import { BINDING_DIRECTORY_LIMIT, BINDING_NOTES_LIMIT, ROUND_END_LIMIT } from './api';
+import { BINDING_DIRECTORY_LIMIT, ROUND_END_LIMIT } from './api';
 import { TaskHistory } from './task-history';
 import { usePageLabels } from './page-labels';
 import { navigateWorkspace } from './routes';
@@ -60,24 +60,20 @@ export function ProjectCreate({api, workspaceId}: {api: WorkspaceApi; workspaceI
   const [spaces, setSpaces] = useState<Workspace[]>([]);
   const [selected, setSelected] = useState(workspaceId ?? '');
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [roundEnd, setRoundEnd] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   useEffect(() => {let live = true; void api.list().then(rows => {if (live) setSpaces(rows);}).catch(() => {if (live) setError(true);}); return () => {live = false;};}, [api]);
   const manageable = spaces.filter(s => s.archived === 0 && ['owner', 'admin'].includes(s.myRole));
-  return <form className="mx-auto max-w-lg space-y-4 rounded-lg border bg-card p-6" data-testid="project-create" onSubmit={async e => {e.preventDefault(); if (busy || !selected || !name.trim()) return; setBusy(true); setError(false); try {const project = await api.createProject({workspaceId: selected, name, description, roundEnd}); navigateWorkspace({view: 'project', projectId: project.id});} catch {setError(true);} finally {setBusy(false);}}}>
+  const validWorkspace = manageable.some(space => space.id === selected);
+  return <form className="mx-auto max-w-lg space-y-4 rounded-lg border bg-card p-6" data-testid="project-create" onSubmit={async e => {e.preventDefault(); if (busy || !validWorkspace || !name.trim()) return; setBusy(true); setError(false); try {const project = await api.createProject({workspaceId: selected, name}); navigateWorkspace({view: 'project', projectId: project.id});} catch {setError(true);} finally {setBusy(false);}}}>
     <h2 className="text-lg font-bold">{l('createProject')}</h2>
     {error && <p role="alert">{l('error')}</p>}
     <fieldset disabled={busy} className="space-y-4">
-      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('workspace')}</span><select required className={workspaceField} value={selected} onChange={e => setSelected(e.target.value)}><option value="">{l('none')}</option>{manageable.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+      {!workspaceId && <label className="block space-y-1.5"><span className="text-sm font-medium">{l('workspace')}</span><select required className={workspaceField} value={selected} onChange={e => setSelected(e.target.value)}><option value="">{l('none')}</option>{manageable.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
       <label className="block space-y-1.5"><span className="text-sm font-medium">{l('name')}</span><input required maxLength={64} className={workspaceField} value={name} onChange={e => setName(e.target.value)}/></label>
-      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('description')}</span><textarea className={workspaceField} rows={3} maxLength={2000} value={description} onChange={e => setDescription(e.target.value)}/></label>
-      <label className="block space-y-1.5"><span className="text-sm font-medium">{l('roundEnd')}</span><textarea aria-label={l('roundEnd')} className={workspaceField} rows={3} placeholder={l('roundEndDefault')} value={roundEnd} onChange={e => setRoundEnd(e.target.value.slice(0, ROUND_END_LIMIT))}/></label>
-      <p className="text-sm text-muted-foreground">{l('roundEndHint')}</p>
       <div className="flex justify-end gap-2">
         <Button variant="outline" type="button" disabled={busy} onClick={() => navigateWorkspace({view: 'projects', workspaceId})}>{l('cancel')}</Button>
-        <Button type="submit" disabled={busy || !selected || !name.trim()}>{l('save')}</Button>
+        <Button type="submit" disabled={busy || !validWorkspace || !name.trim()}>{l('save')}</Button>
       </div>
     </fieldset>
   </form>;
@@ -97,6 +93,7 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
   const [bindNodeId, setBindNodeId] = useState('');
   const [bindDirId, setBindDirId] = useState('');
   const [bindAccess, setBindAccess] = useState<'write' | 'read'>('write');
+  const [bindReviewerId, setBindReviewerId] = useState('');
   const [bindNeedsGrant, setBindNeedsGrant] = useState(false);
   const [history, setHistory] = useState(false);
   const [error, setError] = useState(false);
@@ -136,7 +133,7 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
   const employeeName = (id: string) => employees.find(e => e.agentId === id)?.name || l('unnamedEmployee');
   const bindWorkdirs = nodes.find(n => n.nodeId === bindNodeId)?.workdirs ?? [];
   // The first directory of a binding is changeable, the others read-only until switched (§20.3).
-  function openBind() {setBindNodeId(nodes.length === 1 ? nodes[0]?.nodeId ?? '' : ''); setBindDirId(''); setBindAccess('write'); setBindNeedsGrant(false); setBindOpen(true);}
+  function openBind() {setBindNodeId(nodes.length === 1 ? nodes[0]?.nodeId ?? '' : ''); setBindDirId(''); setBindAccess('write'); setBindReviewerId(''); setBindNeedsGrant(false); setBindOpen(true);}
   async function saveBind() {
     if (!project || !bindNodeId || !bindDirId) return;
     const existing = (targetBinding?.directories ?? []).filter(d => d.workdirBindingId).map(d => ({workdirBindingId: d.workdirBindingId!, access: d.access}));
@@ -145,7 +142,7 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
     await act(async () => {
       setBindNeedsGrant(false);
       try {
-        await api.saveProjectBinding({projectId: project.id, nodeId: bindNodeId, directories, notes: targetBinding?.notes ?? '', reviewerEmployeeId: targetBinding?.reviewerEmployeeId ?? null, ...(targetBinding?.version === undefined ? {} : {version: targetBinding.version})});
+        await api.saveProjectBinding({projectId: project.id, nodeId: bindNodeId, directories, notes: targetBinding?.notes ?? '', reviewerEmployeeId: targetBinding?.reviewerEmployeeId ?? (bindReviewerId || null), ...(targetBinding?.version === undefined ? {} : {version: targetBinding.version})});
       } catch (e) {
         if (!(e instanceof PlatformApiError) || e.machineCode !== 'AGENT_CAPABILITY_NOT_GRANTED') throw e;
         setBindNeedsGrant(true);
@@ -201,7 +198,6 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
           {canBind && <Button variant="outline" disabled={busy} onClick={() => setDraft({id: mine.id, version: mine.version, nodeId: mine.nodeId ?? '', directories: mine.directories.filter(d => d.workdirBindingId).map(d => ({workdirBindingId: d.workdirBindingId!, access: d.access})), notes: mine.notes ?? '', reviewerEmployeeId: mine.reviewerEmployeeId ?? ''})}>{l('edit')}</Button>}
         </article>)}
         {!draft && !myBindings.length && <p>{l('noBinding')}</p>}
-        {!draft && canBind && !myBindings.length && <Button disabled={busy} onClick={() => setDraft({nodeId: '', directories: [], notes: '', reviewerEmployeeId: ''})}>{l('create')}</Button>}
         {draft && <form className="space-y-3" onSubmit={e => {e.preventDefault(); if (!draft.nodeId || !draft.directories.length) return; void act(async () => {await api.saveProjectBinding({projectId: project.id, nodeId: draft.nodeId, directories: draft.directories, notes: draft.notes, reviewerEmployeeId: draft.reviewerEmployeeId || null, ...(draft.version === undefined ? {} : {version: draft.version})}); setDraft(undefined);}, true);}}>
           <fieldset disabled={busy || stale} className="space-y-3">
             <label>{l('node')}<select required disabled={!!draft.id} className={workspaceField} value={draft.nodeId} onChange={e => setDraft({...draft, nodeId: e.target.value, directories: [], reviewerEmployeeId: ''})}><option value="">{l('none')}</option>{draft.nodeId && !nodes.some(n => n.nodeId === draft.nodeId) && <option value={draft.nodeId}>{l('unavailable')}</option>}{nodes.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select></label>
@@ -212,7 +208,6 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
               <Button type="button" variant="ghost" onClick={() => setDraft({...draft, directories: draft.directories.filter((_, i) => i !== index), reviewerEmployeeId: ''})}>{l('remove')}</Button>
             </div>)}
             {draft.directories.length < BINDING_DIRECTORY_LIMIT && <label>{l('addDirectory')}<select className={workspaceField} value="" disabled={!draft.nodeId} onChange={e => {if (e.target.value) setDraft({...draft, directories: [...draft.directories, {workdirBindingId: e.target.value, access: draft.directories.length ? 'read' : 'write'}]});}}><option value="">{l('none')}</option>{workdirs.filter(w => !draft.directories.some(d => d.workdirBindingId === w.id)).map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select></label>}
-            <label>{l('notes')}<textarea className={workspaceField} rows={2} maxLength={BINDING_NOTES_LIMIT} value={draft.notes} onChange={e => setDraft({...draft, notes: e.target.value})}/></label>
             <label>{l('defaultReviewer')}<select aria-label={l('defaultReviewer')} className={workspaceField} value={draft.reviewerEmployeeId} onChange={e => setDraft({...draft, reviewerEmployeeId: e.target.value})}><option value="">{l('none')}</option>{draft.reviewerEmployeeId && !reviewerCandidates.some(e => e.agentId === draft.reviewerEmployeeId) && <option value={draft.reviewerEmployeeId} disabled>{employeeName(draft.reviewerEmployeeId)} · {l('unavailable')}</option>}{reviewerCandidates.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select><span className="text-xs text-muted-foreground">{l('defaultReviewerHint')}</span></label>
             <Button type="submit" disabled={busy || stale || !draft.nodeId || !draft.directories.length}>{l('save')}</Button>
             {draft.id && <Button type="button" variant="destructive" disabled={busy || stale} onClick={() => {if (window.confirm(l('deleteBindingConfirm'))) void act(async () => {await api.deleteProjectBinding(draft.id!); setDraft(undefined);}, true);}}>{l('deleteBinding')}</Button>}
@@ -239,14 +234,22 @@ export function ProjectDetail({api, projectId, renderSession}: {api: WorkspaceAp
         </DialogHeader>
         <form className="space-y-4" onSubmit={e => {e.preventDefault(); void saveBind();}}>
           <label className="grid gap-1.5 text-sm font-medium">{l('deviceNode')}
-            <select required className={workspaceField} value={bindNodeId} disabled={busy} onChange={e => {setBindNodeId(e.target.value); setBindDirId(''); setBindNeedsGrant(false);}}><option value="">{l('none')}</option>{nodes.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select>
+            <select required className={workspaceField} value={bindNodeId} disabled={busy} onChange={e => {setBindNodeId(e.target.value); setBindDirId(''); setBindReviewerId(''); setBindNeedsGrant(false);}}><option value="">{l('none')}</option>{nodes.map(n => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}</select>
           </label>
           <label className="grid gap-1.5 text-sm font-medium">{l('dirPath')}
-            <select required className={`${workspaceField} appearance-none`} value={bindDirId} disabled={busy || !bindNodeId} onChange={e => {setBindDirId(e.target.value); const saved = targetBinding?.directories.find(d => d.workdirBindingId === e.target.value); setBindAccess(saved ? saved.access : targetBinding?.directories.length ? 'read' : 'write');}}><option value=""></option>{bindWorkdirs.filter(w => (targetBinding?.directories.length ?? 0) < BINDING_DIRECTORY_LIMIT || targetBinding?.directories.some(d => d.workdirBindingId === w.id)).map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select>
+            <select required className={`${workspaceField} appearance-none`} value={bindDirId} disabled={busy || !bindNodeId} onChange={e => {setBindDirId(e.target.value); setBindReviewerId(''); const saved = targetBinding?.directories.find(d => d.workdirBindingId === e.target.value); setBindAccess(saved ? saved.access : targetBinding?.directories.length ? 'read' : 'write');}}><option value=""></option>{bindWorkdirs.filter(w => (targetBinding?.directories.length ?? 0) < BINDING_DIRECTORY_LIMIT || targetBinding?.directories.some(d => d.workdirBindingId === w.id)).map(w => <option key={w.id} value={w.id}>{w.label}</option>)}</select>
           </label>
           <label className="grid gap-1.5 text-sm font-medium">{l('accessPermission')}
             <select className={workspaceField} value={bindAccess} disabled={busy} onChange={e => setBindAccess(e.target.value as 'write' | 'read')}><option value="write">{l('accessWrite')}</option><option value="read">{l('accessRead')}</option></select>
           </label>
+          {!targetBinding && bindDirId && employees.some(e => e.nodeId === bindNodeId && (!e.workdirBindingId || e.workdirBindingId === bindDirId)) &&
+            <label className="grid gap-1.5 text-sm font-medium">{l('defaultReviewer')}
+              <select className={workspaceField} value={bindReviewerId} disabled={busy} onChange={e => setBindReviewerId(e.target.value)}>
+                <option value="">{l('none')}</option>
+                {employees.filter(e => e.nodeId === bindNodeId && (!e.workdirBindingId || e.workdirBindingId === bindDirId))
+                  .map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}
+              </select>
+            </label>}
           {bindNeedsGrant && project && <div role="alert" className="space-y-2 text-sm">
             <p>{l('bindGrantRequired')}</p>
             <Button type="button" size="sm" variant="outline" onClick={() => navigateWorkspace({view: 'employees', spaceId: project.workspaceId})}>{l('navEmployees')}</Button>

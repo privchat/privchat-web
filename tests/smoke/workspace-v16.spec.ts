@@ -172,7 +172,7 @@ async function openSettings(page: Page) {
   return page.getByTestId('space-settings');
 }
 
-test('project creation requires a manageable workspace and sends no legacy fields', async ({page}) => {
+test('project creation uses the current workspace and only asks for a name', async ({page}) => {
   const requests = await mock(page, (path, _query, body) => {
     if (path === '/workspace/project/create') return {...project, id: 'p-new', name: body.name};
     if (path === '/workspace/project/get/p-new') return {...project, id: 'p-new', name: 'Independent'};
@@ -181,10 +181,9 @@ test('project creation requires a manageable workspace and sends no legacy field
   await openProjects(page);
   await page.getByRole('button', {name: 'Create project', exact: true}).click();
   const form = page.getByTestId('project-create');
-  const select = form.getByRole('combobox', {name: 'Workspace', exact: true});
-  await expect(select.locator('option')).toHaveCount(2);
+  await expect(form.getByRole('combobox')).toHaveCount(0);
+  await expect(form.getByRole('textbox')).toHaveCount(1);
   await expect(form.getByRole('button', {name: 'Save', exact: true})).toBeDisabled();
-  await select.selectOption('w');
   await page.getByLabel('Name', {exact: true}).fill('Independent');
   await form.getByRole('button', {name: 'Save', exact: true}).click();
   await expect.poll(() => requests.filter(r => r.path === '/workspace/project/create').length).toBe(1);
@@ -221,7 +220,7 @@ test('save conflicts lock the form until reload; revoked management hides editin
   await expect(page.getByLabel('Name', {exact: true})).toHaveCount(0);
 });
 
-test('member binding saves directories with access, notes and own reviewer; others see labels only', async ({page}) => {
+test('member binding saves directories with access and own reviewer; others see labels only', async ({page}) => {
   let saved = false;
   const other = {id: 'b2', projectId: 'p', userId: 'other-user', mine: false, nodeName: 'Other laptop', directories: [{label: 'Shared repo', access: 'write'}], version: 1};
   const requests = await mock(page, (path, _query, body) => {
@@ -232,27 +231,25 @@ test('member binding saves directories with access, notes and own reviewer; othe
       {agentId: 'wrong-node', name: 'Wrong workstation', executor: 'codex', nodeId: 'other', workdirBindingId: ''},
     ];
     if (path === '/workspace/project/binding/save') {saved = true; return {...myBinding, notes: body.notes, reviewerEmployeeId: body.reviewerEmployeeId ?? null, directories: body.directories.map((d: any) => ({workdirBindingId: d.workdirBindingId, label: 'Repository', access: d.access}))};}
-    if (path === '/workspace/project/get/p') return {...project, bindings: saved ? [{...myBinding, notes: 'Handle with care', reviewerEmployeeId: 'reviewer'}, other] : [other]};
+    if (path === '/workspace/project/get/p') return {...project, bindings: saved ? [{...myBinding, notes: '', reviewerEmployeeId: 'reviewer'}, other] : [other]};
   });
   await openProjectDetail(page);
   await page.getByTestId('project-manage').locator('summary').click(); // The binding editor lives in the collapsed management section.
   const detail = page.getByTestId('project-detail');
-  const binding = detail.locator('section[aria-label="Directory binding"]');
   await expect(detail).toContainText('No binding yet');
   const others = detail.locator('section[aria-label="Other members’ bindings"]');
   await expect(others).toContainText('Other laptop'); await expect(others).toContainText('Shared repo · Write');
   await expect(others).not.toContainText('b2'); await expect(others).not.toContainText('other-user');
-  await binding.getByRole('button', {name: 'Create', exact: true}).click();
-  await binding.getByRole('combobox', {name: 'Device', exact: true}).selectOption('n');
-  await binding.getByRole('combobox', {name: 'Add directory', exact: true}).selectOption('dir');
-  await binding.getByLabel('Notes', {exact: true}).fill('Handle with care');
-  const reviewer = binding.getByRole('combobox', {name: 'Default review employee', exact: true});
+  await detail.getByRole('button', {name: 'Bind my directories', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+  await dialog.getByRole('combobox', {name: 'Directory path', exact: true}).selectOption('dir');
+  const reviewer = dialog.getByRole('combobox', {name: 'Default review employee', exact: true});
   await expect(reviewer.locator('option')).toHaveText(['None', 'Reviewer', 'Pinned reviewer']);
   await reviewer.selectOption('reviewer');
-  await binding.getByRole('button', {name: 'Save', exact: true}).click();
+  await dialog.getByRole('button', {name: 'Save binding', exact: true}).click();
   await expect.poll(() => requests.filter(r => r.path === '/workspace/project/binding/save').length).toBe(1);
-  expect(requests.find(r => r.path === '/workspace/project/binding/save')?.body).toEqual({projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'write'}], notes: 'Handle with care', reviewerEmployeeId: 'reviewer'});
-  await expect(detail).toContainText('Handle with care');
+  expect(requests.find(r => r.path === '/workspace/project/binding/save')?.body).toEqual({projectId: 'p', nodeId: 'n', directories: [{workdirBindingId: 'dir', access: 'write'}], notes: '', reviewerEmployeeId: 'reviewer'});
   await expect(detail).toContainText('Default review employee: Reviewer');
   await expect(detail).not.toContainText('Default review employee: reviewer');
   expect(requests.some(r => r.path.includes('/work-note/') || r.path.includes('/work-execution/'))).toBe(false);
@@ -277,14 +274,15 @@ for (const bound of [false, true]) test(`the bind dialog defaults the first dire
     : [{workdirBindingId: 'dir', access: 'write'}]);
 });
 
-test('the binding editor gives the first directory write access and later ones read', async ({page}) => {
-  const requests = await mock(page, path => path === '/agent/nodes' ? [{...node, workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}] : undefined);
+test('the existing binding editor keeps the first directory writable and defaults additions to read', async ({page}) => {
+  const requests = await mock(page, path => {
+    if (path === '/workspace/project/get/p') return {...project, bindings: [myBinding]};
+    if (path === '/agent/nodes') return [{...node, workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}];
+  });
   await openProjectDetail(page);
   await page.getByTestId('project-manage').locator('summary').click();
   const binding = page.getByTestId('project-detail').locator('section[aria-label="Directory binding"]');
-  await binding.getByRole('button', {name: 'Create', exact: true}).click();
-  await binding.getByRole('combobox', {name: 'Device', exact: true}).selectOption('n');
-  await binding.getByRole('combobox', {name: 'Add directory', exact: true}).selectOption('dir');
+  await binding.getByRole('button', {name: 'Edit', exact: true}).click();
   await expect(binding.getByRole('combobox', {name: 'Access', exact: true}).first()).toHaveValue('write');
   await binding.getByRole('combobox', {name: 'Add directory', exact: true}).selectOption('docs');
   await expect(binding.getByRole('combobox', {name: 'Access', exact: true}).nth(1)).toHaveValue('read');
