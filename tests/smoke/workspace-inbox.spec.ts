@@ -36,34 +36,20 @@ const decision = {key: 'decision:q1:1', kind: 'decision', workspaceId: 'w', work
   decisionId: 'q1', options: [{id: 'continue', label: 'Continue', description: 'Go on'}, {id: 'stop', label: 'Stop', description: 'Stop here'}], recommendedOptionId: 'stop'};
 const approval = {key: 'approval:e2:p1:d', kind: 'approval', workspaceId: 'w', workItemId: '22', workItemTitle: 'Task 22', createdAt: 2, actionable: true,
   summary: JSON.stringify({kind: 'tool', tool: 'session/request_permission', input: {title: 'run tests'}}), executionId: 'e2', permissionId: 'p1', requestDigest: 'd'.repeat(64), options: []};
-const opaque = {...approval, key: 'approval:e3:p2:d', executionId: 'e3', permissionId: 'p2', summary: 'run tests', workItemTitle: 'Task 23'};
-const failure = {key: 'failure:l4:5', kind: 'failure', workspaceId: 'w', workItemId: '24', workItemTitle: 'Task 24', summary: 'failed', createdAt: 1, actionable: true, state: 'unknown', options: []};
-test('inbox lists every waiting fact once and answers each through its own API with a stable request id', async ({page}) => {
-  let entries: unknown[] = [decision, approval, opaque, failure]; let fail = true;
-  const requests = await mock(page, (path, _query, body) => {
-    if (path === '/workspace/inbox/list') return {entries};
-    if (path === '/workspace/work-decision/answer') { if (fail) { fail = false; return 'abort'; } entries = entries.filter(e => e !== decision); return {}; }
-    if (path === '/agent/permissions/resolve') { entries = entries.filter(e => e !== approval); return {commandId: body.commandId, executionId: 'e2', kind: 'permission.resolve', status: 'pending'}; }
+test('the attention filter narrows the same task list without duplicating rows', async ({page}) => {
+  const requests = await mock(page, (path) => {
+    if (path === '/workspace/inbox/list') return {entries: [decision, {...decision, key: 'decision:q2:1'}, {...approval, actionable: false}]};
     return undefined;
   });
-  page.on('dialog', dialog => void dialog.accept());
-  await mount(page); await page.getByTestId('workspace-card').first().click();
-  const inbox = page.getByTestId('workspace-inbox');
-  await expect(inbox.getByTestId('inbox-entry')).toHaveCount(4);
-  await expect(inbox).toContainText('Waiting for you (4)');
-  await expect(inbox.locator('[data-kind="failure"]')).toContainText('Result not confirmed');
-  // An approval without readable details cannot be allowed remotely, only denied.
-  await expect(inbox.locator('[data-kind="approval"]').nth(1).getByRole('button', {name: 'Allow once'})).toBeDisabled();
-  const card = inbox.locator('[data-kind="decision"]');
-  await card.getByRole('button', {name: /^Stop/}).click();
-  await expect(inbox.getByRole('alert')).toBeVisible();
-  await card.getByRole('button', {name: /^Stop/}).click();
-  await expect(inbox.getByTestId('inbox-entry')).toHaveCount(3);
-  const answers = requests.filter(r => r.path === '/workspace/work-decision/answer');
-  expect(answers).toHaveLength(2);
-  expect(answers[0].body).toEqual(answers[1].body);
-  expect(answers[0].body).toMatchObject({decisionId: 'q1', optionId: 'stop'});
-  await inbox.locator('[data-kind="approval"]').first().getByRole('button', {name: 'Allow once'}).click();
-  await expect(inbox.getByTestId('inbox-entry')).toHaveCount(2);
-  expect(requests.find(r => r.path === '/agent/permissions/resolve')?.body).toMatchObject({executionId: 'e2', permissionId: 'p1', requestDigest: 'd'.repeat(64), decision: 'allow_once'});
+  await mount(page);
+  await page.getByTestId('workspace-card').first().click();
+  const tasks = page.getByTestId('task-card');
+  await expect(tasks).toHaveCount(2);
+  await expect(page.getByTestId('workspace-inbox')).toHaveCount(0);
+  expect(requests.some(request => request.path === '/workspace/inbox/list')).toBe(false);
+  await page.getByRole('button', {name: 'Needs attention', exact: true}).click();
+  await expect(tasks).toHaveCount(1);
+  await expect(tasks.first()).toContainText('Task 21');
+  await page.getByRole('button', {name: 'All', exact: true}).click();
+  await expect(tasks).toHaveCount(2);
 });

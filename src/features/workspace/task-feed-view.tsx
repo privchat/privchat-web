@@ -33,7 +33,7 @@ function relativeTime(value: number, language: string): string {
   return new Date(value).toLocaleDateString(language);
 }
 
-export function TaskFeed({api, client, workspaceId, projectId, employeeId, unprojected, view, enabled = true, projects = [], onOpen, statusFilter = 'all', search = ''}: TaskScope & {api: WorkspaceApi; client?: PrivchatClient; view: 'active' | 'history'; enabled?: boolean; projects?: import('./api').Project[]; onOpen: (row: WorkspaceActivity) => void; statusFilter?: TaskStatusCategory | 'all'; search?: string}) {
+export function TaskFeed({api, client, workspaceId, projectId, employeeId, unprojected, view, enabled = true, projects = [], onOpen, statusFilter = 'all', search = ''}: TaskScope & {api: WorkspaceApi; client?: PrivchatClient; view: 'active' | 'history'; enabled?: boolean; projects?: import('./api').Project[]; onOpen: (row: WorkspaceActivity) => void; statusFilter?: TaskStatusCategory | 'all' | 'attention'; search?: string}) {
   const activeOnly = view === 'active';
   const loadedPages = useRef(1);
 
@@ -57,8 +57,34 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
   const currentRows = useRef(rows); currentRows.current = rows;
   const base = activeOnly ? unfinishedTaskFeed(rows) : rows;
   const query = search.trim().toLowerCase();
-  const visibleRows = base.filter(row =>
-    (statusFilter === 'all' || taskStatusCategory(row) === statusFilter) &&
+  const [attention, setAttention] = useState<Set<string>>();
+  const [attentionError, setAttentionError] = useState(false);
+  const [attentionRevision, setAttentionRevision] = useState(0);
+  useEffect(() => {
+    if (!enabled || statusFilter !== 'attention' || !workspaceId) return;
+    let active = true;
+    let loading = false;
+    const loadAttention = () => {
+      if (loading) return;
+      loading = true;
+      void api.inbox(workspaceId).then(({entries}) => {
+        if (!active) return;
+        setAttention(new Set(entries.filter(entry => entry.workspaceId === workspaceId && entry.actionable).map(entry => entry.workItemId)));
+        setAttentionError(false);
+      }).catch(() => {if (active) {setAttention(undefined); setAttentionError(true);}}).finally(() => {loading = false;});
+    };
+    loadAttention();
+    const timer = setInterval(loadAttention, 15000);
+    return () => {active = false; clearInterval(timer); setAttention(undefined); setAttentionError(false);};
+  }, [api, enabled, statusFilter, workspaceId, attentionRevision]);
+  const byProject = new Map<string | null, WorkspaceActivity[]>();
+  for (const row of base) {
+    const key = row.item.projectId ?? null;
+    const group = byProject.get(key);
+    if (group) group.push(row); else byProject.set(key, [row]);
+  }
+  const visibleRows = [...byProject.values()].flat().filter(row =>
+    (statusFilter === 'all' || (statusFilter === 'attention' ? attention?.has(row.item.id) : taskStatusCategory(row) === statusFilter)) &&
     (!query || row.item.title.toLowerCase().includes(query)));
   function remember() {
     const host = viewport.current;
@@ -166,7 +192,8 @@ export function TaskFeed({api, client, workspaceId, projectId, employeeId, unpro
       {error && <p role="alert" className="text-sm">{denied ? l('accessDenied') : l('error')}</p>}
     </div>}
     <div ref={viewport} data-testid="task-feed-scroll">
-      {!visibleRows.length && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : activeOnly ? 'activeEmpty' : 'empty')}</p>}
+      {statusFilter === 'attention' && attentionError && <div role="alert" className="flex items-center gap-2 py-3 text-sm text-destructive">{l('error')}<Button size="sm" variant="outline" onClick={() => setAttentionRevision(value => value + 1)}>{l('retry')}</Button></div>}
+      {!visibleRows.length && !(statusFilter === 'attention' && attentionError) && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy || (statusFilter === 'attention' && !attention) ? 'loading' : activeOnly ? 'activeEmpty' : 'empty')}</p>}
       {visibleRows.length > 0 && <WsTable head={<>
         <WsTh>{l('colTask')}</WsTh><WsTh>{l('project')}</WsTh><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colStatus')}</WsTh><WsTh>{l('colUpdated')}</WsTh>
       </>}>

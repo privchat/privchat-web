@@ -81,6 +81,8 @@ test('lost task instruction response survives reload and retries the original re
 
 test('manual workflow opens review controls without changing the task', async ({page}) => {
   const {writes} = await fixture(page, {entries: [request, {...developer, state: 'succeeded'}]});
+  await expect(page.getByRole('button', {name: 'Manual workflow'})).toHaveCount(0);
+  await page.getByTestId('task-manage').click();
   await page.getByRole('button', {name: 'Manual workflow'}).click();
   await expect(page.getByRole('dialog').getByLabel('Review conclusion')).toHaveValue('');
   expect(writes).toEqual([]);
@@ -140,6 +142,9 @@ test('conversation shows bound delivery evidence and separates advice from a rec
   const {writes} = await fixture(page, {entries: [delivered, reviewed, boundCycle], runs: [sourceRun, reviewRun],
     reviews: [frozen, {...frozen, reviewerExecution: {...reviewRun, id: 'other'}, evidenceDescription: 'Wrong round'}], owner: 'other'});
   const summary = page.getByTestId('delivery-summary');
+  await expect(summary.getByText('Artifact digest 4fa9', {exact: false})).toBeHidden();
+  await summary.locator('summary').click();
+  await expect(summary.getByText('Artifact digest 4fa9', {exact: false})).toBeVisible();
   for (const value of ['Reviewer recommends passing (not acceptance)', '7 · v2', 'Artifact digest 4fa9', '#18', 'Offline case still fails', 'unverified']) {
     await expect(summary).toContainText(value);
   }

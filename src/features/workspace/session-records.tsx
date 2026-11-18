@@ -5,7 +5,7 @@ import type { WorkspaceApi, ArchivedNodeEvent } from './api';
 import { useReadPage } from './read-page';
 import { publicRecords, validateSessionRecordsPage } from './public-records';
 
-export function SessionRecords({api, executionId, onDenied}: {api: WorkspaceApi; executionId: string; onDenied: () => void}) {
+export function SessionRecords({api, executionId, onDenied, embedded = false}: {api: WorkspaceApi; executionId: string; onDenied: () => void; embedded?: boolean}) {
   const {t} = useTranslation();
   const label = (key: string) => t(`agentWorkspace.${key}`);
   const load = useCallback(async (cursor?: string) => {
@@ -14,8 +14,8 @@ export function SessionRecords({api, executionId, onDenied}: {api: WorkspaceApi;
   }, [api, executionId]);
   const records = useReadPage(load, (event: ArchivedNodeEvent) => String(event.seq));
   useEffect(() => { if (records.status === 'denied') onDenied(); }, [records.status, onDenied]);
-  return <section data-testid="session-records" className="min-w-0 space-y-3 rounded border p-3">
-    <h3 className="font-semibold">{label('archivedRecords')}</h3>
+  return <section data-testid="session-records" className={`min-w-0 space-y-3 ${embedded ? 'border-l pl-3' : 'rounded border p-3'}`}>
+    {!embedded && <h3 className="font-semibold">{label('archivedRecords')}</h3>}
     <p className="text-sm text-muted-foreground">{label('archiveCoverage')}</p>
     {records.page && <p>{label('lastArchivedSeq')}: {records.page.lastArchivedSeq}</p>}
     {records.gap && <p role="status">{label('archiveGap')}</p>}

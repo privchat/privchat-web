@@ -14,7 +14,6 @@ import { taskSetupDraft } from './create-item-storage';
 import { SpaceEmployees } from './space-employees';
 import { EmployeeDetail } from './employee-detail';
 import { WorkDetails } from './work-details';
-import { WorkspaceInbox } from './inbox';
 import { roomFailure } from './room-observer';
 import { navigateWorkspace, parseWorkspaceRoute, scopedWorkspaceRoute, workspaceHref, type WorkspaceRoute } from './routes';
 import { WorkspaceShell, WsChip, WsChipGroup, WsPageHeader } from './shell';
@@ -160,7 +159,7 @@ function SpaceView({api, client, spaceId, preferenceKey, onRemember}: {api: Work
   const [space, setSpace] = useState<Workspace>();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState('');
-  const [statusFilter, setStatusFilter] = useState<TaskStatusCategory | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<TaskStatusCategory | 'all' | 'attention'>('all');
   const [search, setSearch] = useState('');
   const [error, setError] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -193,12 +192,9 @@ function SpaceView({api, client, spaceId, preferenceKey, onRemember}: {api: Work
     {!space && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l(busy ? 'loading' : 'empty')}</p>}
     {space && <>
       {readOnly && <p className="mb-3 text-sm text-muted-foreground">{l('readOnly')}</p>}
-      <WorkspaceInbox key={`inbox:${spaceId}`} api={api} workspaceId={spaceId} hideWhenEmpty onOpenTask={entry => {
-        if (entry.workspaceId === spaceId) navigateWorkspace({view: 'item', spaceId, itemId: entry.workItemId, executionId: entry.executionId ?? undefined});
-      }}/>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <WsChipGroup label={l('colStatus')}>
-          {([['all', 'statusAll'], ['pending', 'statusPending'], ['running', 'statusRunning'], ['review', 'statusReview'], ['done', 'statusDone']] as const).map(([key, label]) => <WsChip key={key} active={statusFilter === key} onClick={() => setStatusFilter(key)}>{l(label)}</WsChip>)}
+          {([['all', 'statusAll'], ['attention', 'needsAttention'], ['pending', 'statusPending'], ['running', 'statusRunning'], ['review', 'statusReview'], ['done', 'statusDone']] as const).map(([key, label]) => <WsChip key={key} active={statusFilter === key} onClick={() => setStatusFilter(key)}>{l(label)}</WsChip>)}
         </WsChipGroup>
         <div className="flex flex-wrap items-center gap-2">
           <select aria-label={l('project')} className={`${workspaceField} w-auto`} value={projectId} onChange={e => setProjectId(e.target.value)}><option value="">{l('allProjects')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>

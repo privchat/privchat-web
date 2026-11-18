@@ -38,8 +38,8 @@ export function currentReview(item: WorkItem, entries: TaskEntry[], runs: WorkEx
 export function DeliverySummary({review, loading}: {review?: WorkReview; loading: boolean}) {
   const l = usePageLabels();
   const {t} = useTranslation();
-  return <section data-testid="delivery-summary" className="my-4 space-y-1 break-words rounded-xl border bg-card p-4 text-sm">
-    <h2 className="font-semibold">{l('deliverySummary')}</h2>
+  return <details data-testid="delivery-summary" className="my-4 space-y-2 break-words text-sm text-muted-foreground">
+    <summary className="cursor-pointer font-medium">{l('deliverySummary')}</summary>
     {review && <>
       <p>{l('deliveryRecommendation')}</p>
       <FrozenReviewEvidence review={review}/>
@@ -49,5 +49,5 @@ export function DeliverySummary({review, loading}: {review?: WorkReview; loading
       </>}
     </>}
     <p className="text-muted-foreground">{l(loading ? 'loading' : review ? 'unverifiedRemainder' : 'unverifiedDelivery')}</p>
-  </section>;
+  </details>;
 }

@@ -192,18 +192,17 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const status = terminal ? label(`status_${item.status}`) : paused ? l(working ? 'taskPausing' : 'taskPaused')
     : working ? `${name(working)} · ${label(`execution_${working.state}`)}`
     : queued ? l('taskDirectoryQueue')
-    : question ? l('taskDecision') : passed ? l(deliveryReview ? 'taskReviewPassed' : 'unverifiedDelivery') : developer?.state === 'unknown' ? label('unknown') : undefined;
+    : passed ? l(deliveryReview ? 'taskReviewPassed' : 'unverifiedDelivery') : !question && developer?.state === 'unknown' ? label('unknown') : undefined;
 
   if (denied) return <section className="space-y-3"><Button variant="ghost" onClick={onBack}>{l('back')}</Button><p role="alert">{l('accessDenied')}</p></section>;
 
-  return <section className="mx-auto w-full min-w-0 max-w-[800px]" data-testid="task-conversation-page">
+  return <section className="mx-auto w-full min-w-0 max-w-[740px]" data-testid="task-conversation-page">
     <header className="flex items-center gap-3 border-b pb-4">
       <Button variant="ghost" size="icon" onClick={onBack} disabled={locked} aria-label={l('back')}><ArrowLeft className="h-4 w-4" /></Button>
       <div className="min-w-0 flex-1">
         <h1 className="break-words text-xl font-semibold tracking-tight">{item.title}</h1>
         {(developer || reviewer) && <p className="mt-1 break-words text-xs text-muted-foreground">{[developer, reviewer].flatMap(turn => turn ? [name(turn)] : []).join(' · ')}</p>}
       </div>
-      {snapshot && canEdit && !terminal && <Button variant="outline" size="sm" disabled={locked || busy || intent.hasPending} onClick={() => setMode('manual')}>{l('manualWorkflow')}</Button>}
       <Button data-testid="task-manage" variant="ghost" size="icon" aria-label={l('taskInfo')} onClick={() => setMode('details')}><MoreHorizontal className="h-5 w-5" /></Button>
     </header>
     {error && <div role="alert" className="my-4 flex flex-wrap items-center gap-2 text-sm text-destructive">{l('error')}<Button variant="outline" size="sm" onClick={() => void refresh().catch(() => {})}>{l('retry')}</Button></div>}
@@ -213,7 +212,6 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       <p className="text-sm text-muted-foreground">{l('taskNoDeveloper')}</p>
       {canEdit && <Button onClick={() => setMode('assign')}>{label('assignEmployee')}</Button>}
     </div>}
-    {snapshot && developer && (developer.state === 'succeeded' || reviewer) && <DeliverySummary review={deliveryReview} loading={!error && readEvidence && reviewRead?.snapshot !== snapshot}/>}
     {snapshot && <ol aria-label={l('taskConversation')} className="space-y-5 py-5">
       {!entries.some(e => e.kind === 'requirement') && item.description.trim() && <li className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-xl bg-accent px-4 py-3 text-sm">{item.description}</li>}
       {entries.map(entry => {
@@ -229,9 +227,9 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
         const id = run?.executionId;
         const open = !!id && expanded === id;
         const result = run && previews[run.id];
-        return <li key={key} id={`task-turn-${entry.id}`} className="space-y-2 rounded-xl border bg-card p-4 text-sm">
+        return <li key={key} id={`task-turn-${entry.id}`} className="space-y-2 py-1 text-sm leading-relaxed">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold">{name(entry)} <span className="font-normal text-muted-foreground">· {entry.role === 'reviewer' ? l('reviewEmployeeLabel') : l('devEmployeeLabel')}</span></p>
+            <p className="font-semibold">{name(entry)}</p>
             {entry.state && <span className="text-xs text-muted-foreground">{label(`execution_${entry.state}`)}</span>}
           </div>
           {result && <TaskMarkdown>{result}</TaskMarkdown>}
@@ -240,7 +238,8 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
         </li>;
       })}
     </ol>}
-    {question && <aside className="mb-4 space-y-3 rounded-xl border bg-card p-4 text-sm">
+    {snapshot && developer && (developer.state === 'succeeded' || reviewer) && <DeliverySummary review={deliveryReview} loading={!error && readEvidence && reviewRead?.snapshot !== snapshot}/>}
+    {question && <aside className="mb-4 space-y-2 border-l-2 border-primary pl-3 text-sm">
       <h2 className="font-semibold">{l('taskDecision')}</h2>
       <p className="whitespace-pre-wrap break-words">{question.question}</p>
       {question.blockingReason && <TaskMarkdown>{question.blockingReason}</TaskMarkdown>}
@@ -248,7 +247,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
         onClick={() => void act('/workspace/work-decision/answer', {decisionId: question.id, optionId: option.id})}>{option.label}</Button>)}</div>}
     </aside>}
     {(canTalk || status || actionError || intent.hasPending) && <footer className="sticky bottom-0 space-y-2 border-t bg-background pb-2 pt-3">
-      {status && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+      {status && <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-sm text-muted-foreground">
         <span role="status">{status}</span>
         {working && ['waiting_permission', 'waiting_user'].includes(working.state ?? '') && (() => {
           const id = snapshot?.runs.find(run => run.id === working.workExecutionId)?.executionId;
@@ -287,6 +286,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
     <Dialog open={mode !== undefined} onOpenChange={open => {if (!open && !locked) setMode(undefined);}}>
       {mode && <DialogContent className="max-h-[85dvh] max-w-2xl overflow-y-auto">
         <DialogHeader><DialogTitle>{mode === 'assign' ? label('assignEmployee') : mode === 'manual' ? l('manualWorkflow') : l('taskInfo')}</DialogTitle></DialogHeader>
+        {mode === 'details' && snapshot && canEdit && !terminal && <Button className="w-fit" variant="outline" size="sm" disabled={locked || busy || intent.hasPending} onClick={() => setMode('manual')}>{l('manualWorkflow')}</Button>}
         <TaskManagement api={api} item={item} mode={mode} readOnly={!canEdit} refresh={async () => {await refresh();}}
           onLockChange={value => {setLocked(value); onLockChange(value);}}
           onExecution={id => {setExpanded(id); setMode(undefined); void refresh().catch(() => {});}} />
@@ -324,6 +324,6 @@ function TaskManagement({api, item, mode, readOnly, refresh, onLockChange, onExe
   if (!data) return <p role="status">{l('loading')}</p>;
   return <div className="space-y-4">
     {mode === 'details' && <WorkItemPanel api={api} item={item} notes={data.notes} readOnly={readOnly} refresh={refresh}/>}
-    {!readOnly && !['done', 'cancelled'].includes(item.status) && <WorkflowPanel api={api} item={item} {...data} readOnly={readOnly} assignmentOnly={mode === 'assign'} onLockChange={onLockChange} onExecution={onExecution}/>}
+    {mode !== 'details' && !readOnly && !['done', 'cancelled'].includes(item.status) && <WorkflowPanel api={api} item={item} {...data} readOnly={readOnly} assignmentOnly={mode === 'assign'} onLockChange={onLockChange} onExecution={onExecution}/>}
   </div>;
 }

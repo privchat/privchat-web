@@ -85,12 +85,14 @@ function SessionConsoleBody({api,executionId,onContinue,employeeManaged=false,ta
     finally {if(live.current)setBusy(false);}
   }
   return <section className="space-y-3 border-t pt-3" data-testid="session-console">
-    <p role="status">{execution?.state??t('agentWorkspace.pending')}</p>
+    {!task && <p role="status">{execution?.state??t('agentWorkspace.pending')}</p>}
     {(()=>{const f=(execution?.result as {failure?:{code?:string;retryable?:boolean;summary?:string}}|undefined)?.failure;if(!f)return null;
       const known=['executor_not_logged_in','executor_version_unsupported','executor_quota_exhausted','executor_unavailable'];
       return <p role="alert" data-testid="execution-failure">{t(`agentWorkspace.failure_${known.includes(f.code??'')?f.code:'executor_error'}`)}{f.retryable?` · ${t('agentWorkspace.failureRetryable')}`:''}{f.summary&&<span className="block text-xs text-muted-foreground">{f.summary}</span>}</p>;})()}
     {error&&<p role="alert">{t(denied?'agentWorkspace.denied':'agentWorkspace.error')}</p>}
-    {!denied && <SessionRecords key={executionId} api={api} executionId={executionId} onDenied={denyAccess}/>}
+    {!denied && (task
+      ? <details className="space-y-2 text-sm"><summary className="cursor-pointer text-muted-foreground">{t('agentWorkspace.archivedRecords')}</summary><SessionRecords embedded key={executionId} api={api} executionId={executionId} onDenied={denyAccess}/></details>
+      : <SessionRecords key={executionId} api={api} executionId={executionId} onDenied={denyAccess}/>)}
     {task && !task.readOnly && intent.current.hasPending && <Button variant="outline" size="sm" disabled={controls}
       onClick={() => void retryTaskApproval()}>{t('agentWorkspace.retrySame')}</Button>}
     {!task && <div className="flex flex-wrap gap-2">
