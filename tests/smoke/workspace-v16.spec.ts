@@ -590,8 +590,8 @@ test('creating a workspace employee grants the workspace binding before associat
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
   await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
-  await expect(dialog.getByRole('textbox', {name: 'Employee name'})).toHaveValue('Codex');
-  await dialog.getByRole('textbox', {name: 'Employee name', exact: true}).fill('New dev');
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
+  await expect(dialog.getByRole('combobox')).toHaveCount(3);
   await expect(dialog.getByLabel('Responsibility')).toHaveCount(0);
   await expect(dialog.getByLabel('Work directory')).toHaveCount(0);
   await dialog.getByRole('button', {name: 'Create employee', exact: true}).click();
@@ -604,7 +604,7 @@ test('creating a workspace employee grants the workspace binding before associat
   expect(posts[grantAt].body).toEqual({workspaceId: 'w', nodeId: 'n', capability: 'agent.codex'});
   expect(posts[linkAt].body).toEqual({workspaceId: 'w', employeeId: 'new-emp'});
   const created = posts.find(r => r.path === '/agent/agents')!.body;
-  expect(created).toMatchObject({name: 'New dev', roleDescription: '', title: '', model: '', nodeId: 'n', executor: 'codex', workdirBindingId: ''});
+  expect(created).toMatchObject({name: 'Codex', roleDescription: '', title: '', model: '', nodeId: 'n', executor: 'codex', workdirBindingId: ''});
   expect(created).not.toHaveProperty('authorizeCapability');
   expect(created).not.toHaveProperty('bindExecutionId');
   expect(created.requestId).toHaveLength(36);
@@ -648,7 +648,7 @@ test('associating an owned employee grants its missing workspace binding first',
     return undefined;
   });
   await mount(page); await page.getByTestId('workspace-card').first().click(); await page.getByTestId('ws-nav-navEmployees').click();
-  await page.getByTestId('space-employees').getByRole('button', {name: 'Add AI employee', exact: true}).click();
+  await page.getByTestId('space-employees').getByRole('button', {name: 'Associate employee', exact: true}).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('combobox', {name: 'Associate employee', exact: true}).selectOption('reviewer');
   await dialog.getByRole('button', {name: 'Associate employee', exact: true}).click();
@@ -705,15 +705,14 @@ test('employee detail edits only the profile and keeps the work binding untouche
   });
   await mount(page); await openEmployeeDetail(page);
   const detail = page.getByTestId('employee-detail');
-  await expect(detail).toContainText('Mac'); await expect(detail).toContainText('Codex'); await expect(detail).toContainText('Repository');
-  await detail.getByRole('button', {name: 'Edit profile', exact: true}).click();
+  await expect(detail).toContainText('Mac'); await expect(detail).toContainText('Codex'); await expect(detail).not.toContainText('Repository');
+  await detail.getByRole('button', {name: 'Rename', exact: true}).click();
   await detail.getByRole('textbox', {name: 'Employee name', exact: true}).fill('Engineer II');
-  await detail.getByRole('textbox', {name: 'Responsibility', exact: true}).fill('Own the workspace console');
-  await detail.getByRole('textbox', {name: 'Title', exact: true}).fill('Lead');
+  await expect(detail.getByRole('textbox')).toHaveCount(1);
   await detail.getByRole('button', {name: 'Save', exact: true}).click();
   await expect(detail.getByRole('status')).toHaveText('Profile saved.');
   const update = requests.find(r => r.path === '/agent/agents/update')!;
-  expect(update.body).toMatchObject({agentId: 'emp', name: 'Engineer II', roleDescription: 'Own the workspace console', title: 'Lead', model: '', nodeId: 'n', executor: 'codex', workdirBindingId: 'dir'});
+  expect(update.body).toMatchObject({agentId: 'emp', name: 'Engineer II', roleDescription: 'Implement', title: 'Developer', model: '', nodeId: 'n', executor: 'codex', workdirBindingId: 'dir'});
   expect(update.body.requestId).toHaveLength(36);
   expect(update.body).not.toHaveProperty('bindExecutionId');
   expect(update.body).not.toHaveProperty('expectedBindingVersion');
@@ -726,18 +725,18 @@ for (const honest of [true, false]) test(`rebinding carries the expected binding
   const requests = await mock(page, (path, _query, body) => {
     if (path === '/agent/agents' && !body) return [ownedEmployee];
     if (path === '/agent/nodes') return [{...node, workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}];
-    if (path === '/agent/employees/rebind') return {...ownedEmployee, bindingVersion: 4, workdirBindingId: honest ? 'docs' : 'dir'};
+    if (path === '/agent/employees/rebind') return {...ownedEmployee, bindingVersion: 4, workdirBindingId: honest ? '' : 'dir'};
   });
   await mount(page); await openEmployeeDetail(page);
   const detail = page.getByTestId('employee-detail');
   await detail.getByRole('button', {name: 'Change work binding', exact: true}).click();
-  await expect(detail.getByTestId('rebind-preview')).toContainText('Mac · Codex · Repository');
-  await detail.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('docs');
-  await expect(detail.getByTestId('rebind-preview')).toContainText('Mac · Codex · Docs');
+  await expect(detail.getByTestId('rebind-preview')).toContainText('Mac · Codex');
+  await expect(detail.getByRole('combobox')).toHaveCount(3);
+  await expect(detail.getByRole('textbox')).toHaveCount(0);
   await detail.getByRole('button', {name: 'Save', exact: true}).click();
   await expect.poll(() => requests.filter(r => r.path === '/agent/employees/rebind').length).toBe(1);
   const first = requests.find(r => r.path === '/agent/employees/rebind')!.body;
-  expect(first).toMatchObject({agentId: 'emp', expectedBindingVersion: 3, nodeId: 'n', executor: 'codex', model: '', workdirBindingId: 'docs', bindExecutionId: null});
+  expect(first).toMatchObject({agentId: 'emp', expectedBindingVersion: 3, nodeId: 'n', executor: 'codex', model: '', workdirBindingId: '', bindExecutionId: null});
   expect(first).not.toHaveProperty('authorizeCapability');
   if (honest) {
     await expect(detail.getByRole('status')).toHaveText('Work binding changed.');
@@ -759,17 +758,16 @@ test('rebinding onto a revoked capability asks for re-authorization and carries 
   const requests = await mock(page, (path, _query, body) => {
     if (path === '/agent/agents' && !body) return [ownedEmployee];
     if (path === '/agent/nodes') return [{...node, granted: [], revokedCapabilities: ['agent.codex'], workdirs: [{id: 'dir', label: 'Repository'}, {id: 'docs', label: 'Docs'}]}];
-    if (path === '/agent/employees/rebind') return {...ownedEmployee, bindingVersion: 4, workdirBindingId: 'docs'};
+    if (path === '/agent/employees/rebind') return {...ownedEmployee, bindingVersion: 4, workdirBindingId: ''};
   });
   await mount(page); await openEmployeeDetail(page);
   const detail = page.getByTestId('employee-detail');
   await detail.getByRole('button', {name: 'Change work binding', exact: true}).click();
   await expect(detail.getByTestId('employee-grant-notice')).toHaveText('You revoked this capability in device management. Saving authorizes Codex on this device again.');
-  await detail.getByRole('combobox', {name: 'Work directory', exact: true}).selectOption('docs');
   await detail.getByRole('button', {name: 'Save', exact: true}).click();
   await expect(detail.getByRole('status')).toHaveText('Work binding changed.');
   const body = requests.find(r => r.path === '/agent/employees/rebind')!.body;
-  expect(body).toMatchObject({agentId: 'emp', expectedBindingVersion: 3, nodeId: 'n', executor: 'codex', workdirBindingId: 'docs', bindExecutionId: null, authorizeCapability: true});
+  expect(body).toMatchObject({agentId: 'emp', expectedBindingVersion: 3, nodeId: 'n', executor: 'codex', workdirBindingId: '', bindExecutionId: null, authorizeCapability: true});
   expect(messages.some(m => m.includes('Saving authorizes Codex on this device again.'))).toBe(true);
 });
 
@@ -878,7 +876,7 @@ test('rebinding shows a model the executor no longer offers and reports the serv
     if (path === '/agent/nodes') return [catalogNode];
     if (path === '/agent/employees/rebind') {
       if (!refused) {refused = true; return 'reject:AGENT_MODEL_UNSUPPORTED';}
-      return {...retired, bindingVersion: 4, model: body.model};
+      return {...retired, bindingVersion: 4, model: body.model, workdirBindingId: ''};
     }
     return undefined;
   });
@@ -1151,7 +1149,8 @@ test('directoryless creation pairs with reported options and retries the same id
   const dialog = await openEmployeeDialog(page);
   await fillEmployee(dialog);
   await dialog.getByRole('combobox', {name: 'Executor', exact: true}).selectOption('codex');
-  await expect(dialog.getByLabel('Employee name', {exact: true})).toHaveValue('Codex (2)');
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
+  await expect(dialog.getByRole('combobox')).toHaveCount(3);
   await dialog.getByRole('button', {name: 'Create employee'}).click();
   await expect(dialog.getByRole('button', {name: 'Retry', exact: true})).toBeVisible();
 

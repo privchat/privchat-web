@@ -24,15 +24,17 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [creation] = useState(() => employeeCreationIntent(api, workspaceId));
   const [adding, setAdding] = useState(creation.hasPending);
+  const [associating, setAssociating] = useState(false);
+  const [associateId, setAssociateId] = useState('');
   const [manageId, setManageId] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const readOnly = !space || space.archived !== 0 || !['owner', 'admin', 'member'].includes(space.myRole);
+  const unlinked = owned.filter(e => !rows.some(r => r.employeeId === e.agentId));
   const managed = rows.find(r => r.id === manageId);
   const managedCause = managed ? employeeCause(managed, bindings, nodes) : undefined;
   const managedGrant = managed ? grantableWorkspaceBinding(managed, bindings, nodes) : null;
   const managedOwn = !!managed && owned.some(e => e.agentId === managed.employeeId);
-  const candidates = owned.filter(e => !rows.some(r => r.employeeId === e.agentId));
   // Short states stay pills; a long localized reason wraps instead of stretching the table (§18.8).
   const status = (row: WorkspaceEmployee) => {
     const cause = employeeCause(row, bindings, nodes);
@@ -49,9 +51,31 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
   async function act(action: () => Promise<unknown>) {if (busy) return; setBusy(true); setError(false); try {await action(); await reload();} catch {setError(true);} finally {setBusy(false);}}
   if (history) return <TaskHistory api={api} scope={{employeeId: history}} renderSession={renderSession} onBack={() => setHistory(undefined)}/>;
   return <section data-testid="space-employees" className="w-full min-w-0">
-    <WsPageHeader title={l('employeesTitle')} subtitle={l('employeesSub')} actions={
+    <WsPageHeader title={l('employeesTitle')} subtitle={l('employeesSub')} actions={<>
+      {!!unlinked.length && !readOnly && employeePages.ready && !employeePages.hasMore &&
+        <Button variant="outline" disabled={busy || creation.hasPending} onClick={() => setAssociating(true)}>{l('link')}</Button>}
       <Button disabled={readOnly || busy} onClick={() => setAdding(true)}><Plus className="h-4 w-4" />{l('addEmployee')}</Button>
-    } />
+    </>} />
+    <Dialog open={associating} onOpenChange={open => {if (!busy) {setAssociating(open); if (!open) setAssociateId('');}}}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{l('link')}</DialogTitle></DialogHeader>
+        <label className="grid gap-1.5 text-sm font-medium">{l('link')}
+          <select className={wsField} value={associateId} disabled={busy || readOnly} onChange={e => setAssociateId(e.target.value)}>
+            <option value="">{l('none')}</option>
+            {unlinked.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}
+          </select>
+        </label>
+        {error && <p role="alert">{l('error')}</p>}
+        <DialogFooter><Button disabled={busy || readOnly || !associateId} onClick={() => void act(async () => {
+          const employee = unlinked.find(e => e.agentId === associateId);
+          if (!employee) return;
+          const binding = workspaceBindingGrant(employee.nodeId, `agent.${employee.executor}`, bindings, nodes);
+          if (binding) await api.createBinding(workspaceId, binding.nodeId, binding.capability);
+          await api.associateEmployee(workspaceId, employee.agentId);
+          setAssociateId(''); setAssociating(false);
+        })}>{l('link')}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
     {space && readOnly && <p className="mb-3 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm text-muted-foreground">{l('readOnly')}</p>}
     {(error || employeePages.error) && <p role="alert" className="mb-3 text-sm text-destructive">{l(employeePages.errorCode ?? 'error')}</p>}
     {managed && <section className="mb-3 space-y-3 rounded border p-3" aria-label={l('manage')}>
@@ -68,12 +92,11 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
       </div>
       {!readOnly && managedGrant && <p className="text-sm text-muted-foreground">{l('authorizeWorkspaceHint')}</p>}
     </section>}
-    {rows.length > 0 && <WsTable head={<><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colExecutor')}</WsTh><WsTh>{l('colDevice')}</WsTh><WsTh>{l('colWorkdir')}</WsTh><WsTh>{l('colStatus')}</WsTh></>}>
+    {rows.length > 0 && <WsTable head={<><WsTh>{l('colEmployee')}</WsTh><WsTh>{l('colExecutor')}</WsTh><WsTh>{l('colDevice')}</WsTh><WsTh>{l('colStatus')}</WsTh></>}>
       {rows.map(row => {const s = status(row); return <tr key={row.id} className="hover:bg-accent/40">
         <WsTd><button type="button" className="font-semibold hover:underline focus-visible:underline" onClick={() => setManageId(row.id)}>{row.name || l('unnamedEmployee')}</button></WsTd>
         <WsTd>{executorDisplay(employeeExecutor(row.capability ?? '') ?? row.capability ?? '')}</WsTd>
         <WsTd>{nodes.find(n => n.nodeId === row.nodeId)?.name ?? row.nodeId ?? '—'}</WsTd>
-        <WsTd>{nodes.find(n => n.nodeId === row.nodeId)?.workdirs?.find(w => w.id === row.workdirBindingId)?.label ?? row.workdirBindingId ?? l('unavailable')}</WsTd>
         <WsTd>{s.pill ? <StatusPill icon={s.icon}>{s.text}</StatusPill> : <span className="block max-w-[300px] text-xs text-muted-foreground">{s.text}</span>}</WsTd>
       </tr>;})}
     </WsTable>}
@@ -82,17 +105,15 @@ export function SpaceEmployees({api, workspaceId, onLockChange, renderSession}: 
       <p className="mt-2 text-sm">{l('noLinkedEmployees')}</p>
     </div>}
     {employeePages.hasMore && <div className="mt-3"><Button variant="outline" disabled={busy || employeePages.busy} onClick={() => void employeePages.more()}>{l('more')}</Button></div>}
-    <AddEmployeeDialog api={api} creation={creation} names={[...owned.map(e => e.name), ...rows.map(r => r.name ?? '')]} nodes={nodes} bindings={bindings} workspaceId={workspaceId} candidates={candidates} readOnly={readOnly} open={adding} onClose={() => setAdding(false)} onCreated={employee => {setOwned(current => [...current, employee]); setAdding(false); void reload().catch(() => setError(true));}} onAssociated={() => void reload().catch(() => setError(true))} onLockChange={onLockChange}/>
+    <AddEmployeeDialog api={api} creation={creation} names={[...owned.map(e => e.name), ...rows.map(r => r.name ?? '')]} nodes={nodes} bindings={bindings} workspaceId={workspaceId} readOnly={readOnly} open={adding} onClose={() => setAdding(false)} onCreated={employee => {setOwned(current => [...current, employee]); setAdding(false); void reload().catch(() => setError(true));}} onLockChange={onLockChange}/>
   </section>;
 }
 
-function AddEmployeeDialog({api, creation, names, nodes, bindings, workspaceId, candidates, readOnly, open, onClose, onCreated, onAssociated, onLockChange}: {api: WorkspaceApi; creation: ReturnType<typeof employeeCreationIntent>; names: string[]; nodes: Node[]; bindings: Binding[]; workspaceId: string; candidates: Employee[]; readOnly: boolean; open: boolean; onClose: () => void; onCreated: (employee: Employee) => void; onAssociated: () => void; onLockChange: (locked: boolean) => void}) {
+function AddEmployeeDialog({api, creation, names, nodes, bindings, workspaceId, readOnly, open, onClose, onCreated, onLockChange}: {api: WorkspaceApi; creation: ReturnType<typeof employeeCreationIntent>; names: string[]; nodes: Node[]; bindings: Binding[]; workspaceId: string; readOnly: boolean; open: boolean; onClose: () => void; onCreated: (employee: Employee) => void; onLockChange: (locked: boolean) => void}) {
   const l = usePageLabels();
-  const [customName, setCustomName] = useState<string>();
   const [model, setModel] = useState('');
   const [nodeId, setNodeId] = useState('');
   const [executor, setExecutor] = useState('');
-  const [associateId, setAssociateId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<WorkspaceLabelKey>();
   const running = useRef(false);
@@ -109,12 +130,12 @@ function AddEmployeeDialog({api, creation, names, nodes, bindings, workspaceId, 
     const suffix = ` (${i})`;
     suggested = base.slice(0, 64 - suffix.length) + suffix;
   }
-  const name = customName ?? suggested;
+  const name = suggested;
   const grant = executorGrant(node, executor);
   const grantNotice = l(grant === 'revoked' ? 'capabilityRevokedConfirm' : 'grantOnSaveConfirm').replace('{capability}', executorDisplay(executor));
   const valid = !!name.trim() && !used.has(name.trim().toLowerCase()) && !!node && executors.includes(executor) &&
     (!model || models.some(m => m.id === model));
-  function reset() {setCustomName(undefined); setModel(''); setNodeId(''); setExecutor(''); setAssociateId(''); setError(undefined);}
+  function reset() {setModel(''); setNodeId(''); setExecutor(''); setError(undefined);}
   function close() {if (running.current || pending) return; reset(); onClose();}
   async function submit() {
     if (running.current || readOnly || (!pending && !valid)) return;
@@ -142,17 +163,6 @@ function AddEmployeeDialog({api, creation, names, nodes, bindings, workspaceId, 
       setError(e instanceof PlatformApiError && ['AGENT_DEFINITION_INVALID', 'AGENT_WORKDIR_NOT_ALLOWED'].includes(e.machineCode ?? '') ? 'employeeCreateUnsupported' : 'error');
     } finally {running.current = false; setBusy(false); onLockChange(creation.hasPending);}
   }
-  async function associate() {
-    if (busy || pending || readOnly || !associateId) return;
-    setBusy(true); setError(undefined); onLockChange(true);
-    try {
-      const candidate = candidates.find(c => c.agentId === associateId);
-      const binding = candidate ? workspaceBindingGrant(candidate.nodeId, `agent.${candidate.executor}`, bindings, nodes) : null;
-      if (binding) await api.createBinding(workspaceId, binding.nodeId, binding.capability);
-      await api.associateEmployee(workspaceId, associateId); setAssociateId(''); onAssociated();
-    } catch {setError('error');}
-    finally {setBusy(false); onLockChange(false);}
-  }
   return <Dialog open={open} onOpenChange={o => {if (!o) close();}}>
     <DialogContent className="max-h-[85vh] overflow-y-auto">
       <DialogHeader>
@@ -176,16 +186,6 @@ function AddEmployeeDialog({api, creation, names, nodes, bindings, workspaceId, 
         </label>
         {!!executor && grant !== 'granted' && <p className="text-sm text-muted-foreground" data-testid="employee-grant-notice">{grantNotice}</p>}
         <ModelField reportedOnly node={node} executor={executor} value={model} disabled={busy || !executor} onChange={setModel}/>
-        {executor && <label className="grid gap-1.5 text-sm font-medium">{l('employeeNameLabel')}
-          <input className={wsField} value={name} maxLength={64} disabled={busy} onChange={e => setCustomName(e.target.value)}/>
-        </label>}
-        {customName && used.has(customName.trim().toLowerCase()) && <p role="status" className="text-sm">{l('employeeNameTaken')}</p>}
-        {candidates.length > 0 && <div className="space-y-2 border-t pt-4">
-          <label className="grid gap-1.5 text-sm font-medium">{l('link')}
-            <select className={wsField} value={associateId} disabled={busy || readOnly} onChange={e => setAssociateId(e.target.value)}><option value="">{l('none')}</option>{candidates.map(e => <option key={e.agentId} value={e.agentId}>{e.name}</option>)}</select>
-          </label>
-          <Button type="button" variant="outline" disabled={busy || readOnly || !associateId} onClick={() => void associate()}>{l('link')}</Button>
-        </div>}
         </>}
         {error && <p role="alert" className="text-sm text-destructive">{l(error)}</p>}
         {(pending || workstations.length > 0) && <DialogFooter>

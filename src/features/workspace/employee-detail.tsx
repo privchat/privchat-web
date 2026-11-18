@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlatformApiError } from '@/lib/platform-errors';
-import type { Binding, Employee, Execution, Node, Workspace, WorkspaceApi } from './api';
+import type { Binding, Employee, Node, Workspace, WorkspaceApi } from './api';
 import { ConsoleIntent } from './console-intent';
 import { employeeCause, executorGrant, grantableWorkspaceBinding } from './employee-access';
-import { availableEmployeeExecutors, bindingCandidates, executorDisplay, ModelField } from './employees';
+import { availableEmployeeExecutors, executorDisplay, ModelField } from './employees';
 import { employeeReasonLabel, usePageLabels, type WorkspaceLabelKey } from './page-labels';
 import { navigateWorkspace } from './routes';
 import { WsPageHeader, wsField } from './shell';
@@ -29,16 +29,13 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
   const [owned, setOwned] = useState<Employee[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [bindings, setBindings] = useState<Binding[]>([]);
-  const [sessions, setSessions] = useState<Execution[]>([]);
   const [mode, setMode] = useState<'view' | 'profile' | 'rebind'>(panel ?? 'view');
   const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<WorkspaceLabelKey | ''>('');
   const [saved, setSaved] = useState<WorkspaceLabelKey | ''>('');
-  const [profile, setProfile] = useState({name: '', roleDescription: '', title: ''});
-  const [draft, setDraft] = useState({nodeId: '', executor: '', workdirBindingId: '', model: '', bindExecutionId: ''});
-  const [existingSession, setExistingSession] = useState(false);
-  const [consent, setConsent] = useState(false);
+  const [profile, setProfile] = useState({name: ''});
+  const [draft, setDraft] = useState({nodeId: '', executor: '', model: ''});
   const [baseVersion, setBaseVersion] = useState<number>();
   const profileIntent = useRef(new ConsoleIntent());
   const rebindIntent = useRef(new ConsoleIntent());
@@ -48,27 +45,22 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
   const readOnly = !space || space.archived !== 0 || !['owner', 'admin', 'member'].includes(space.myRole);
   const cause = linked ? employeeCause(linked, bindings, nodes) : undefined;
   const grantable = linked && !readOnly ? grantableWorkspaceBinding(linked, bindings, nodes) : null;
-  const reauthorizable = !!own?.nodeId && !!own.workdirBindingId && (cause === 'capabilityRevoked' || cause === 'capabilityNotGranted');
+  const reauthorizable = !!own?.nodeId && (cause === 'capabilityRevoked' || cause === 'capabilityNotGranted');
   const node = nodes.find(n => n.nodeId === draft.nodeId);
   const executors = availableEmployeeExecutors(node);
   const grant = executorGrant(node, draft.executor);
-  const candidates = bindingCandidates(sessions, draft.nodeId, draft.executor, owned, draft.model, draft.workdirBindingId);
-  const candidate = candidates.find(e => e.executionId === draft.bindExecutionId);
   const version = own?.bindingVersion ?? 0;
   const conflict = !!own && baseVersion !== undefined && baseVersion !== version;
   const pending = profileIntent.current.hasPending || rebindIntent.current.hasPending;
   const locked = busy || pending;
   const canEditProfile = !!own?.nodeId && !!own.executor;
   const profileValid = !!profile.name.trim();
-  const rebindValid = !!own && !conflict && node?.state === 'active' && executors.includes(draft.executor)
-    && !!node.workdirs?.some(w => w.id === draft.workdirBindingId)
-    && (!existingSession || (!!candidate && consent));
+  const rebindValid = !!own && !readOnly && !conflict && node?.state === 'active' && executors.includes(draft.executor);
   const deviceName = (id?: string | null) => nodes.find(n => n.nodeId === id)?.name ?? l('unavailable');
-  const directoryName = (nodeId?: string | null, id?: string | null) => nodes.find(n => n.nodeId === nodeId)?.workdirs?.find(w => w.id === id)?.label ?? l('unavailable');
-  const summary = (nodeId?: string | null, executor?: string, workdir?: string | null, model?: string) =>
-    `${deviceName(nodeId)} · ${executorDisplay(executor ?? '')} · ${directoryName(nodeId, workdir)} · ${model?.trim() || l('modelDefault')}`;
-  const oldSummary = summary(own?.nodeId, own?.executor, own?.workdirBindingId, own?.model);
-  const newSummary = summary(draft.nodeId, draft.executor, draft.workdirBindingId, draft.model);
+  const summary = (nodeId?: string | null, executor?: string, model?: string) =>
+    `${deviceName(nodeId)} · ${executorDisplay(executor ?? '')} · ${model?.trim() || l('modelDefault')}`;
+  const oldSummary = summary(own?.nodeId, own?.executor, own?.model);
+  const newSummary = summary(draft.nodeId, draft.executor, draft.model);
 
   async function load() {
     setBusy(true); setError('');
@@ -84,16 +76,10 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
   // A new binding version means the draft was read against an older one: start over instead of retargeting silently.
   useEffect(() => {
     if (!own) return;
-    setProfile({name: own.name, roleDescription: own.roleDescription, title: own.title});
-    setDraft({nodeId: own.nodeId ?? '', executor: own.executor, workdirBindingId: own.workdirBindingId, model: own.model, bindExecutionId: ''});
-    setBaseVersion(own.bindingVersion ?? 0); setExistingSession(false); setConsent(false);
+    setProfile({name: own.name});
+    setDraft({nodeId: own.nodeId ?? '', executor: own.executor, model: own.model});
+    setBaseVersion(own.bindingVersion ?? 0);
   }, [own?.agentId, own?.bindingVersion]);
-  useEffect(() => {
-    let active = true; setSessions([]);
-    if (mode !== 'rebind' || !existingSession || !draft.nodeId || !draft.executor) return;
-    void api.executions(draft.nodeId).then(rows => {if (active) setSessions(rows);}).catch(() => {if (active) setError('error');});
-    return () => {active = false;};
-  }, [api, mode, existingSession, draft.nodeId, draft.executor]);
 
   async function act(run: () => Promise<void>) {
     if (locked && !pending) return;
@@ -106,16 +92,16 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
     return (result: Employee) => {
       if (result.agentId !== body.agentId || (result.bindingVersion ?? 0) <= Number(body.expectedBindingVersion)
         || result.nodeId !== body.nodeId || result.executor !== body.executor || result.model !== body.model
-        || result.workdirBindingId !== body.workdirBindingId || (result.executionId ?? null) !== body.bindExecutionId) {
+        || (result.workdirBindingId ?? '') !== body.workdirBindingId || (result.executionId ?? null) !== body.bindExecutionId) {
         throw new Error('Invalid rebind receipt');
       }
       return false;
     };
   }
   async function saveProfile() {
-    if (!own || !canEditProfile) return;
+    if (!own || readOnly || !canEditProfile || !profileValid) return;
     // An ordinary profile change carries the existing routing and never a session (§18.14).
-    const body = {agentId: own.agentId, name: profile.name.trim(), roleDescription: profile.roleDescription.trim(), title: profile.title.trim(),
+    const body = {agentId: own.agentId, name: profile.name.trim(), roleDescription: own.roleDescription, title: own.title,
       model: own.model, nodeId: own.nodeId!, executor: own.executor, workdirBindingId: own.workdirBindingId ?? ''};
     await act(async () => {
       await profileIntent.current.run<Employee>(api, '/agent/agents/update', body, 'requestId');
@@ -126,7 +112,7 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
   async function reauthorize() {
     if (!own?.nodeId || !window.confirm(l('reauthorizeHint').replace('{name}', own.name))) return;
     const body = {agentId: own.agentId, name: own.name, roleDescription: own.roleDescription, title: own.title, model: own.model,
-      nodeId: own.nodeId, executor: own.executor, workdirBindingId: own.workdirBindingId, authorizeCapability: true};
+      nodeId: own.nodeId, executor: own.executor, workdirBindingId: own.workdirBindingId ?? '', authorizeCapability: true};
     await act(async () => {await profileIntent.current.run<Employee>(api, '/agent/agents/update', body, 'requestId'); if (live.current) await load();});
   }
   async function saveRebind() {
@@ -134,7 +120,7 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
     const notice = grant === 'granted' ? '' : `\n${l(grant === 'revoked' ? 'capabilityRevokedConfirm' : 'grantOnSaveConfirm').replace('{capability}', executorDisplay(draft.executor))}`;
     if (!window.confirm(`${l('rebindConfirm')}\n${oldSummary} → ${newSummary}${notice}`)) return;
     const body = {agentId: own.agentId, expectedBindingVersion: baseVersion ?? version, nodeId: draft.nodeId, executor: draft.executor,
-      model: draft.model.trim(), workdirBindingId: draft.workdirBindingId, bindExecutionId: existingSession ? draft.bindExecutionId : null,
+      model: draft.model.trim(), workdirBindingId: '', bindExecutionId: null,
       ...(grant === 'revoked' ? {authorizeCapability: true} : {})};
     await act(async () => {
       await rebindIntent.current.run<Employee>(api, '/agent/employees/rebind', body, 'requestId', rebound(body));
@@ -190,65 +176,37 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
     </div>}
     {linked?.previousResultUnknown && <p className="rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm text-muted-foreground">{l('previousUnknownNotice')}</p>}
 
-    <div className="rounded-[9px] border bg-card p-4">
-      <h2 className="text-sm font-semibold">{l('profile')}</h2>
-      {mode === 'profile' && own ? <form className="mt-3 space-y-3" onSubmit={e => {e.preventDefault(); if (!locked && profileValid) void saveProfile();}}>
-        <p className="text-sm text-muted-foreground">{l('profileHint')}</p>
-        <label className="grid gap-1.5 text-sm font-medium">{l('employeeNameLabel')}<input className={wsField} maxLength={80} disabled={locked} value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})}/></label>
-        <label className="grid gap-1.5 text-sm font-medium">{l('roleDescription')}<textarea className={wsField} maxLength={2000} disabled={locked} value={profile.roleDescription} onChange={e => setProfile({...profile, roleDescription: e.target.value})}/></label>
-        <label className="grid gap-1.5 text-sm font-medium">{l('employeeTitle')}<input className={wsField} maxLength={80} disabled={locked} value={profile.title} onChange={e => setProfile({...profile, title: e.target.value})}/></label>
+    {mode === 'profile' && own && !readOnly && <div className="rounded-[9px] border bg-card p-4">
+      <h2 className="text-sm font-semibold">{l('editProfile')}</h2>
+      <form className="mt-3 space-y-3" onSubmit={e => {e.preventDefault(); if (!locked && profileValid) void saveProfile();}}>
+        <label className="grid gap-1.5 text-sm font-medium">{l('employeeNameLabel')}<input className={wsField} maxLength={64} disabled={locked} value={profile.name} onChange={e => setProfile({...profile, name: e.target.value})}/></label>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => setMode('view')}>{l('cancel')}</Button>
           <Button type="submit" disabled={locked || !profileValid}>{l('save')}</Button>
         </div>
-      </form> : <dl className="mt-3 grid gap-2 text-sm">
-        <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('employeeTitle')}</dt><dd className="min-w-0 break-words">{own?.title || linked?.name || '—'}</dd></div>
-        <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('roleDescription')}</dt><dd className="min-w-0 whitespace-pre-wrap break-words">{own?.roleDescription || '—'}</dd></div>
-      </dl>}
-    </div>
+      </form>
+    </div>}
 
     <div className="rounded-[9px] border bg-card p-4">
       <h2 className="text-sm font-semibold">{l('workBinding')}</h2>
-      {mode === 'rebind' && own ? <form className="mt-3 space-y-3" onSubmit={e => {e.preventDefault(); if (!locked && rebindValid) void saveRebind();}}>
+      {mode === 'rebind' && own && !readOnly ? <form className="mt-3 space-y-3" onSubmit={e => {e.preventDefault(); if (!locked && rebindValid) void saveRebind();}}>
         <p className="text-sm text-muted-foreground">{l('rebindHint')}</p>
         {conflict && <p role="alert" className="text-sm text-destructive" data-testid="rebind-conflict">{l('conflict')}</p>}
         <label className="grid gap-1.5 text-sm font-medium">{l('deviceNodeLabel')}
-          <select className={wsField} value={draft.nodeId} disabled={locked} onChange={e => {setDraft({nodeId: e.target.value, executor: '', workdirBindingId: '', model: '', bindExecutionId: ''}); setConsent(false);}}>
+          <select className={wsField} value={draft.nodeId} disabled={locked} onChange={e => {setDraft({nodeId: e.target.value, executor: '', model: ''});}}>
             <option value="">{l('deviceNodeLabel')}</option>
             {nodes.map(n => <option key={n.nodeId} value={n.nodeId} disabled={n.state !== 'active'}>{n.name}</option>)}
           </select>
         </label>
         <label className="grid gap-1.5 text-sm font-medium">{l('executorLabel')}
-          <select className={wsField} value={draft.executor} disabled={locked || !node} onChange={e => {setDraft({...draft, executor: e.target.value, model: '', bindExecutionId: ''}); setConsent(false);}}>
+          <select className={wsField} value={draft.executor} disabled={locked || !node} onChange={e => {setDraft({...draft, executor: e.target.value, model: ''});}}>
             <option value="">{l('executorLabel')}</option>
             {executors.map(x => {const state = executorGrant(node, x); return <option key={x} value={x}>{executorDisplay(x)}{state === 'granted' ? '' : ` · ${l(state === 'revoked' ? 'executorRevoked' : 'executorGrantOnSave')}`}</option>;})}
           </select>
         </label>
         {!!draft.executor && grant !== 'granted' && <p className="text-sm text-muted-foreground" data-testid="employee-grant-notice">{l(grant === 'revoked' ? 'capabilityRevokedConfirm' : 'grantOnSaveConfirm').replace('{capability}', executorDisplay(draft.executor))}</p>}
-        <label className="grid gap-1.5 text-sm font-medium">{l('workdirLabel')}
-          <select className={wsField} value={draft.workdirBindingId} disabled={locked || !node} onChange={e => {setDraft({...draft, workdirBindingId: e.target.value, bindExecutionId: ''}); setConsent(false);}}>
-            <option value="">{l('workdirLabel')}</option>
-            {node?.workdirs?.map(w => <option key={w.id} value={w.id}>{w.label}</option>)}
-          </select>
-        </label>
-        <ModelField node={node} executor={draft.executor} value={draft.model} disabled={locked || !!candidate || !draft.executor}
-          onChange={model => {setDraft({...draft, model, bindExecutionId: ''}); setConsent(false);}}/>
-        <label className="grid gap-1.5 text-sm font-medium">{l('rebindTargetSession')}
-          <select className={wsField} value={existingSession ? 'existing' : 'new'} disabled={locked} onChange={e => {setExistingSession(e.target.value === 'existing'); setDraft({...draft, bindExecutionId: ''}); setConsent(false);}}>
-            <option value="new">{l('rebindNewSession')}</option>
-            <option value="existing">{l('rebindExistingSession')}</option>
-          </select>
-        </label>
-        {existingSession && <>
-          <p className="text-sm text-muted-foreground">{l('privateNotImported')}</p>
-          <label className="grid gap-1.5 text-sm font-medium">{l('rebindTargetSession')}
-            <select className={wsField} value={draft.bindExecutionId} disabled={locked} onChange={e => {const picked = candidates.find(x => x.executionId === e.target.value); setDraft({...draft, bindExecutionId: e.target.value, model: picked ? String(picked.params?.model ?? '') : draft.model}); setConsent(false);}}>
-              <option value="">{l('none')}</option>
-              {candidates.map(x => <option key={x.executionId} value={x.executionId}>{typeof x.params?.title === 'string' && x.params.title ? x.params.title : l('untitledSession')} · {String(x.params?.model ?? '')}</option>)}
-            </select>
-          </label>
-          {candidate && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={consent} disabled={locked} onChange={e => setConsent(e.target.checked)}/>{l('rebindConsent')}</label>}
-        </>}
+        <ModelField reportedOnly node={node} executor={draft.executor} value={draft.model} disabled={locked || !draft.executor}
+          onChange={model => setDraft({...draft, model})}/>
         <dl className="grid gap-1 rounded-[8px] border bg-sidebar px-3 py-2.5 text-sm" data-testid="rebind-preview">
           <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('rebindCurrent')}</dt><dd className="min-w-0 break-words">{oldSummary}</dd></div>
           <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('rebindTarget')}</dt><dd className="min-w-0 break-words">{newSummary}</dd></div>
@@ -261,7 +219,6 @@ export function EmployeeDetail({api, workspaceId, employeeId, panel, onLockChang
       </form> : <dl className="mt-3 grid gap-2 text-sm">
         <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('colDevice')}</dt><dd className="min-w-0 break-words">{deviceName(own?.nodeId ?? linked?.nodeId)}</dd></div>
         <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('colExecutor')}</dt><dd className="min-w-0 break-words">{executorDisplay(own?.executor ?? linked?.capability?.replace(/^agent\./, '') ?? '')}</dd></div>
-        <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('colWorkdir')}</dt><dd className="min-w-0 break-words">{directoryName(own?.nodeId ?? linked?.nodeId, own?.workdirBindingId ?? linked?.workdirBindingId)}</dd></div>
         <div className="flex gap-2"><dt className="w-28 shrink-0 text-muted-foreground">{l('modelLabel')}</dt><dd className="min-w-0 break-words">{own?.model || l('modelDefault')}</dd></div>
         <p className="text-muted-foreground">{l(own ? 'privateNotImported' : 'reasonNotOwner')}</p>
       </dl>}
