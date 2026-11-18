@@ -223,28 +223,28 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       <p className="text-sm text-muted-foreground">{l('taskNoDeveloper')}</p>
       {canEdit && <Button onClick={() => setMode('assign')}>{label('assignEmployee')}</Button>}
     </div>}
-    {snapshot && <ol aria-label={l('taskConversation')} className="space-y-5 py-5">
-      {!entries.some(e => e.kind === 'requirement') && item.description.trim() && <li className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-xl bg-muted px-4 py-3 text-sm">{item.description}</li>}
+    {snapshot && <ol aria-label={l('taskConversation')} className="space-y-6 py-6">
+      {!entries.some(e => e.kind === 'requirement') && item.description.trim() && <li className="ml-auto w-fit max-w-[85%] whitespace-pre-wrap break-words rounded-xl bg-muted px-4 py-3 text-sm leading-relaxed">{item.description}</li>}
       {entries.map(entry => {
         const key = `${entry.kind}:${entry.id}`;
         if (entry.kind === 'requirement') return entry.text?.trim() && <li key={key} className="ml-auto w-fit max-w-[85%]">
-          <p className="whitespace-pre-wrap break-words rounded-xl bg-muted px-4 py-3 text-sm">{entry.text}</p>
-          {entry.delivery && ['steered','interrupting','delivered','pending'].includes(entry.delivery) && <p className="mt-1 text-right text-xs text-muted-foreground">{l(`taskDelivery_${entry.delivery}` as 'taskDelivery_pending')}</p>}
+          <p className="whitespace-pre-wrap break-words rounded-xl bg-muted px-4 py-3 text-sm leading-relaxed">{entry.text}</p>
+          {entry.delivery && ['steered','interrupting','delivered','pending'].includes(entry.delivery) && <p className="mt-1 px-4 text-right text-xs text-muted-foreground">{l(`taskDelivery_${entry.delivery}` as 'taskDelivery_pending')}</p>}
         </li>;
         if (entry.kind === 'pause' || entry.kind === 'decision' || (entry.kind === 'cycle' && entry.state === 'stopped'))
-          return <li key={key} className="text-center text-xs text-muted-foreground">{entry.kind === 'pause' ? l('taskPaused') : entry.text}</li>;
+          return <li key={key} className="break-words text-xs leading-relaxed text-muted-foreground">{entry.kind === 'pause' ? l('taskPaused') : entry.text}</li>;
         if (entry.kind !== 'turn') return null;
         const run = snapshot.runs.find(e => e.id === entry.workExecutionId);
         const id = run?.executionId;
         const open = !!id && expanded === id;
         const result = run && previews[run.id];
         return <li key={key} id={`task-turn-${entry.id}`} className="space-y-2 py-1 text-sm leading-relaxed">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="font-semibold">{name(entry)}</p>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <p className="break-words font-semibold">{name(entry)}</p>
             {entry.state && <span className="text-xs text-muted-foreground">{label(`execution_${entry.state}`)}</span>}
           </div>
           {result && <TaskMarkdown>{result}</TaskMarkdown>}
-          {id && <Button variant="ghost" size="sm" aria-expanded={open} onClick={() => setExpanded(open ? undefined : id)}>{l('execProcess')}</Button>}
+          {id && <Button variant="ghost" size="sm" className="px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground" aria-expanded={open} onClick={() => setExpanded(open ? undefined : id)}>{l('execProcess')}</Button>}
           {open && renderSession(id, {readOnly: !canEdit || terminal || !entry.employeeId || !ownedEmployees.includes(entry.employeeId)})}
         </li>;
       })}
