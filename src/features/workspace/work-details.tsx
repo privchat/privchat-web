@@ -205,7 +205,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       </div>
       <Button data-testid="task-manage" variant="ghost" size="icon" aria-label={l('taskInfo')} onClick={() => setMode('details')}><MoreHorizontal className="h-5 w-5" /></Button>
     </header>
-    {error && <div role="alert" className="my-4 flex flex-wrap items-center gap-2 text-sm text-destructive">{l('error')}<Button variant="outline" size="sm" onClick={() => void refresh().catch(() => {})}>{l('retry')}</Button></div>}
+    {error && <div role="alert" className="my-4 flex flex-wrap items-center gap-2 text-sm text-foreground">{l('error')}<Button variant="outline" size="sm" onClick={() => void refresh().catch(() => {})}>{l('retry')}</Button></div>}
     {!snapshot && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l('loading')}</p>}
     {(readOnly || !owner) && <p className="mt-4 text-sm text-muted-foreground">{l('accessRead')}</p>}
     {snapshot && !developer && !terminal && <div className="my-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
@@ -213,11 +213,11 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       {canEdit && <Button onClick={() => setMode('assign')}>{label('assignEmployee')}</Button>}
     </div>}
     {snapshot && <ol aria-label={l('taskConversation')} className="space-y-5 py-5">
-      {!entries.some(e => e.kind === 'requirement') && item.description.trim() && <li className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-xl bg-accent px-4 py-3 text-sm">{item.description}</li>}
+      {!entries.some(e => e.kind === 'requirement') && item.description.trim() && <li className="ml-auto max-w-[85%] whitespace-pre-wrap break-words rounded-xl bg-muted px-4 py-3 text-sm">{item.description}</li>}
       {entries.map(entry => {
         const key = `${entry.kind}:${entry.id}`;
         if (entry.kind === 'requirement') return entry.text?.trim() && <li key={key} className="ml-auto w-fit max-w-[85%]">
-          <p className="whitespace-pre-wrap break-words rounded-xl bg-accent px-4 py-3 text-sm">{entry.text}</p>
+          <p className="whitespace-pre-wrap break-words rounded-xl bg-muted px-4 py-3 text-sm">{entry.text}</p>
           {entry.delivery && ['steered','interrupting','delivered','pending'].includes(entry.delivery) && <p className="mt-1 text-right text-xs text-muted-foreground">{l(`taskDelivery_${entry.delivery}` as 'taskDelivery_pending')}</p>}
         </li>;
         if (entry.kind === 'pause' || entry.kind === 'decision' || (entry.kind === 'cycle' && entry.state === 'stopped'))
@@ -259,7 +259,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
         {canEdit && !terminal && passed && !working && <Button size="sm" disabled={busy || intent.hasPending} onClick={() => void accept()}>{l('taskConfirmDone')}</Button>}
         {canTalk && paused && !working && !passed && <Button variant="ghost" size="sm" onClick={() => input.current?.focus()}>{l('taskResume')}</Button>}
       </div>}
-      {actionError && <p role="alert" className="text-sm text-destructive">{l('error')}</p>}
+      {actionError && <p role="alert" className="text-sm text-foreground">{l('error')}</p>}
       {unknown && canTalk && !intent.hasPending && <div role="alert" className="space-y-2 rounded-lg border bg-card p-3 text-sm">
         <p>{l('acknowledgeUnknown')}</p>
         <div className="flex flex-wrap gap-2">{(['inspect', ...(unknown.rerun ? ['rerun'] : [])] as const).map(choice =>
