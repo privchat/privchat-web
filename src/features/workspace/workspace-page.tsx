@@ -183,7 +183,7 @@ function SpaceView({api, client, spaceId, preferenceKey, onRemember}: {api: Work
     } finally {if (live.current) setBusy(false);}
   }
   useEffect(() => {live.current = true; void load(); return () => {live.current = false;};}, [api, spaceId]);
-  const open = (row: WorkspaceActivity) => navigateWorkspace({view: 'item', spaceId, itemId: row.item.id, executionId: row.latestExecution?.executionId ?? undefined});
+  const open = (row: WorkspaceActivity) => navigateWorkspace({view: 'item', spaceId, itemId: row.item.id});
   return <section data-testid="workspace-detail">
     <WsPageHeader title={l('tasksTitle')} subtitle={l('tasksSub')} actions={
       <Button size="sm" disabled={readOnly} onClick={() => navigateWorkspace({view: 'create-item', spaceId, projectId: projectId || undefined})}><Plus className="h-4 w-4" />{l('newTask')}</Button>

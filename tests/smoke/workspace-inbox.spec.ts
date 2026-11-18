@@ -52,4 +52,7 @@ test('the attention filter narrows the same task list without duplicating rows',
   await expect(tasks.first()).toContainText('Task 21');
   await page.getByRole('button', {name: 'All', exact: true}).click();
   await expect(tasks).toHaveCount(2);
+  await page.getByRole('button', {name: 'Task 21', exact: true}).click();
+  await expect(page).toHaveURL(/#\/workspace\/space\/w\/item\/21$/);
+  await expect(page.getByTestId('session-console')).toHaveCount(0);
 });
