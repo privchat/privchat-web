@@ -1250,3 +1250,35 @@ test('multiple writable directories block an unpinned employee but keep create-o
   await form.getByRole('button', {name: 'Create only', exact: true}).click();
   await expect.poll(() => requests.filter(r => r.method === 'POST').map(r => r.path)).toEqual(['/workspace/work-item/create']);
 });
+
+test('project binding browses live node directories one level at a time and waits for registration', async ({page}) => {
+  let registered = false;
+  const id = '/Users/demo/repo';
+  const requests = await mock(page, (path, _query, body) => {
+    if (path === '/agent/nodes') return [{...node, workdirs: registered ? [{id, label: 'repo'}] : []}];
+    if (path === '/agent/nodes/query') {
+      let data;
+      if (body.kind === 'fs.roots') data = {scopes: [{path: '/', name: '/'}], projects: []};
+      if (body.kind === 'fs.list') {
+        const entries = {'/': [{name: 'Users', path: '/Users'}], '/Users': [{name: 'demo', path: '/Users/demo'}],
+          '/Users/demo': [{name: 'repo', path: id}], [id]: []};
+        data = {path: body.params.path, entries: entries[body.params.path as keyof typeof entries]};
+      }
+      if (body.kind === 'project.add') {registered = true; data = {status: 'added', workdir: {id, label: 'repo'}};}
+      return {kind: body.kind, outcome: 'ok', data};
+    }
+    if (path === '/workspace/project/binding/save') return {...myBinding, directories: [{workdirBindingId: id, access: 'write'}]};
+  });
+  await openProjectDetail(page);
+  await page.getByRole('button', {name: 'Bind my directories', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('combobox', {name: 'Device node', exact: true}).selectOption('n');
+  const picker = dialog.getByTestId('node-directory-picker');
+  for (const name of ['Users', 'demo', 'repo']) await picker.getByRole('button', {name, exact: true}).click();
+  await expect(requests.filter(r => r.path === '/agent/nodes/query').map(r => r.body.params.path)).toEqual([undefined, '/', '/Users', '/Users/demo', id]);
+  await picker.getByRole('button', {name: 'Use this directory', exact: true}).click();
+  await expect(dialog.getByRole('combobox', {name: 'Directory path', exact: true})).toHaveValue(id);
+  await dialog.getByRole('button', {name: 'Save binding', exact: true}).click();
+  await expect.poll(() => requests.find(r => r.path === '/workspace/project/binding/save')?.body.directories)
+    .toEqual([{workdirBindingId: id, access: 'write'}]);
+});

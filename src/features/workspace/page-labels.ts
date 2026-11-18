@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { UnavailableCause } from './employee-access';
 const en = {
+  directoryRoots: 'Shared directories', directoryUp: 'Up one level', chooseDirectory: 'Use this directory', directoryBrowseUnsupported: 'Update Weey Agent to browse live directories.', directoryBrowseError: 'Could not browse this workstation. Retry or choose an already shared directory.', directoryListTruncated: 'This directory has more entries than can be shown.',
   deliverySummary: 'Delivery review', deliveryRecommendation: 'Reviewer recommends passing (not acceptance).', unverifiedDelivery: 'Current delivery and review evidence: unverified.', unverifiedRemainder: 'Checks not covered by this evidence: unverified.',
   manualReviewHint: 'Manual for this task: no automatic review.', advancedSettings: 'Advanced settings', manualWorkflow: 'Manual workflow',
   workstation: "Workstation",
@@ -112,6 +113,7 @@ const en = {
 type Labels = typeof en;
 export type WorkspaceLabelKey = keyof Labels;
 const zh: Labels = {
+  directoryRoots: '已授权目录', directoryUp: '上一级', chooseDirectory: '使用此目录', directoryBrowseUnsupported: '请更新 Weey Agent 后实时浏览目录。', directoryBrowseError: '无法浏览此工作节点。请重试，或选择已注册的目录。', directoryListTruncated: '此目录还有未显示的条目。',
   deliverySummary: '交付结论', deliveryRecommendation: '评审建议通过（不等于验收）。', unverifiedDelivery: '本轮交付与评审依据：未核验。', unverifiedRemainder: '证据未覆盖的检查项：未核验。',
   manualReviewHint: '本次手动推进，不自动发起评审。', advancedSettings: '进阶配置', manualWorkflow: '手动推进',
   workstation: "工作站",
@@ -221,6 +223,7 @@ const zh: Labels = {
   pendingRetry: '上一次请求结果未确认，请重试同一请求，不会新建。',
 };
 const zhTW: Labels = {
+  directoryRoots: '已授權目錄', directoryUp: '上一層', chooseDirectory: '使用此目錄', directoryBrowseUnsupported: '請更新 Weey Agent 後即時瀏覽目錄。', directoryBrowseError: '無法瀏覽此工作節點。請重試，或選擇已登記的目錄。', directoryListTruncated: '此目錄還有未顯示的項目。',
   deliverySummary: '交付結論', deliveryRecommendation: '評審建議通過（不等於驗收）。', unverifiedDelivery: '本輪交付與評審依據：未核驗。', unverifiedRemainder: '證據未涵蓋的檢查項：未核驗。',
   manualReviewHint: '本次手動推進，不自動發起評審。', advancedSettings: '進階設定', manualWorkflow: '手動推進',
   workstation: "工作站",
@@ -330,6 +333,7 @@ const zhTW: Labels = {
   pendingRetry: '上一次請求結果未確認，請重試同一請求，不會新建。',
 };
 const vi: Labels = {
+  directoryRoots: 'Thư mục được cấp quyền', directoryUp: 'Lên một cấp', chooseDirectory: 'Dùng thư mục này', directoryBrowseUnsupported: 'Cập nhật Weey Agent để duyệt thư mục trực tiếp.', directoryBrowseError: 'Không thể duyệt thiết bị. Hãy thử lại hoặc chọn thư mục đã chia sẻ.', directoryListTruncated: 'Còn mục chưa hiển thị trong thư mục này.',
   deliverySummary: 'Kết luận bàn giao', deliveryRecommendation: 'Đề xuất đánh giá: đạt (chưa nghiệm thu).', unverifiedDelivery: 'Bàn giao và bằng chứng vòng này: chưa xác minh.', unverifiedRemainder: 'Các kiểm tra ngoài bằng chứng này: chưa xác minh.',
   manualReviewHint: 'Thao tác thủ công cho nhiệm vụ này, không tự động yêu cầu đánh giá.', advancedSettings: 'Cài đặt nâng cao', manualWorkflow: 'Thao tác thủ công',
   workstation: "Máy làm việc",
