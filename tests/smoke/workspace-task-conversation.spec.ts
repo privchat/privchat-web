@@ -38,7 +38,8 @@ async function fixture(page: Page, {entries = [] as object[], owner = 'test-owne
     if (path.endsWith('/workspace/get/w')) data = {id: 'w', name: 'Team', archived: 0, myRole: 'owner'};
     if (path.endsWith('/work-item/get/2')) {
       reads++;
-      data = {id: '2', workspaceId: 'w', title: 'Reconnect task', description: '', createdBy: owner, version, status: state};
+      data = {id: '2', workspaceId: 'w', title: 'Reconnect task', description: '', createdBy: owner, version, status: state,
+        createdAt: 1_790_000_000_000, closedAt: state === 'done' ? 1_790_003_900_000 : null};
     }
     if (path.endsWith('/employee/list')) data = [{employeeId: '12', name: 'Ada'}];
     if (path.endsWith('/employee/page')) data = {items: [], hasMore: false, nextCursor: null};
@@ -142,6 +143,8 @@ test('the stop control pauses the task, not a raw execution', async ({page}) => 
 test('finished result renders public Markdown and review still requires owner confirmation', async ({page}) => {
   const {writes} = await fixture(page, {entries: [request, {...developer, state: 'succeeded'}, review]});
   const view = page.getByTestId('task-conversation-page');
+  await expect(view.getByText(/^Elapsed /)).toBeVisible();
+  await expect(view.getByText(/^Assigned /)).toBeVisible();
   await expect(view.locator('strong')).toHaveText('Reconnect verified');
   await expect(view).not.toContainText('NOT PUBLIC');
   await expect(view.locator('img')).toHaveCount(0);
@@ -149,6 +152,7 @@ test('finished result renders public Markdown and review still requires owner co
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', {name: 'Confirm completion'}).click();
   await expect(page.getByRole('status').filter({hasText: 'Done'})).toBeVisible();
+  await expect(view.getByText('Task duration 1 hr 5 min', {exact: true})).toBeVisible();
   expect(writes).toEqual([{path: '/workspace/work-item/update-status', body: {id: '2', version: 2, status: 'done'}}]);
 });
 

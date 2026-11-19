@@ -15,6 +15,7 @@ import type {PendingConsoleRequest} from './console-intent';
 import {WorkspaceRoomObserver, roomFailure} from './room-observer';
 import {taskIntent, taskResult, taskWorking, type TaskDecision, type TaskEntry} from './task-conversation';
 import {isQueued} from './delivery-receipt';
+import {taskElapsed} from './task-timing';
 
 type Props = {
   api: WorkspaceApi; initial: WorkItem; client?: PrivchatClient; viewerId?: string; executionId?: string;
@@ -25,7 +26,7 @@ type Props = {
 
 export function WorkDetails({api, initial, client, viewerId, executionId, readOnly, onBack, renderSession, onLockChange}: Props) {
   const l = usePageLabels();
-  const {t} = useTranslation();
+  const {t, i18n} = useTranslation();
   const label = (key: string) => t(`agentWorkspace.${key}`);
   const [item, setItem] = useState(initial);
   const [snapshot, setSnapshot] = useState<{entries: TaskEntry[]; runs: WorkExecution[]; questions: TaskDecision[]}>();
@@ -61,6 +62,16 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const owner = !!viewerId && viewerId === item.createdBy;
   const canEdit = owner && !readOnly && !error;
   const terminal = item.status === 'done' || item.status === 'cancelled';
+  const [clock, setClock] = useState(Date.now);
+  useEffect(() => {
+    if (terminal || !item.createdAt) return;
+    setClock(Date.now());
+    const timer = setInterval(() => setClock(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, [terminal, item.createdAt]);
+  const locale = i18n.resolvedLanguage ?? 'en';
+  const stamp = (at: number) => new Intl.DateTimeFormat(locale, {dateStyle: 'medium', timeStyle: 'short'}).format(at);
+  const elapsed = taskElapsed(item.createdAt, terminal ? item.closedAt : clock, locale);
   const entries = snapshot?.entries ?? [];
   const developer = entries.filter(e => e.kind === 'turn' && e.role === 'developer').at(-1);
   const reviewer = entries.filter(e => e.kind === 'turn' && e.role === 'reviewer').at(-1);
@@ -216,6 +227,10 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       </div>
       <Button data-testid="task-manage" variant="ghost" size="icon" aria-label={l('taskInfo')} onClick={() => setMode('details')}><MoreHorizontal className="h-5 w-5" /></Button>
     </header>
+    {!!item.createdAt && <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+      <span>{l('taskCreatedTime')} <time dateTime={new Date(item.createdAt).toISOString()}>{stamp(item.createdAt)}</time></span>
+      {elapsed && <span>{l(terminal ? 'taskElapsedTime' : 'taskElapsedSoFar')} {elapsed}</span>}
+    </p>}
     {error && <div role="alert" className="my-4 flex flex-wrap items-center gap-2 text-sm text-foreground">{l('error')}<Button variant="outline" size="sm" onClick={() => void refresh().catch(() => {})}>{l('retry')}</Button></div>}
     {!snapshot && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l('loading')}</p>}
     {(readOnly || !owner) && <p className="mt-4 text-sm text-muted-foreground">{l('accessRead')}</p>}
@@ -243,6 +258,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
             <p className="break-words font-semibold">{name(entry)}</p>
             {entry.state && <span className="text-xs text-muted-foreground">{label(`execution_${entry.state}`)}</span>}
           </div>
+          {entry.at > 0 && <p className="text-xs text-muted-foreground">{l('taskDispatchedTime')} <time dateTime={new Date(entry.at).toISOString()}>{stamp(entry.at)}</time></p>}
           {result && <TaskMarkdown>{result}</TaskMarkdown>}
           {id && <Button variant="ghost" size="sm" className="px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground" aria-expanded={open} onClick={() => setExpanded(open ? undefined : id)}>{l('execProcess')}</Button>}
           {open && renderSession(id, {readOnly: !canEdit || terminal || !entry.employeeId || !ownedEmployees.includes(entry.employeeId)})}
