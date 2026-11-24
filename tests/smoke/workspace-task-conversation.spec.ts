@@ -140,6 +140,32 @@ test('the stop control pauses the task, not a raw execution', async ({page}) => 
   expect(writes.map(w => w.path)).toEqual(['/workspace/work-instruction/pause']);
 });
 
+test('task timing and employee headings align on desktop and mobile', async ({page}) => {
+  await fixture(page, {entries: [request, {...developer, state: 'succeeded'}]});
+  const view = page.getByTestId('task-conversation-page');
+  const turn = view.locator('#task-turn-t7');
+  const created = view.getByText(/^Created /);
+  const elapsed = view.getByText(/^Elapsed /);
+  const name = turn.getByText('Ada', {exact: true});
+  const assigned = turn.getByText(/^Assigned /);
+  const result = turn.getByText('Reconnect verified');
+  await expect(result).toBeVisible();
+
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({width, height: 900});
+    for (const [left, right] of [[created, elapsed], [name, assigned]]) {
+      const [a, b, frame] = await Promise.all([left.boundingBox(), right.boundingBox(), view.boundingBox()]);
+      expect(a && b && frame).toBeTruthy();
+      expect(a!.x).toBeCloseTo(frame!.x, 0);
+      expect(b!.x + b!.width).toBeCloseTo(frame!.x + frame!.width, 0);
+      expect(b!.x - (a!.x + a!.width)).toBeGreaterThanOrEqual(11);
+      expect(Math.abs(b!.y - a!.y)).toBeLessThanOrEqual(4);
+    }
+    await expect(elapsed).toHaveCSS('text-align', 'right');
+    await expect(result).toHaveCSS('text-align', 'left');
+  }
+});
+
 test('finished result renders public Markdown and review still requires owner confirmation', async ({page}) => {
   const {writes} = await fixture(page, {entries: [request, {...developer, state: 'succeeded'}, review]});
   const view = page.getByTestId('task-conversation-page');

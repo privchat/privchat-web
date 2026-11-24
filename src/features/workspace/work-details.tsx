@@ -218,7 +218,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
 
   if (denied) return <section className="space-y-3"><Button variant="ghost" onClick={onBack}>{l('back')}</Button><p role="alert">{l('accessDenied')}</p></section>;
 
-  return <section className="mx-auto w-full min-w-0 max-w-[740px]" data-testid="task-conversation-page">
+  return <section className="mx-auto w-full min-w-0 max-w-[740px] text-left" data-testid="task-conversation-page">
     <header className="flex items-center gap-3 border-b pb-4">
       <Button variant="ghost" size="icon" onClick={onBack} disabled={locked} aria-label={l('back')}><ArrowLeft className="h-4 w-4" /></Button>
       <div className="min-w-0 flex-1">
@@ -227,9 +227,9 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
       </div>
       <Button data-testid="task-manage" variant="ghost" size="icon" aria-label={l('taskInfo')} onClick={() => setMode('details')}><MoreHorizontal className="h-5 w-5" /></Button>
     </header>
-    {!!item.createdAt && <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+    {!!item.createdAt && <p className="mt-3 grid grid-cols-2 gap-x-3 text-xs text-muted-foreground">
       <span>{l('taskCreatedTime')} <time dateTime={new Date(item.createdAt).toISOString()}>{stamp(item.createdAt)}</time></span>
-      {elapsed && <span>{l(terminal ? 'taskElapsedTime' : 'taskElapsedSoFar')} {elapsed}</span>}
+      {elapsed && <span className="text-right">{l(terminal ? 'taskElapsedTime' : 'taskElapsedSoFar')} {elapsed}</span>}
     </p>}
     {error && <div role="alert" className="my-4 flex flex-wrap items-center gap-2 text-sm text-foreground">{l('error')}<Button variant="outline" size="sm" onClick={() => void refresh().catch(() => {})}>{l('retry')}</Button></div>}
     {!snapshot && !error && <p role="status" className="py-6 text-sm text-muted-foreground">{l('loading')}</p>}
@@ -254,11 +254,11 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
         const open = !!id && expanded === id;
         const result = run && previews[run.id];
         return <li key={key} id={`task-turn-${entry.id}`} className="space-y-2 py-1 text-sm leading-relaxed">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <p className="break-words font-semibold">{name(entry)}</p>
-            {entry.state && <span className="text-xs text-muted-foreground">{label(`execution_${entry.state}`)}</span>}
+          <div className="flex items-baseline justify-between gap-x-3">
+            <p className="min-w-0 truncate font-semibold">{name(entry)}</p>
+            {entry.at > 0 && <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">{l('taskDispatchedTime')} <time dateTime={new Date(entry.at).toISOString()}>{stamp(entry.at)}</time></span>}
           </div>
-          {entry.at > 0 && <p className="text-xs text-muted-foreground">{l('taskDispatchedTime')} <time dateTime={new Date(entry.at).toISOString()}>{stamp(entry.at)}</time></p>}
+          {entry.state && <p className="text-xs text-muted-foreground">{label(`execution_${entry.state}`)}</p>}
           {result && <TaskMarkdown>{result}</TaskMarkdown>}
           {id && <Button variant="ghost" size="sm" className="px-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground" aria-expanded={open} onClick={() => setExpanded(open ? undefined : id)}>{l('execProcess')}</Button>}
           {open && renderSession(id, {readOnly: !canEdit || terminal || !entry.employeeId || !ownedEmployees.includes(entry.employeeId)})}
