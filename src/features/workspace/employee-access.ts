@@ -126,5 +126,5 @@ export function projectDirectory(project: Project | undefined, nodeId?: string |
   return myProjectBinding(project, nodeId)?.directories.find(d => !!workdirBindingId && d.workdirBindingId === workdirBindingId);
 }
 
-/** The limits offered for automatic corrections; null is unlimited (§19.6). */
-export const CORRECTION_CHOICES: (number | null)[] = [null, 1, 3, 5, 10, 20, 50];
+/** The limits offered for automatic corrections; null uses the server default of one. */
+export const CORRECTION_CHOICES: (number | null)[] = [null, 0, 3, 5, 10, 20, 50];

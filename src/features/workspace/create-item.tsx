@@ -216,7 +216,7 @@ export function CreateItem({api, workspaceId, initialProjectId, draftScope, onBa
         <summary className="cursor-pointer text-sm font-medium">{l('advancedSettings')}</summary>
         <label className="flex items-center gap-2 py-2 text-sm font-medium"><input type="checkbox" checked={autoReview} disabled={!reviewer} onChange={e => setManualReview(!e.target.checked)}/>{l('autoReview')}</label>
         {autoReview && <label className="grid gap-1.5 font-medium">{l('correctionRounds')}<select aria-label={l('correctionRounds')} className={wsField} value={correctionLimit} onChange={e => setCorrectionLimit(e.target.value)}>
-          {CORRECTION_CHOICES.map(choice => <option key={choice ?? 'unlimited'} value={choice ?? ''}>{choice == null ? l('correctionUnlimited') : l('correctionRoundsN').replace('{n}', String(choice))}</option>)}
+          {CORRECTION_CHOICES.map(choice => <option key={choice ?? 'default'} value={choice ?? ''}>{choice == null ? l('correctionDefault') : l('correctionRoundsN').replace('{n}', String(choice))}</option>)}
         </select><span className="text-xs font-normal text-muted-foreground">{l('correctionRoundsHint')}</span></label>}
       </details>
     </fieldset>

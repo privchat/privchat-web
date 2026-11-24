@@ -52,6 +52,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(false);
+  const [staleReviewId, setStaleReviewId] = useState<string>();
   const [unknown, setUnknown] = useState<{request: PendingConsoleRequest; rerun: boolean}>();
   const [intent] = useState(() => taskIntent(api, initial.id, viewerId));
   const inFlight = useRef(false);
@@ -79,6 +80,8 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const pauseIndex = entries.map(e => e.kind).lastIndexOf('pause');
   const paused = pauseIndex >= 0 && !entries.slice(pauseIndex + 1).some(e => e.kind === 'requirement');
   const passed = cycle?.state === 'recommendation_passed';
+  const reviewToRefresh = cycle?.reviewWorkExecutionId &&
+    (cycle.state === 'needs_user' || staleReviewId === cycle.reviewWorkExecutionId) ? cycle.reviewWorkExecutionId : undefined;
   const question = snapshot?.questions.find(q => q.workItemId === item.id && q.status === 'pending' && q.expiresAt > Date.now());
   const canTalk = canEdit && !!developer && !terminal;
   const name = (entry: TaskEntry) => (entry.employeeId && people[entry.employeeId]) ||
@@ -203,6 +206,20 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
     try {
       await api.put('/workspace/work-item/update-status', {id: item.id, version: item.version, status: 'done'});
       await refresh().catch(() => {});
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.machineCode === 'WORKSPACE_REVIEW_STALE' && cycle?.reviewWorkExecutionId)
+        setStaleReviewId(cycle.reviewWorkExecutionId);
+      else setActionError(true);
+    }
+    finally {inFlight.current = false; setBusy(false);}
+  }
+
+  async function recheck(reviewId: string) {
+    if (inFlight.current || !canEdit || terminal) return;
+    inFlight.current = true; setBusy(true); setActionError(false);
+    try {
+      await api.post('/workspace/work-review-cycle/recheck', {workItemId: item.id, version: item.version, reviewWorkExecutionId: reviewId});
+      await refresh().catch(() => {});
     } catch {setActionError(true);}
     finally {inFlight.current = false; setBusy(false);}
   }
@@ -214,6 +231,7 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
   const status = terminal ? label(`status_${item.status}`) : paused ? l(working ? 'taskPausing' : 'taskPaused')
     : working ? `${name(working)} · ${label(`execution_${working.state}`)}`
     : queued ? l('taskDirectoryQueue')
+    : reviewToRefresh && cycle?.state === 'needs_user' ? l('taskDecision')
     : passed ? l(deliveryReview ? 'taskReviewPassed' : 'unverifiedDelivery') : !question && developer?.state === 'unknown' ? label('unknown') : undefined;
 
   if (denied) return <section className="space-y-3"><Button variant="ghost" onClick={onBack}>{l('back')}</Button><p role="alert">{l('accessDenied')}</p></section>;
@@ -283,9 +301,13 @@ export function WorkDetails({api, initial, client, viewerId, executionId, readOn
             document.getElementById(`task-turn-${working.id}`)?.scrollIntoView({block: 'nearest'});
           }}>{l('taskOpenApproval')}</Button>;
         })()}
-        {canEdit && !terminal && passed && !working && <Button size="sm" disabled={busy || intent.hasPending} onClick={() => void accept()}>{l('taskConfirmDone')}</Button>}
+        {canEdit && !terminal && !working && (reviewToRefresh
+          ? <Button size="sm" disabled={busy || intent.hasPending} onClick={() => void recheck(reviewToRefresh)}>{l('taskReviewCurrent')}</Button>
+          : passed && <Button size="sm" disabled={busy || intent.hasPending} onClick={() => void accept()}>{l('taskConfirmDone')}</Button>)}
         {canTalk && paused && !working && !passed && <Button variant="ghost" size="sm" onClick={() => input.current?.focus()}>{l('taskResume')}</Button>}
       </div>}
+      {passed && staleReviewId && staleReviewId === cycle?.reviewWorkExecutionId &&
+        <p role="alert" className="text-sm text-muted-foreground">{l('taskUnverifiedVersion')}</p>}
       {actionError && <p role="alert" className="text-sm text-foreground">{l('error')}</p>}
       {unknown && canTalk && !intent.hasPending && <div role="alert" className="space-y-2 rounded-lg border bg-card p-3 text-sm">
         <p>{l('acknowledgeUnknown')}</p>

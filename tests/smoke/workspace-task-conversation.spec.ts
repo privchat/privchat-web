@@ -5,7 +5,18 @@ const developer = {kind: 'turn', id: 't7', at: 2, role: 'developer', employeeId:
 const request = {kind: 'requirement', id: 'a7', at: 1, text: 'Recover after reconnect'};
 const review = {kind: 'cycle', id: 'c1', at: 3, state: 'recommendation_passed'};
 
-async function fixture(page: Page, {entries = [] as object[], owner = 'test-owner', loseSend = false, verifyUnknown = false, runs = undefined as object[] | undefined, reviewError = false, reviews = [] as object[]} = {}) {
+test('owner can retry a replacement review after resolving its findings without dispatching development', async ({page}) => {
+  const {writes} = await fixture(page, {entries: [request, {...developer, state: 'succeeded'},
+    {...review, state: 'needs_user', reviewWorkExecutionId: '9'}]});
+  await expect(page.getByRole('button', {name: 'Confirm completion'})).toHaveCount(0);
+  await page.getByRole('button', {name: 'Review current version'}).click();
+  await expect.poll(() => writes).toEqual([{
+    path: '/workspace/work-review-cycle/recheck',
+    body: {workItemId: '2', version: 2, reviewWorkExecutionId: '9'},
+  }]);
+});
+
+async function fixture(page: Page, {entries = [] as object[], owner = 'test-owner', loseSend = false, verifyUnknown = false, runs = undefined as object[] | undefined, reviewError = false, reviews = [] as object[], staleOnClose = false} = {}) {
   const writes: {path: string; body: Record<string, unknown>}[] = [];
   let timeline = entries;
   let state = 'open';
@@ -25,7 +36,11 @@ async function fixture(page: Page, {entries = [] as object[], owner = 'test-owne
         timeline = [...timeline, {kind: 'requirement', id: 'i9', at: 4, text: body.text, delivery: 'pending'}];
       }
       if (path.endsWith('/pause')) timeline = [...timeline, {kind: 'pause', id: 'p1', at: 4}];
-      if (path.endsWith('/update-status')) state = body.status;
+      if (path.endsWith('/update-status')) {
+        if (staleOnClose) return route.fulfill({json: {code: 10205, message: 'WORKSPACE_REVIEW_STALE'}});
+        state = body.status;
+      }
+      if (path.endsWith('/recheck')) timeline = [...timeline, {kind: 'cycle', id: 'c2', at: 5, state: 'pending'}];
       data = true;
     }
     if (path.endsWith('/work-instruction/timeline')) data = timeline;
@@ -180,6 +195,23 @@ test('finished result renders public Markdown and review still requires owner co
   await expect(page.getByRole('status').filter({hasText: 'Done'})).toBeVisible();
   await expect(view.getByText('Task duration 1 hr 5 min', {exact: true})).toBeVisible();
   expect(writes).toEqual([{path: '/workspace/work-item/update-status', body: {id: '2', version: 2, status: 'done'}}]);
+});
+
+test('stale verdict offers only a review of the current version', async ({page}) => {
+  const {writes} = await fixture(page, {
+    entries: [request, {...developer, state: 'succeeded'}, {...review, reviewWorkExecutionId: '8'}],
+    staleOnClose: true,
+  });
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', {name: 'Confirm completion'}).click();
+  await expect(page.getByRole('alert')).toContainText('The reviewed version could not be verified');
+  await expect(page.getByRole('button', {name: 'Confirm completion'})).toHaveCount(0);
+  await page.getByRole('button', {name: 'Review current version'}).click();
+  await expect(page.getByRole('button', {name: 'Review current version'})).toHaveCount(0);
+  expect(writes).toEqual([
+    {path: '/workspace/work-item/update-status', body: {id: '2', version: 2, status: 'done'}},
+    {path: '/workspace/work-review-cycle/recheck', body: {workItemId: '2', version: 2, reviewWorkExecutionId: '8'}},
+  ]);
 });
 
 test('other members can see the conversation but cannot drive the task', async ({page}) => {
