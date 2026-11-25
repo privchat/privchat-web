@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Bot, CheckSquare, ChevronDown, ChevronRight, Folder, Monitor, Plus, Users, type LucideIcon } from 'lucide-react';
-import { brandConfig } from '@/lib/brand-config';
+import { Bot, CheckSquare, ChevronDown, ChevronRight, Folder, Monitor, Plus, Settings, Users, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Workspace, WorkspaceApi } from './api';
 import { usePageLabels } from './page-labels';
@@ -54,11 +53,11 @@ function routeSpaceId(route: WorkspaceRoute): string | undefined {
 }
 
 type NavKey = 'navTasks' | 'navProjects' | 'navMembers' | 'navDevices' | 'navEmployees';
-const NAV: {group: 'groupWorkspace' | 'groupResources'; items: {key: NavKey; icon: LucideIcon; views: WorkspaceRoute['view'][]; go: (spaceId?: string) => WorkspaceRoute}[]}[] = [
-  {group: 'groupWorkspace', items: [
+const NAV: {group: 'groupResources' | null; items: {key: NavKey; icon: LucideIcon; views: WorkspaceRoute['view'][]; go: (spaceId?: string) => WorkspaceRoute}[]}[] = [
+  {group: null, items: [
     {key: 'navTasks', icon: CheckSquare, views: ['space', 'records', 'create-item', 'item'], go: sid => sid ? {view: 'space', spaceId: sid} : {view: 'home'}},
     {key: 'navProjects', icon: Folder, views: ['projects', 'create-project', 'project'], go: sid => ({view: 'projects', workspaceId: sid})},
-    {key: 'navMembers', icon: Users, views: ['settings'], go: sid => sid ? {view: 'settings', spaceId: sid} : {view: 'home'}},
+    {key: 'navMembers', icon: Users, views: ['members'], go: sid => sid ? {view: 'members', spaceId: sid} : {view: 'home'}},
   ]},
   {group: 'groupResources', items: [
     {key: 'navDevices', icon: Monitor, views: ['devices'], go: () => ({view: 'devices'})},
@@ -66,12 +65,13 @@ const NAV: {group: 'groupWorkspace' | 'groupResources'; items: {key: NavKey; ico
   ]},
 ];
 
-function sectionKey(route: WorkspaceRoute): NavKey | 'createSpace' | null {
+function sectionKey(route: WorkspaceRoute): NavKey | 'settings' | 'createSpace' | null {
   switch (route.view) {
     case 'space': case 'records': case 'create-item': case 'item': return 'navTasks';
     case 'projects': case 'create-project': case 'project': return 'navProjects';
     case 'employees': case 'employee': return 'navEmployees';
-    case 'settings': return 'navMembers';
+    case 'members': return 'navMembers';
+    case 'settings': return 'settings';
     case 'devices': return 'navDevices';
     case 'create-space': return 'createSpace';
     default: return null;
@@ -94,12 +94,13 @@ export function WorkspaceShell({api, route, preferred, spaceRevision, children}:
   const space = spaces.find(s => s.id === spaceId);
   const section = sectionKey(route);
   const detail = route.view === 'item' || route.view === 'project' || route.view === 'employee';
-  const initial = (brandConfig.appName || 'W').charAt(0).toUpperCase();
   return <div className="flex h-full min-h-0 w-full flex-col bg-background text-foreground md:flex-row">
     <aside className="flex min-w-0 shrink-0 flex-col border-b bg-sidebar px-3 pt-2 md:w-[224px] md:border-b-0 md:border-r md:py-3.5">
-      <div className="hidden items-center gap-2.5 px-1.5 pb-[17px] pt-[3px] md:flex">
-        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg bg-primary text-lg font-bold text-primary-foreground">{initial}</span>
-        <span className="truncate text-[17px] font-bold">{brandConfig.appName}</span>
+      <div className="mb-1.5 flex min-h-8 items-center justify-between gap-2 pl-1.5 md:mb-3.5">
+        <span data-testid="ws-sidebar-title" className="truncate text-base font-semibold">{l('groupWorkspace')}</span>
+        {spaceId && <button type="button" title={l('settings')} aria-label={l('settings')} aria-current={route.view === 'settings' ? 'page' : undefined}
+          className={cn('shrink-0 rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground', route.view === 'settings' && 'bg-accent text-foreground')}
+          onClick={() => navigateWorkspace({view: 'settings', spaceId})}><Settings aria-hidden="true" className="h-4 w-4" /></button>}
       </div>
       <div className="mb-1 flex items-center gap-1 md:mb-[17px]">
         <div className="flex min-w-0 flex-1 items-center rounded-[7px] border bg-background px-2">
@@ -112,8 +113,8 @@ export function WorkspaceShell({api, route, preferred, spaceRevision, children}:
         <button type="button" title={l('createSpace')} aria-label={l('createSpace')} data-testid="ws-create-space" className="rounded-[7px] border bg-background p-2 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => navigateWorkspace({view: 'create-space'})}><Plus className="h-4 w-4" /></button>
       </div>
       <nav className="flex min-h-0 flex-1 gap-1 overflow-x-auto md:block md:overflow-y-auto">
-        {NAV.map(group => <div key={group.group} className="shrink-0">
-          <p className="hidden px-2.5 pb-1 pt-2 text-[11px] text-muted-foreground md:block">{l(group.group)}</p>
+        {NAV.map(group => <div key={group.group ?? 'workspace'} className="shrink-0">
+          {group.group && <p className="hidden px-2.5 pb-1 pt-2 text-[11px] text-muted-foreground md:block">{l(group.group)}</p>}
           <div className="flex md:block">
             {group.items.map(item => {
               const active = item.views.includes(route.view);

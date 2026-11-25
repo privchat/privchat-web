@@ -7,6 +7,7 @@ import type { Project, Workspace, WorkItem, WorkspaceActivity, WorkspaceApi, Wor
 import { usePageLabels } from './page-labels';
 import { ProjectCreate, ProjectDetail, ProjectList, workspaceField } from './project-management';
 import { SpaceSettings } from './space-settings';
+import { SpaceMembers } from './space-members';
 import { DevicePage } from './devices';
 import { TaskFeed } from './task-feed-view';
 import { CreateItem } from './create-item';
@@ -63,7 +64,8 @@ export function WorkspacePage({api, client, accountKey, viewerId = client?.sessi
     case 'item': view = <ItemRoute key={`${route.spaceId}:${route.itemId}:${route.executionId ?? ''}`} api={api} client={client} viewerId={viewerId} spaceId={route.spaceId} itemId={route.itemId} executionId={route.executionId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employees': view = <SpaceEmployees key={route.spaceId} api={api} workspaceId={route.spaceId} renderSession={renderSession} onLockChange={onLockChange}/>; break;
     case 'employee': view = <EmployeeDetail key={`${route.spaceId}:${route.employeeId}:${route.panel ?? ''}`} api={api} workspaceId={route.spaceId} employeeId={route.employeeId} panel={route.panel} onLockChange={onLockChange}/>; break;
-    case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId}/>; break;
+    case 'members': view = <SpaceMembers key={route.spaceId} api={api} workspaceId={route.spaceId}/>; break;
+    case 'settings': view = <SpaceSettings key={route.spaceId} api={api} workspaceId={route.spaceId} onUpdated={() => setSpaceRevision(revision => revision + 1)}/>; break;
     default: view = <SpaceHome api={api}/>;
   }
   const setupFrom = new URLSearchParams(location.hash.split('?')[1]).get('fromTask');

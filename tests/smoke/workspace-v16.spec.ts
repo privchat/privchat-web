@@ -8,8 +8,9 @@ const project = {id: 'p', workspaceId: 'w', name: 'Project', archived: 0, versio
 const item = (id: string, status = 'open', version = 1) => ({id, workspaceId: 'w', title: `Task ${id}`, createdBy: 'test-owner', description: '', status, version, createdAt: Number(id), closedAt: ['done', 'cancelled'].includes(status) ? Number(id) : null});
 const row = (id: string, status = 'open', version = 1) => ({item: item(id, status, version), latestExecution: {id: `link-${id}`, executionId: `exec-${id}`, employeeId: 'emp', state: 'succeeded'}, executionCount: 2, developerEmployeeId: 'emp', reviewerEmployeeId: null, reviewNoteId: null, stage: ['done', 'cancelled'].includes(status) ? 'closed' : 'development', lastActivityAt: Number(id), needsAttention: false});
 const feed = (items: WorkspaceActivity[] = [row('21'), row('22')], more = true) => ({items, olderCursor: more ? 'opaque-w' : null, hasOlder: more, refreshRequired: false});
-async function mount(page: Page) {
-  await page.goto('/'); await page.evaluate(async () => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage('en'); const {mountWorkspacePage} = await import('/src/test-harness/workspace-console.tsx'); mountWorkspacePage(`${location.origin}/__v16/app`);});
+async function mount(page: Page, navigate = true) {
+  if (navigate) await page.goto('/');
+  await page.evaluate(async () => {const {default: i18n} = await import('/src/i18n/index.ts'); await i18n.changeLanguage('en'); const {mountWorkspacePage} = await import('/src/test-harness/workspace-console.tsx'); mountWorkspacePage(`${location.origin}/__v16/app`, location.hash || '#/workspace');});
 }
 async function mock(page: Page, override?: (path: string, query: URL, body: any) => unknown) {
   const requests: {path: string; query: URL; method: string; body: any}[] = [];
@@ -168,9 +169,49 @@ async function openProjectDetail(page: Page) {
 }
 async function openSettings(page: Page) {
   await mount(page); await page.getByTestId('workspace-card').first().click();
-  await page.getByTestId('ws-nav-navMembers').click();
+  await page.getByRole('button', {name: 'Space settings', exact: true}).click();
   return page.getByTestId('space-settings');
 }
+
+async function openMembers(page: Page) {
+  await mount(page); await page.getByTestId('workspace-card').first().click();
+  await page.getByTestId('ws-nav-navMembers').click();
+  return page.getByTestId('space-members');
+}
+
+test('workspace sidebar separates members from settings on desktop and mobile', async ({page}) => {
+  const requests = await mock(page);
+  const members = await openMembers(page);
+  const breadcrumb = page.getByRole('navigation', {name: 'breadcrumb'});
+  const membersTab = page.getByTestId('ws-nav-navMembers');
+  const settingsButton = page.getByRole('button', {name: 'Space settings', exact: true});
+
+  await expect(page.getByTestId('ws-sidebar-title')).toHaveText('Workspace');
+  await expect(page).toHaveURL(/\/space\/w\/members$/);
+  await expect(breadcrumb).toContainText('Members');
+  await expect(membersTab).toHaveAttribute('aria-current', 'page');
+  await expect(members.getByRole('heading', {level: 1, name: 'Members'})).toBeVisible();
+  await expect(page.getByTestId('space-profile')).toHaveCount(0);
+
+  await page.setViewportSize({width: 390, height: 844});
+  await expect(settingsButton).toBeVisible();
+  const memberRequests = requests.filter(r => r.path === '/workspace/member/list').length;
+  await settingsButton.click();
+  await expect(page).toHaveURL(/\/space\/w\/settings$/);
+  await expect(breadcrumb).toContainText('Space settings');
+  await expect(settingsButton).toHaveAttribute('aria-current', 'page');
+  await expect(membersTab).not.toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('space-profile')).toBeVisible();
+  await expect(page.getByTestId('space-members')).toHaveCount(0);
+  expect(requests.filter(r => r.path === '/workspace/member/list')).toHaveLength(memberRequests);
+
+  await page.goBack();
+  await expect(members).toBeVisible();
+  await page.reload();
+  await mount(page, false);
+  await expect(members).toBeVisible();
+  await expect(page.getByTestId('ws-sidebar-title')).toBeVisible();
+});
 
 test('project creation uses the current workspace and only asks for a name', async ({page}) => {
   const requests = await mock(page, (path, _query, body) => {
@@ -341,7 +382,7 @@ test('project detail shows my device directory table and bind dialog saves a ver
   await expect(detail.getByRole('cell', {name: 'Read', exact: true})).toBeVisible();
 });
 
-test('space settings manage members by role through their own APIs', async ({page}) => {
+test('members page manages members by role through their own APIs', async ({page}) => {
   let role = 'member'; let removed = false;
   const members = [{id: 'm1', workspaceId: 'w', userId: 'owner-user', role: 'owner'}, {id: 'm2', workspaceId: 'w', userId: 'member-user', role: 'member'}];
   const requests = await mock(page, (path, _query, body) => {
@@ -351,7 +392,7 @@ test('space settings manage members by role through their own APIs', async ({pag
     if (path === '/workspace/member/delete/m2') {removed = true; return null;}
   });
   page.on('dialog', dialog => dialog.accept());
-  const settings = await openSettings(page);
+  const settings = await openMembers(page);
   await expect(settings.getByRole('heading', {name: 'Members', exact: true})).toBeVisible();
   await expect(settings.locator('tbody tr')).toHaveCount(2);
   await expect(settings.locator('tbody tr').first()).toContainText('Owner');
@@ -377,9 +418,9 @@ test('space settings manage members by role through their own APIs', async ({pag
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) test(`settings cannot manage members without workspace management ${JSON.stringify(extras)}`, async ({page}) => {
+for (const extras of [{myRole: 'member'}, {myRole: 'viewer'}, {archived: 1}]) test(`members page cannot manage members without workspace management ${JSON.stringify(extras)}`, async ({page}) => {
   const requests = await mock(page, path => path === '/workspace/get/w' ? space('w', extras) : path === '/workspace/member/list' ? [{id: 'm2', workspaceId: 'w', userId: 'member-user', role: 'member'}] : undefined);
-  const settings = await openSettings(page);
+  const settings = await openMembers(page);
   await expect(settings.locator('tbody tr')).toHaveCount(1);
   await expect(settings.getByLabel('Role', {exact: true})).toHaveCount(0);
   await expect(settings.getByRole('button', {name: 'Remove', exact: true})).toHaveCount(0);
